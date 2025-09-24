@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">VetFinance</string>
+    <string name="add_transaction">Agregar Transacción</string>
+    <string name="income">Ingresos</string>
+    <string name="expenses">Gastos</string>
+    <string name="add_new_transaction">Agregar nueva transacción</string>
+</resources>

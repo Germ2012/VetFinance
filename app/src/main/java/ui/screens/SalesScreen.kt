@@ -1,0 +1,161 @@
+// ruta: app/src/main/java/com/example/vetfinance/ui/screens/SalesScreen.kt
+
+package com.example.vetfinance.ui.screens
+
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.navigation.NavController
+import com.example.vetfinance.data.SaleWithProducts
+import com.example.vetfinance.navigation.Screen
+import com.example.vetfinance.viewmodel.VetViewModel
+import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Date
+import java.util.Locale
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
+    // Se obtienen los datos filtrados y la fecha seleccionada desde el ViewModel
+    val filteredSales by viewModel.filteredSales.collectAsState()
+    val selectedDate by viewModel.selectedSaleDateFilter.collectAsState()
+
+    // Estados para manejar la visibilidad y el estado del diálogo del selector de fecha
+    var showDatePicker by remember { mutableStateOf(false) }
+    val datePickerState = rememberDatePickerState()
+
+    // Muestra el DatePickerDialog cuando showDatePicker es true
+    if (showDatePicker) {
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.onSaleDateFilterSelected(datePickerState.selectedDateMillis)
+                        showDatePicker = false
+                    }
+                ) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(onClick = {
+                navController.navigate(Screen.AddSale.route)
+            }) {
+                Icon(Icons.Default.Add, contentDescription = "Registrar Venta")
+            }
+        }
+    ) { paddingValues ->
+        Column(modifier = Modifier.padding(paddingValues).padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Historial de Ventas", style = MaterialTheme.typography.headlineMedium)
+
+                // Chip que muestra la fecha seleccionada y abre el selector de fecha
+                FilterChip(
+                    selected = selectedDate != null,
+                    onClick = { showDatePicker = true },
+                    label = {
+                        val labelText = if (selectedDate != null) {
+                            val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+                            "Fecha: ${sdf.format(Date(selectedDate!!))}"
+                        } else {
+                            "Filtrar por Fecha"
+                        }
+                        Text(labelText)
+                    },
+                    // Icono para limpiar el filtro de fecha
+                    trailingIcon = {
+                        if (selectedDate != null) {
+                            IconButton(onClick = { viewModel.clearSaleDateFilter() }) {
+                                Icon(Icons.Default.Close, contentDescription = "Limpiar filtro")
+                            }
+                        }
+                    }
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Muestra un mensaje si la lista está vacía, adaptado al filtro actual
+            if (filteredSales.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    val message = if (selectedDate != null) {
+                        "No se encontraron ventas para esta fecha."
+                    } else {
+                        "No se han registrado ventas."
+                    }
+                    Text(message)
+                }
+            } else {
+                // Muestra la lista de ventas
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(filteredSales) { saleWithProducts ->
+                        SaleItem(saleWithProducts)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Un elemento visual que representa una venta en una tarjeta,
+ * mostrando sus detalles y productos.
+ */
+@Composable
+fun SaleItem(saleWithProducts: SaleWithProducts) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            val saleDateTime = LocalDateTime.ofInstant(
+                Instant.ofEpochMilli(saleWithProducts.sale.date),
+                ZoneId.systemDefault()
+            )
+            val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+
+            Text(
+                text = "Venta #${saleWithProducts.sale.saleId} - ${saleDateTime.format(formatter)}",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            if (saleWithProducts.products.isNotEmpty()) {
+                saleWithProducts.products.forEach { product ->
+                    Text("• ${product.name}")
+                }
+            } else {
+                Text("Venta manual.", style = MaterialTheme.typography.bodySmall)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = String.format("Total: Gs %,.0f", saleWithProducts.sale.totalAmount).replace(",", "."),
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.End)
+            )
+        }
+    }
+}
