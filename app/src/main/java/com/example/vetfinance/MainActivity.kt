@@ -1,5 +1,3 @@
-// ruta: app/src/main/java/com/example/vetfinance/MainActivity.kt
-
 package com.example.vetfinance
 
 import android.os.Bundle
@@ -24,12 +22,10 @@ import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
             VetFinanceTheme {
-                // El ViewModel ahora es proveído por Hilt
                 MainScreen(viewModel = hiltViewModel<VetViewModel>())
             }
         }
@@ -40,8 +36,16 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(viewModel: VetViewModel) {
     val navController = rememberNavController()
-    // Definimos los ítems que aparecerán en la barra de navegación inferior
-    val navItems = listOf(Screen.Dashboard, Screen.Sales, Screen.Reports, Screen.Inventory, Screen.Clients)
+    // Se definen los ítems que aparecerán en la barra de navegación inferior,
+    // incluyendo la pantalla de Calendario.
+    val navItems = listOf(
+        Screen.Dashboard,
+        Screen.Calendar,
+        Screen.Sales,
+        Screen.Reports,
+        Screen.Inventory,
+        Screen.Clients
+    )
 
     Scaffold(
         bottomBar = {
@@ -56,10 +60,13 @@ fun MainScreen(viewModel: VetViewModel) {
                         selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                         onClick = {
                             navController.navigate(screen.route) {
+                                // Evita acumular una gran pila de destinos
                                 popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
                                 }
+                                // Evita volver a lanzar el mismo destino si ya está en la cima
                                 launchSingleTop = true
+                                // Restaura el estado al volver a seleccionar un ítem
                                 restoreState = true
                             }
                         }
@@ -69,7 +76,7 @@ fun MainScreen(viewModel: VetViewModel) {
         }
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
-            // Aquí se renderizarán todas tus pantallas a través del NavHost
+            // AppNavigation contiene el NavHost que renderiza la pantalla actual.
             AppNavigation(navController = navController, viewModel = viewModel)
         }
     }

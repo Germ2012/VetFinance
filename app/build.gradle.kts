@@ -1,5 +1,3 @@
-// ruta: app/build.gradle.kts
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -79,7 +77,7 @@ dependencies {
 
     // ---- Hilt (Inyección de Dependencias) ----
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler) // El alias 'hilt.compiler' ahora apunta a 'hilt-android-compiler' en el TOML
+    kapt(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
 
     // ---- Navigation y Componentes de UI ----
@@ -93,16 +91,6 @@ dependencies {
     kapt(libs.room.compiler)
     implementation(libs.room.ktx)
 
-    //---CSV---//
-    implementation("org.apache.commons:commons-csv:1.11.0")
-
-
-    // ---- Testing ----
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
-    debugImplementation(libs.androidx.compose.ui.tooling)
-    debugImplementation(libs.androidx.compose.ui.test.manifest)
-
     // ---- Paging (Paginación de datos) ----
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)
@@ -110,10 +98,21 @@ dependencies {
     // ---- Gráficos ----
     implementation(libs.ycharts)
 
-    // ---- Calendario ----
-    implementation(libs.compose.calendar)
+    // ---- Calendario (Librería reemplazada y alias corregido) ----
+    implementation(libs.calendar.compose)
+
+    //---CSV---//
+    implementation("org.apache.commons.csv:commons-csv:1.11.0")
+
+
+    // ---- Testing ----
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.tooling)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
 kapt {
     correctErrorTypes = true
 }
+

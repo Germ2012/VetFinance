@@ -2,7 +2,6 @@ package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -13,20 +12,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.viewmodel.VetViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InventoryScreen(viewModel: VetViewModel) {
-    val inventory by viewModel.inventory.collectAsState()
     val showDialog by viewModel.showAddProductDialog.collectAsState()
+    val filter by viewModel.inventoryFilter.collectAsState()
+    val products = viewModel.productsPaginated.collectAsLazyPagingItems()
 
-    // Mostramos el diálogo si el estado es 'true'
     if (showDialog) {
         AddProductDialog(
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { name, price, stock, isService ->
+                // La lógica de añadir se delega al ViewModel.
                 viewModel.addProduct(name, price, stock, isService)
             }
         )
@@ -42,16 +44,48 @@ fun InventoryScreen(viewModel: VetViewModel) {
         Column(modifier = Modifier.padding(paddingValues).padding(16.dp)) {
             Text("Inventario", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
-            if (inventory.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No hay productos en el inventario.")
-                }
-            } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(inventory) { product ->
+            InventoryFilter(selectedFilter = filter, onFilterSelected = { viewModel.onInventoryFilterChanged(it) })
+            Spacer(modifier = Modifier.height(16.dp))
+
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(count = products.itemCount) { index ->
+                    products[index]?.let { product ->
                         InventoryItem(product)
                     }
                 }
+
+                // Manejo de estados de carga de Paging para una mejor UX
+                when (products.loadState.append) {
+                    is LoadState.Loading -> { item { CircularProgressIndicator(modifier = Modifier.padding(16.dp)) } }
+                    is LoadState.Error -> { item { Text("Error al cargar más productos.") } }
+                    else -> {}
+                }
+                when (products.loadState.refresh) {
+                    is LoadState.Loading -> { item { Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() } } }
+                    is LoadState.Error -> { item { Text("Error al actualizar la lista.") } }
+                    else -> {
+                        if (products.itemCount == 0) {
+                            item { Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) { Text("No hay productos que coincidan con el filtro.") } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun InventoryFilter(selectedFilter: String, onFilterSelected: (String) -> Unit) {
+    val filters = listOf("Todos", "Productos", "Servicios")
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        filters.forEachIndexed { index, label ->
+            SegmentedButton(
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = filters.size),
+                onClick = { onFilterSelected(label) },
+                selected = selectedFilter == label
+            ) {
+                Text(label)
             }
         }
     }
@@ -73,12 +107,9 @@ fun InventoryItem(product: Product) {
                 )
             }
             Column(horizontalAlignment = Alignment.End) {
-                // --- CAMBIO APLICADO AQUÍ ---
-                // Se crea una variable con el precio formateado en Guaraníes
                 val formattedPrice = String.format("₲ %,.0f", product.price).replace(",", ".")
-
                 Text(
-                    text = formattedPrice, // Se usa la nueva variable
+                    text = formattedPrice,
                     style = MaterialTheme.typography.bodyLarge
                 )
                 if (!product.isService) {
@@ -91,7 +122,6 @@ fun InventoryItem(product: Product) {
         }
     }
 }
-
 
 @Composable
 fun AddProductDialog(
@@ -107,24 +137,27 @@ fun AddProductDialog(
         onDismissRequest = onDismiss,
         title = { Text("Añadir Producto/Servicio") },
         text = {
-            Column {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Nombre") }
+                    label = { Text("Nombre") },
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = price,
                     onValueChange = { price = it },
                     label = { Text("Precio") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = stock,
-                    onValueChange = { stock = it },
+                    onValueChange = { if (it.all { char -> char.isDigit() }) stock = it },
                     label = { Text("Stock") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    enabled = !isService // Deshabilitado si es un servicio
+                    enabled = !isService, // Deshabilitado si es un servicio
+                    modifier = Modifier.fillMaxWidth()
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = isService, onCheckedChange = { isService = it })
@@ -138,10 +171,11 @@ fun AddProductDialog(
                     onConfirm(
                         name,
                         price.toDoubleOrNull() ?: 0.0,
-                        if (isService) 999 else stock.toIntOrNull() ?: 0,
+                        if (isService) 9999 else stock.toIntOrNull() ?: 0,
                         isService
                     )
-                }
+                },
+                enabled = name.isNotBlank() && price.isNotBlank()
             ) {
                 Text("Guardar")
             }

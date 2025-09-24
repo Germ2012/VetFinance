@@ -1,22 +1,24 @@
 package com.example.vetfinance.navigation
 
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.Dashboard
-import androidx.compose.material.icons.filled.Inventory
-import androidx.compose.material.icons.filled.People
-import androidx.compose.material.icons.filled.PointOfSale
-import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.graphics.vector.ImageVector
 
+/**
+ * Define todas las rutas de navegación de la aplicación.
+ * Se usa una sealed class para asegurar que solo se puedan usar las rutas aquí definidas.
+ */
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
+    // Pantallas principales que aparecen en la barra de navegación inferior
     object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Dashboard)
     object Sales : Screen("sales", "Ventas", Icons.Default.PointOfSale)
     object Reports : Screen("reports", "Reportes", Icons.Default.Assessment)
     object Inventory : Screen("inventory", "Inventario", Icons.Default.Inventory)
     object Clients : Screen("clients", "Clientes", Icons.Default.People)
+    object Calendar : Screen("calendar", "Calendario", Icons.Default.CalendarMonth)
+
+    // Pantallas secundarias a las que se navega desde otras partes de la app
     object AddSale : Screen("add_sale", "Nueva Venta", Icons.Default.Add)
     object ClientDetail : Screen("client_detail/{clientId}", "Detalle de Cliente", Icons.AutoMirrored.Filled.ReceiptLong)
     object DebtClients : Screen("debt_clients", "Clientes con Deuda", Icons.Default.People)
