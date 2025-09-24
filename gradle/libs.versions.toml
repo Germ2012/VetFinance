@@ -17,6 +17,9 @@ appcompat = "1.7.1"
 material = "1.13.0"
 activity = "1.11.0"
 constraintlayout = "2.2.1"
+paging = "3.2.1"
+ycharts = "2.1.0"
+composeCalendar = "1.0.0-beta01"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -51,6 +54,16 @@ androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 androidx-activity = { group = "androidx.activity", name = "activity", version.ref = "activity" }
 androidx-constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayout", version.ref = "constraintlayout" }
+
+# Paging
+androidx-paging-runtime = { group = "androidx.paging", name = "paging-runtime", version.ref = "paging" }
+androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", version.ref = "paging" }
+
+# Gráficos
+ycharts = { group = "co.yml", name = "ycharts", version.ref = "ycharts" }
+
+# Calendario
+compose-calendar = { group = "io.github.bogdanov-alex", name = "compose-calendar", version.ref = "composeCalendar" }
 
 [plugins]
 # No necesitas definir plugins aquí para este caso

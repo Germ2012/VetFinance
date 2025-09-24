@@ -2,7 +2,7 @@ package com.example.vetfinance.data
 
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
-
+import androidx.paging.PagingSource
 @Dao
 interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY date DESC")
@@ -53,6 +53,9 @@ interface ProductDao {
     // Nuevo método para obtener productos en lotes
     @Query("SELECT * FROM products ORDER BY name ASC LIMIT :limit OFFSET :offset")
     suspend fun getProductsPaged(limit: Int, offset: Int): List<Product>
+//paginacion
+    @Query("SELECT * FROM products WHERE (:filterType = 'Todos') OR (:filterType = 'Productos' AND isService = 0) OR (:filterType = 'Servicios' AND isService = 1) ORDER BY name ASC")
+    fun getProductsPagedSource(filterType: String): PagingSource<Int, Product>
 }
 
 @Dao
@@ -96,7 +99,20 @@ interface SaleDao {
     // Nuevo método para obtener relaciones de ventas en lotes
     @Query("SELECT * FROM sales_products_cross_ref LIMIT :limit OFFSET :offset")
     suspend fun getSaleProductCrossRefsPaged(limit: Int, offset: Int): List<SaleProductCrossRef>
+
+    //Reportes
+    @Query("""
+        SELECT P.name, SUM(SP.quantity) as totalSold
+        FROM sales_products_cross_ref AS SP
+        JOIN products AS P ON SP.productId = P.id
+        GROUP BY P.name
+        ORDER BY totalSold DESC
+        LIMIT :limit
+    """)
+    fun getTopSellingProducts(limit: Int): Flow<List<TopSellingProduct>>
 }
+// Data class para el resultado del query
+data class TopSellingProduct(val name: String, val totalSold: Int)
 
 @Dao
 interface ClientDao {
@@ -125,6 +141,13 @@ interface ClientDao {
     // Nuevo método para obtener clientes en lotes
     @Query("SELECT * FROM clients ORDER BY name ASC LIMIT :limit OFFSET :offset")
     suspend fun getClientsPaged(limit: Int, offset: Int): List<Client>
+    // --- MODIFICADO PARA PAGINACIÓN ---
+    @Query("SELECT * FROM clients WHERE debtAmount > 0 ORDER BY name ASC")
+    fun getDebtClientsPagedSource(): PagingSource<Int, Client>
+
+    // --- NUEVO PARA REPORTES ---
+    @Query("SELECT SUM(debtAmount) FROM clients")
+    fun getTotalDebt(): Flow<Double>
 }
 
 @Dao
@@ -201,4 +224,30 @@ interface TreatmentDao {
     // Nuevo método para obtener tratamientos en lotes
     @Query("SELECT * FROM treatments ORDER BY treatmentDate DESC LIMIT :limit OFFSET :offset")
     suspend fun getTreatmentsPaged(limit: Int, offset: Int): List<Treatment>
+
+    @Dao
+    interface AppointmentDao {
+        @Insert(onConflict = OnConflictStrategy.REPLACE)
+        suspend fun insert(appointment: Appointment)
+
+        @Update
+        suspend fun update(appointment: Appointment)
+
+        @Delete
+        suspend fun delete(appointment: Appointment)
+
+        @Transaction
+        @Query("SELECT * FROM appointments WHERE appointmentDate >= :startDate AND appointmentDate < :endDate ORDER BY appointmentDate ASC")
+        fun getAppointmentsForDateRange(startDate: Long, endDate: Long): Flow<List<AppointmentWithDetails>>
+
+        @Insert(onConflict = OnConflictStrategy.REPLACE)
+        suspend fun insertAll(appointments: List<Appointment>)
+
+        @Query("DELETE FROM appointments")
+        suspend fun deleteAllAppointments()
+
+        @Query("SELECT * FROM appointments ORDER BY appointmentDate DESC LIMIT :limit OFFSET :offset")
+        suspend fun getAppointmentsPaged(limit: Int, offset: Int): List<Appointment>
+    }
+
 }

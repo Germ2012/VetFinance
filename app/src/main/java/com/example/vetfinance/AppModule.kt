@@ -10,6 +10,7 @@ import com.example.vetfinance.data.ProductDao
 import com.example.vetfinance.data.SaleDao
 import com.example.vetfinance.data.TransactionDao
 import com.example.vetfinance.data.TreatmentDao
+import com.example.vetfinance.data.AppointmentDao
 import com.example.vetfinance.viewmodel.VetRepository
 import dagger.Module
 import dagger.Provides
@@ -59,6 +60,10 @@ object AppModule {
     @Provides
     @Singleton
     fun provideTreatmentDao(db: AppDatabase): TreatmentDao = db.treatmentDao()
+    @Provides
+    @Singleton
+    fun provideAppointmentDao(db: AppDatabase): AppointmentDao = db.appointmentDao()
+
 
     @Provides
     @Singleton
@@ -70,9 +75,10 @@ object AppModule {
         clientDao: ClientDao,
         paymentDao: PaymentDao,
         petDao: PetDao,
-        treatmentDao: TreatmentDao
+        treatmentDao: TreatmentDao,
+        appointmentDao: AppointmentDao
     ): VetRepository {
         // Se pasa la DB al constructor del Repositorio
-        return VetRepository(db, productDao, saleDao, transactionDao, clientDao, paymentDao, petDao, treatmentDao)
+        return VetRepository(db, productDao, saleDao, transactionDao, clientDao, paymentDao, petDao, treatmentDao, appointmentDao)
     }
 }

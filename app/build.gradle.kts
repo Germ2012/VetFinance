@@ -102,6 +102,16 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+
+    // ---- Paging (Paginación de datos) ----
+    implementation(libs.androidx.paging.runtime)
+    implementation(libs.androidx.paging.compose)
+
+    // ---- Gráficos ----
+    implementation(libs.ycharts)
+
+    // ---- Calendario ----
+    implementation(libs.compose.calendar)
 }
 
 kapt {

@@ -1,42 +1,28 @@
 package com.example.vetfinance.viewmodel
 
 import android.content.Context
-import android.database.sqlite.SQLiteConstraintException
 import android.net.Uri
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
 import androidx.room.withTransaction
-import com.example.vetfinance.data.AppDatabase
-import com.example.vetfinance.data.BackupValidationException
-import com.example.vetfinance.data.Client
-import com.example.vetfinance.data.ClientDao
-import com.example.vetfinance.data.Payment
-import com.example.vetfinance.data.PaymentDao
-import com.example.vetfinance.data.Pet
-import com.example.vetfinance.data.PetDao
-import com.example.vetfinance.data.PetWithOwner
-import com.example.vetfinance.data.Product
-import com.example.vetfinance.data.ProductDao
-import com.example.vetfinance.data.Sale
-import com.example.vetfinance.data.SaleDao
-import com.example.vetfinance.data.SaleProductCrossRef
-import com.example.vetfinance.data.SaleWithProducts
-import com.example.vetfinance.data.Transaction
-import com.example.vetfinance.data.TransactionDao
-import com.example.vetfinance.data.Treatment
-import com.example.vetfinance.data.TreatmentDao
+import com.example.vetfinance.data.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
 import org.apache.commons.csv.CSVPrinter
 import java.io.StringWriter
-import java.util.zip.ZipEntry
-import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
+import java.time.LocalDate
+import java.time.ZoneOffset
 import javax.inject.Inject
 import javax.inject.Singleton
 
+/**
+ * Clase de datos interna para manejar los datos del backup durante la importación/exportación.
+ * Incluye todas las entidades de la base de datos.
+ */
 private data class ParsedBackupData(
     val clients: List<Client>,
     val products: List<Product>,
@@ -45,9 +31,9 @@ private data class ParsedBackupData(
     val sales: List<Sale>,
     val transactions: List<Transaction>,
     val payments: List<Payment>,
-    val saleProductCrossRefs: List<SaleProductCrossRef>
+    val saleProductCrossRefs: List<SaleProductCrossRef>,
+    val appointments: List<Appointment> // <--- Entidad añadida
 )
-
 
 @Singleton
 class VetRepository @Inject constructor(
@@ -58,29 +44,58 @@ class VetRepository @Inject constructor(
     private val clientDao: ClientDao,
     private val paymentDao: PaymentDao,
     private val petDao: PetDao,
-    private val treatmentDao: TreatmentDao
+    private val treatmentDao: TreatmentDao,
+    private val appointmentDao: AppointmentDao // <--- DAO añadido
 ) {
 
-    // --- Métodos de Lectura ---
+    private val BATCH_SIZE = 500 // Constante para la exportación por lotes
+
+    // --- MÉTODOS DE PAGINACIÓN ---
+    fun getProductsPaginated(filterType: String): Flow<PagingData<Product>> {
+        return Pager(
+            config = PagingConfig(pageSize = 20, enablePlaceholders = false),
+            pagingSourceFactory = { productDao.getProductsPagedSource(filterType) }
+        ).flow
+    }
+
+    fun getDebtClientsPaginated(): Flow<PagingData<Client>> {
+        return Pager(
+            config = PagingConfig(pageSize = 20, enablePlaceholders = false),
+            pagingSourceFactory = { clientDao.getDebtClientsPagedSource() }
+        ).flow
+    }
+
+    // --- MÉTODOS DE CITAS ---
+    fun getAppointmentsForDate(date: LocalDate): Flow<List<AppointmentWithDetails>> {
+        val startOfDay = date.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
+        val endOfDay = date.plusDays(1).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli()
+        return appointmentDao.getAppointmentsForDateRange(startOfDay, endOfDay)
+    }
+
+    suspend fun insertAppointment(appointment: Appointment) = appointmentDao.insert(appointment)
+    suspend fun updateAppointment(appointment: Appointment) = appointmentDao.update(appointment)
+    suspend fun deleteAppointment(appointment: Appointment) = appointmentDao.delete(appointment)
+
+    // --- MÉTODOS DE REPORTES ---
+    fun getTopSellingProducts(limit: Int): Flow<List<TopSellingProduct>> = saleDao.getTopSellingProducts(limit)
+    fun getTotalDebt(): Flow<Double> = clientDao.getTotalDebt()
+
+    // --- MÉTODOS DE LECTURA (FLUJOS) ---
     fun getAllProducts(): Flow<List<Product>> = productDao.getAllProducts()
     fun getAllSales(): Flow<List<SaleWithProducts>> = saleDao.getAllSalesWithProducts()
-    fun getAllTransactions(): Flow<List<Transaction>> = transactionDao.getAllTransactions()
     fun getAllClients(): Flow<List<Client>> = clientDao.getAllClients()
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>> = paymentDao.getPaymentsForClient(clientId)
     fun getAllPetsWithOwners(): Flow<List<PetWithOwner>> = petDao.getAllPetsWithOwners()
     fun getTreatmentsForPet(petId: String): Flow<List<Treatment>> = treatmentDao.getTreatmentsForPet(petId)
     fun getUpcomingTreatments(): Flow<List<Treatment>> = treatmentDao.getUpcomingTreatments()
-    fun getAllTreatments(): Flow<List<Treatment>> = treatmentDao.getAllTreatments()
-    suspend fun productExists(name: String): Boolean = productDao.productExists(name)
 
-    // --- Métodos de Escritura ---
+    // --- MÉTODOS DE ESCRITURA (SUSPEND) ---
     suspend fun insertProduct(product: Product) { productDao.insert(product) }
     suspend fun updateProduct(product: Product) { productDao.update(product) }
-    suspend fun insertTransaction(transaction: Transaction) { transactionDao.insert(transaction) }
-    suspend fun deleteTransaction(transaction: Transaction) { transactionDao.delete(transaction) }
     suspend fun insertClient(client: Client) { clientDao.insert(client) }
     suspend fun updateClient(client: Client) { clientDao.update(client) }
     suspend fun insertPet(pet: Pet) = petDao.insert(pet)
+    suspend fun updatePet(pet: Pet) = petDao.update(pet)
     suspend fun insertTreatment(treatment: Treatment) = treatmentDao.insert(treatment)
     suspend fun markTreatmentAsCompleted(treatmentId: String) = treatmentDao.markAsCompleted(treatmentId)
 
@@ -112,14 +127,9 @@ class VetRepository @Inject constructor(
 
     // --- LÓGICA DE IMPORTACIÓN Y EXPORTACIÓN ---
 
-    // Código refactorizado para la exportación en lotes
-    // Se elimina la palabra clave 'const'
-    private val BATCH_SIZE = 500
-
     suspend fun exportarDatosCompletos(): Map<String, String> = withContext(Dispatchers.IO) {
         val csvMap = mutableMapOf<String, String>()
 
-        // Función de ayuda para la exportación por lotes
         suspend fun <T> exportBatch(
             daoMethod: suspend (limit: Int, offset: Int) -> List<T>,
             fileName: String,
@@ -140,77 +150,33 @@ class VetRepository @Inject constructor(
             csvMap[fileName] = sw.toString()
         }
 
-        // Exportar Clientes
-        exportBatch(
-            daoMethod = { limit, offset -> clientDao.getClientsPaged(limit, offset) },
-            fileName = "clients.csv",
-            headers = arrayOf("clientId", "name", "phone", "debtAmount")
-        ) { it, printer ->
-            printer.printRecord(it.clientId, it.name, it.phone ?: "", it.debtAmount)
-        }
+        exportBatch(clientDao::getClientsPaged, "clients.csv", arrayOf("clientId", "name", "phone", "debtAmount"))
+        { it, p -> p.printRecord(it.clientId, it.name, it.phone ?: "", it.debtAmount) }
 
-        // Exportar Productos
-        exportBatch(
-            daoMethod = { limit, offset -> productDao.getProductsPaged(limit, offset) },
-            fileName = "products.csv",
-            headers = arrayOf("id", "name", "price", "stock", "isService")
-        ) { it, printer ->
-            printer.printRecord(it.id, it.name, it.price, it.stock, it.isService)
-        }
+        exportBatch(productDao::getProductsPaged, "products.csv", arrayOf("id", "name", "price", "stock", "isService"))
+        { it, p -> p.printRecord(it.id, it.name, it.price, it.stock, it.isService) }
 
-        // Exportar Mascotas
-        exportBatch(
-            daoMethod = { limit, offset -> petDao.getPetsPaged(limit, offset) },
-            fileName = "pets.csv",
-            headers = arrayOf("petId", "name", "ownerIdFk")
-        ) { it, printer ->
-            printer.printRecord(it.petId, it.name, it.ownerIdFk)
-        }
+        exportBatch(petDao::getPetsPaged, "pets.csv", arrayOf("petId", "name", "ownerIdFk"))
+        { it, p -> p.printRecord(it.petId, it.name, it.ownerIdFk) }
 
-        // Exportar Tratamientos
-        exportBatch(
-            daoMethod = { limit, offset -> treatmentDao.getTreatmentsPaged(limit, offset) },
-            fileName = "treatments.csv",
-            headers = arrayOf("treatmentId", "petIdFk", "treatmentDate", "description", "nextTreatmentDate", "isNextTreatmentCompleted")
-        ) { it, printer ->
-            printer.printRecord(it.treatmentId, it.petIdFk, it.treatmentDate, it.description, it.nextTreatmentDate ?: "", it.isNextTreatmentCompleted)
-        }
+        exportBatch(treatmentDao::getTreatmentsPaged, "treatments.csv", arrayOf("treatmentId", "petIdFk", "treatmentDate", "description", "nextTreatmentDate", "isNextTreatmentCompleted"))
+        { it, p -> p.printRecord(it.treatmentId, it.petIdFk, it.treatmentDate, it.description, it.nextTreatmentDate ?: "", it.isNextTreatmentCompleted) }
 
-        // Exportar Ventas
-        exportBatch(
-            daoMethod = { limit, offset -> saleDao.getSalesPaged(limit, offset) },
-            fileName = "sales.csv",
-            headers = arrayOf("saleId", "clientIdFk", "date", "totalAmount")
-        ) { it, printer ->
-            printer.printRecord(it.saleId, it.clientIdFk, it.date, it.totalAmount)
-        }
+        exportBatch(saleDao::getSalesPaged, "sales.csv", arrayOf("saleId", "clientIdFk", "date", "totalAmount"))
+        { it, p -> p.printRecord(it.saleId, it.clientIdFk, it.date, it.totalAmount) }
 
-        // Exportar Transacciones
-        exportBatch(
-            daoMethod = { limit, offset -> transactionDao.getTransactionsPaged(limit, offset) },
-            fileName = "transactions.csv",
-            headers = arrayOf("transactionId", "saleIdFk", "date", "type", "amount", "description")
-        ) { it, printer ->
-            printer.printRecord(it.transactionId, it.saleIdFk ?: "", it.date, it.type, it.amount, it.description ?: "")
-        }
+        exportBatch(transactionDao::getTransactionsPaged, "transactions.csv", arrayOf("transactionId", "saleIdFk", "date", "type", "amount", "description"))
+        { it, p -> p.printRecord(it.transactionId, it.saleIdFk ?: "", it.date, it.type, it.amount, it.description ?: "") }
 
-        // Exportar Pagos
-        exportBatch(
-            daoMethod = { limit, offset -> paymentDao.getPaymentsPaged(limit, offset) },
-            fileName = "payments.csv",
-            headers = arrayOf("paymentId", "clientIdFk", "paymentDate", "amountPaid")
-        ) { it, printer ->
-            printer.printRecord(it.paymentId, it.clientIdFk, it.paymentDate, it.amountPaid)
-        }
+        exportBatch(paymentDao::getPaymentsPaged, "payments.csv", arrayOf("paymentId", "clientIdFk", "paymentDate", "amountPaid"))
+        { it, p -> p.printRecord(it.paymentId, it.clientIdFk, it.paymentDate, it.amountPaid) }
 
-        // Exportar Detalles de Venta (Tabla de Unión)
-        exportBatch(
-            daoMethod = { limit, offset -> saleDao.getSaleProductCrossRefsPaged(limit, offset) },
-            fileName = "sale_product_cross_refs.csv",
-            headers = arrayOf("saleId", "productId", "quantity", "priceAtTimeOfSale")
-        ) { it, printer ->
-            printer.printRecord(it.saleId, it.productId, it.quantity, it.priceAtTimeOfSale)
-        }
+        exportBatch(saleDao::getSaleProductCrossRefsPaged, "sale_product_cross_refs.csv", arrayOf("saleId", "productId", "quantity", "priceAtTimeOfSale"))
+        { it, p -> p.printRecord(it.saleId, it.productId, it.quantity, it.priceAtTimeOfSale) }
+
+        // Exportar Citas
+        exportBatch(appointmentDao::getAppointmentsPaged, "appointments.csv", arrayOf("appointmentId", "clientIdFk", "petIdFk", "appointmentDate", "description", "status"))
+        { it, p -> p.printRecord(it.appointmentId, it.clientIdFk, it.petIdFk, it.appointmentDate, it.description, it.status) }
 
         return@withContext csvMap
     }
@@ -219,7 +185,7 @@ class VetRepository @Inject constructor(
         try {
             val archivosDelZip = mutableMapOf<String, String>()
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
-                ZipInputStream(inputStream).use { zis ->
+                java.util.zip.ZipInputStream(inputStream).use { zis ->
                     generateSequence { zis.nextEntry }.forEach { entry ->
                         archivosDelZip[entry.name] = zis.bufferedReader().readText()
                     }
@@ -228,24 +194,13 @@ class VetRepository @Inject constructor(
             if (archivosDelZip.isEmpty()) return@withContext "Error: El archivo ZIP está vacío o no es válido."
 
             val backupData = validateAndParseBackupData(archivosDelZip)
-
-            // 👇 Se llama a la nueva función de fusión
             performMergeImport(backupData)
 
             return@withContext "Fusión de datos completada con éxito."
 
         } catch (e: BackupValidationException) {
             e.printStackTrace()
-            return@withContext e.message ?: "Error de validación de copia de seguridad desconocido."
-        } catch (e: NumberFormatException) {
-            e.printStackTrace()
-            return@withContext "Error de formato: Uno de los archivos CSV contiene un número inválido."
-        } catch (e: IllegalArgumentException) {
-            e.printStackTrace()
-            return@withContext "Error de formato: Revise los encabezados de los archivos CSV. ${e.message ?: "Sin detalles."}"
-        } catch (e: SQLiteConstraintException) {
-            e.printStackTrace()
-            return@withContext "Error de integridad: Los datos son inconsistentes. ${e.message ?: "Sin detalles."}"
+            return@withContext e.message ?: "Error de validación desconocido."
         } catch (e: Exception) {
             e.printStackTrace()
             return@withContext "Error inesperado al importar: ${e.message ?: "Sin detalles."}"
@@ -254,7 +209,6 @@ class VetRepository @Inject constructor(
 
     @Throws(BackupValidationException::class)
     private fun validateAndParseBackupData(archivos: Map<String, String>): ParsedBackupData {
-        // Parseo de todas las entidades
         val clients = parseCSV(archivos["clients.csv"], ::parseClient)
         val products = parseCSV(archivos["products.csv"], ::parseProduct)
         val pets = parseCSV(archivos["pets.csv"], ::parsePet)
@@ -263,64 +217,40 @@ class VetRepository @Inject constructor(
         val transactions = parseCSV(archivos["transactions.csv"], ::parseTransaction)
         val payments = parseCSV(archivos["payments.csv"], ::parsePayment)
         val saleProductCrossRefs = parseCSV(archivos["sale_product_cross_refs.csv"], ::parseSaleProductCrossRef)
+        val appointments = parseCSV(archivos["appointments.csv"], ::parseAppointment)
 
-        // Sets de IDs para validaciones rápidas
         val clientIds = clients.map { it.clientId }.toSet()
         val petIds = pets.map { it.petId }.toSet()
         val productIds = products.map { it.id }.toSet()
         val saleIds = sales.map { it.saleId }.toSet()
 
-        // --- Validaciones de integridad (claves foráneas) ---
-
-        pets.forEach { pet ->
-            if (pet.ownerIdFk !in clientIds)
-                throw BackupValidationException("Conflicto en 'pets.csv': La mascota '${pet.name}' (ID: ${pet.petId}) se refiere a un dueño con ID ${pet.ownerIdFk} que no existe.")
+        pets.forEach { if (it.ownerIdFk !in clientIds) throw BackupValidationException("Mascota con dueño inválido: ${it.name}") }
+        treatments.forEach { if (it.petIdFk !in petIds) throw BackupValidationException("Tratamiento con mascota inválida: ${it.treatmentId}") }
+        sales.forEach { if (it.clientIdFk !in clientIds) throw BackupValidationException("Venta con cliente inválido: ${it.saleId}") }
+        payments.forEach { if (it.clientIdFk !in clientIds) throw BackupValidationException("Pago con cliente inválido: ${it.paymentId}") }
+        saleProductCrossRefs.forEach {
+            if (it.saleId !in saleIds) throw BackupValidationException("Detalle de venta con ID de venta inválido: ${it.saleId}")
+            if (it.productId !in productIds) throw BackupValidationException("Detalle de venta con ID de producto inválido: ${it.productId}")
+        }
+        appointments.forEach {
+            if (it.clientIdFk !in clientIds) throw BackupValidationException("Cita con cliente inválido: ${it.appointmentId}")
+            if (it.petIdFk !in petIds) throw BackupValidationException("Cita con mascota inválida: ${it.appointmentId}")
         }
 
-        treatments.forEach { treatment ->
-            if (treatment.petIdFk !in petIds)
-                throw BackupValidationException("Conflicto en 'treatments.csv': El tratamiento (ID: ${treatment.treatmentId}) se refiere a una mascota con ID ${treatment.petIdFk} que no existe.")
-        }
-
-        sales.forEach { sale ->
-            if (sale.clientIdFk !in clientIds)
-                throw BackupValidationException("Conflicto en 'sales.csv': La venta (ID: ${sale.saleId}) se refiere a un cliente con ID ${sale.clientIdFk} que no existe.")
-        }
-
-        payments.forEach { payment ->
-            if (payment.clientIdFk !in clientIds)
-                throw BackupValidationException("Conflicto en 'payments.csv': El pago (ID: ${payment.paymentId}) se refiere a un cliente con ID ${payment.clientIdFk} que no existe.")
-        }
-
-        saleProductCrossRefs.forEach { crossRef ->
-            if (crossRef.saleId !in saleIds)
-                throw BackupValidationException("Conflicto en 'sale_product_cross_refs.csv': Se encontró un producto asociado a una venta con ID ${crossRef.saleId} que no existe.")
-            if (crossRef.productId !in productIds)
-                throw BackupValidationException("Conflicto en 'sale_product_cross_refs.csv': Se encontró una venta asociada a un producto con ID ${crossRef.productId} que no existe.")
-        }
-
-        return ParsedBackupData(clients, products, pets, treatments, sales, transactions, payments, saleProductCrossRefs)
+        return ParsedBackupData(clients, products, pets, treatments, sales, transactions, payments, saleProductCrossRefs, appointments)
     }
 
-    // 👇 6. ESTA ES LA NUEVA FUNCIÓN DE FUSIÓN
     private suspend fun performMergeImport(data: ParsedBackupData) {
         db.withTransaction {
-            // --- YA NO SE BORRAN LOS DATOS ---
-            // El OnConflictStrategy.REPLACE se encargará de la lógica.
-
-            // Inserción/Actualización de los datos en orden de dependencia
             if (data.clients.isNotEmpty()) clientDao.insertAll(data.clients)
             if (data.products.isNotEmpty()) productDao.insertAll(data.products)
-
-            // Las entidades con claves foráneas se insertan después de sus "padres"
             if (data.pets.isNotEmpty()) petDao.insertAll(data.pets)
             if (data.sales.isNotEmpty()) saleDao.insertAllSales(data.sales)
             if (data.treatments.isNotEmpty()) treatmentDao.insertAll(data.treatments)
-
-            // El resto de datos
             if (data.transactions.isNotEmpty()) transactionDao.insertAll(data.transactions)
             if (data.payments.isNotEmpty()) paymentDao.insertAll(data.payments)
             if (data.saleProductCrossRefs.isNotEmpty()) saleDao.insertAllSaleProductCrossRefs(data.saleProductCrossRefs)
+            if (data.appointments.isNotEmpty()) appointmentDao.insertAll(data.appointments)
         }
     }
 
@@ -330,66 +260,14 @@ class VetRepository @Inject constructor(
         return CSVParser.parse(content, format).map(parser)
     }
 
-    // --- Funciones de parseo ---
-    private fun parseClient(record: org.apache.commons.csv.CSVRecord): Client = Client(
-        clientId = record.get("clientId"),
-        name = record.get("name"),
-        phone = record.get("phone").ifEmpty { null },
-        debtAmount = record.get("debtAmount").toDouble()
-    )
-
-    private fun parseProduct(record: org.apache.commons.csv.CSVRecord): Product = Product(
-        id = record.get("id"),
-        name = record.get("name"),
-        price = record.get("price").toDouble(),
-        stock = record.get("stock").toInt(),
-        isService = record.get("isService").toBoolean()
-    )
-
-    private fun parsePet(record: org.apache.commons.csv.CSVRecord): Pet = Pet(
-        petId = record.get("petId"),
-        name = record.get("name"),
-        ownerIdFk = record.get("ownerIdFk")
-    )
-
-    private fun parseTreatment(record: org.apache.commons.csv.CSVRecord): Treatment = Treatment(
-        treatmentId = record.get("treatmentId"),
-        petIdFk = record.get("petIdFk"),
-        description = record.get("description"),
-        treatmentDate = record.get("treatmentDate").toLong(),
-        nextTreatmentDate = record.get("nextTreatmentDate").toLongOrNull(),
-        isNextTreatmentCompleted = record.get("isNextTreatmentCompleted").toBoolean()
-    )
-
-    private fun parseSale(record: org.apache.commons.csv.CSVRecord): Sale = Sale(
-        saleId = record.get("saleId"),
-        clientIdFk = record.get("clientIdFk"),
-        date = record.get("date").toLong(),
-        totalAmount = record.get("totalAmount").toDouble()
-    )
-
-    private fun parseTransaction(record: org.apache.commons.csv.CSVRecord): Transaction =
-        Transaction(
-            transactionId = record.get("transactionId"),
-            saleIdFk = record.get("saleIdFk").ifEmpty { null },
-            date = record.get("date").toLong(),
-            type = record.get("type"),
-            amount = record.get("amount").toDouble(),
-            description = record.get("description").ifEmpty { null }
-        )
-
-    private fun parsePayment(record: org.apache.commons.csv.CSVRecord): Payment = Payment(
-        paymentId = record.get("paymentId"),
-        clientIdFk = record.get("clientIdFk"),
-        amountPaid = record.get("amountPaid").toDouble(),
-        paymentDate = record.get("paymentDate").toLong()
-    )
-
-    private fun parseSaleProductCrossRef(record: org.apache.commons.csv.CSVRecord): SaleProductCrossRef =
-        SaleProductCrossRef(
-            saleId = record.get("saleId"),
-            productId = record.get("productId"),
-            quantity = record.get("quantity").toInt(),
-            priceAtTimeOfSale = record.get("priceAtTimeOfSale").toDouble()
-        )
+    // --- Funciones de Parseo ---
+    private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r["phone"].ifEmpty { null }, r["debtAmount"].toDouble())
+    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["id"], r["name"], r["price"].toDouble(), r["stock"].toInt(), r["isService"].toBoolean())
+    private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"])
+    private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r["description"], r["treatmentDate"].toLong(), r["nextTreatmentDate"].toLongOrNull(), r["isNextTreatmentCompleted"].toBoolean())
+    private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["clientIdFk"], r["date"].toLong(), r["totalAmount"].toDouble())
+    private fun parseTransaction(r: org.apache.commons.csv.CSVRecord) = Transaction(r["transactionId"], r["saleIdFk"].ifEmpty { null }, r["date"].toLong(), r["type"], r["amount"].toDouble(), r["description"].ifEmpty { null })
+    private fun parsePayment(r: org.apache.commons.csv.CSVRecord) = Payment(r["paymentId"], r["clientIdFk"], r["amountPaid"].toDouble(), r["paymentDate"].toLong())
+    private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(r["saleId"], r["productId"], r["quantity"].toInt(), r["priceAtTimeOfSale"].toDouble())
+    private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], r["appointmentDate"].toLong(), r["description"], r["status"])
 }
