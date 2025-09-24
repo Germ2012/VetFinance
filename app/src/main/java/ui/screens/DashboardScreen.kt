@@ -108,7 +108,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             contentDescription = "Fondo del dashboard",
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
-            alpha = 0.15f
+            alpha = 0.5f
         )
 
         LazyColumn(
@@ -124,14 +124,6 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             item {
                 val formattedSales = String.format("₲ %,.0f", salesToday).replace(",", ".")
                 ReportSummaryCard("Ventas de Hoy", formattedSales)
-            }
-            item {
-                Button(
-                    onClick = { showManagementDialog = true },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Gestionar Clientes y Mascotas")
-                }
             }
             if (upcomingTreatments.isNotEmpty()) {
                 item {

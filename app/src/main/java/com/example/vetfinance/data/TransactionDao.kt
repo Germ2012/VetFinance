@@ -20,6 +20,10 @@ interface TransactionDao {
 
     @Query("DELETE FROM transactions")
     suspend fun deleteAllTransactions()
+
+    // Nuevo método para obtener transacciones en lotes
+    @Query("SELECT * FROM transactions ORDER BY date DESC LIMIT :limit OFFSET :offset")
+    fun getTransactionsPaged(limit: Int, offset: Int): List<Transaction>
 }
 
 @Dao
@@ -45,6 +49,10 @@ interface ProductDao {
 
     @Query("DELETE FROM products")
     suspend fun deleteAllProducts()
+
+    // Nuevo método para obtener productos en lotes
+    @Query("SELECT * FROM products ORDER BY name ASC LIMIT :limit OFFSET :offset")
+    suspend fun getProductsPaged(limit: Int, offset: Int): List<Product>
 }
 
 @Dao
@@ -80,6 +88,14 @@ interface SaleDao {
     // 👇 CORRECCIÓN: Nombre de tabla y tipo de retorno corregidos
     @Query("SELECT * FROM sales_products_cross_ref")
     fun getAllSaleProductCrossRefs(): Flow<List<SaleProductCrossRef>>
+
+    // Nuevo método para obtener ventas en lotes
+    @Query("SELECT * FROM sales ORDER BY date DESC LIMIT :limit OFFSET :offset")
+    suspend fun getSalesPaged(limit: Int, offset: Int): List<Sale>
+
+    // Nuevo método para obtener relaciones de ventas en lotes
+    @Query("SELECT * FROM sales_products_cross_ref LIMIT :limit OFFSET :offset")
+    suspend fun getSaleProductCrossRefsPaged(limit: Int, offset: Int): List<SaleProductCrossRef>
 }
 
 @Dao
@@ -105,6 +121,10 @@ interface ClientDao {
 
     @Query("SELECT * FROM clients WHERE name = :name LIMIT 1")
     suspend fun findByName(name: String): Client?
+
+    // Nuevo método para obtener clientes en lotes
+    @Query("SELECT * FROM clients ORDER BY name ASC LIMIT :limit OFFSET :offset")
+    suspend fun getClientsPaged(limit: Int, offset: Int): List<Client>
 }
 
 @Dao
@@ -124,6 +144,10 @@ interface PaymentDao {
 
     @Query("SELECT * FROM payments")
     fun getAllPayments(): Flow<List<Payment>>
+
+    // Nuevo método para obtener pagos en lotes
+    @Query("SELECT * FROM payments ORDER BY paymentDate DESC LIMIT :limit OFFSET :offset")
+    suspend fun getPaymentsPaged(limit: Int, offset: Int): List<Payment>
 }
 
 @Dao
@@ -144,6 +168,10 @@ interface PetDao {
 
     @Query("SELECT * FROM pets WHERE name = :name AND ownerIdFk = :ownerId LIMIT 1")
     suspend fun findByNameAndOwner(name: String, ownerId: String): Pet?
+
+    // Nuevo método para obtener mascotas en lotes
+    @Query("SELECT * FROM pets ORDER BY name ASC LIMIT :limit OFFSET :offset")
+    suspend fun getPetsPaged(limit: Int, offset: Int): List<Pet>
 }
 
 @Dao
@@ -169,4 +197,8 @@ interface TreatmentDao {
     // 👇 CORRECCIÓN: Se añadió la anotación para la fusión de datos
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(treatments: List<Treatment>)
+
+    // Nuevo método para obtener tratamientos en lotes
+    @Query("SELECT * FROM treatments ORDER BY treatmentDate DESC LIMIT :limit OFFSET :offset")
+    suspend fun getTreatmentsPaged(limit: Int, offset: Int): List<Treatment>
 }

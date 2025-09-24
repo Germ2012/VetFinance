@@ -31,7 +31,9 @@ import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
 import org.apache.commons.csv.CSVPrinter
 import java.io.StringWriter
+import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -110,96 +112,104 @@ class VetRepository @Inject constructor(
 
     // --- LÓGICA DE IMPORTACIÓN Y EXPORTACIÓN ---
 
+    // Código refactorizado para la exportación en lotes
+    // Se elimina la palabra clave 'const'
+    private val BATCH_SIZE = 500
+
     suspend fun exportarDatosCompletos(): Map<String, String> = withContext(Dispatchers.IO) {
         val csvMap = mutableMapOf<String, String>()
 
+        // Función de ayuda para la exportación por lotes
+        suspend fun <T> exportBatch(
+            daoMethod: suspend (limit: Int, offset: Int) -> List<T>,
+            fileName: String,
+            headers: Array<String>,
+            recordMapper: (T, CSVPrinter) -> Unit
+        ) {
+            val sw = StringWriter()
+            val format = CSVFormat.Builder.create(CSVFormat.DEFAULT).setHeader(*headers).build()
+            CSVPrinter(sw, format).use { printer ->
+                var offset = 0
+                var batch: List<T>
+                do {
+                    batch = daoMethod(BATCH_SIZE, offset)
+                    batch.forEach { recordMapper(it, printer) }
+                    offset += BATCH_SIZE
+                } while (batch.isNotEmpty())
+            }
+            csvMap[fileName] = sw.toString()
+        }
+
         // Exportar Clientes
-        csvMap["clients.csv"] = StringWriter().use { sw ->
-            val format = CSVFormat.Builder.create(CSVFormat.DEFAULT)
-                .setHeader("clientId", "name", "phone", "debtAmount").build()
-            CSVPrinter(sw, format).use { printer ->
-                clientDao.getAllClients().first().forEach {
-                    printer.printRecord(it.clientId, it.name, it.phone ?: "", it.debtAmount)
-                }
-            }
-            sw.toString()
+        exportBatch(
+            daoMethod = { limit, offset -> clientDao.getClientsPaged(limit, offset) },
+            fileName = "clients.csv",
+            headers = arrayOf("clientId", "name", "phone", "debtAmount")
+        ) { it, printer ->
+            printer.printRecord(it.clientId, it.name, it.phone ?: "", it.debtAmount)
         }
+
         // Exportar Productos
-        csvMap["products.csv"] = StringWriter().use { sw ->
-            val format = CSVFormat.Builder.create(CSVFormat.DEFAULT)
-                .setHeader("id", "name", "price", "stock", "isService").build()
-            CSVPrinter(sw, format).use { printer ->
-                productDao.getAllProducts().first().forEach {
-                    printer.printRecord(it.id, it.name, it.price, it.stock, it.isService)
-                }
-            }
-            sw.toString()
+        exportBatch(
+            daoMethod = { limit, offset -> productDao.getProductsPaged(limit, offset) },
+            fileName = "products.csv",
+            headers = arrayOf("id", "name", "price", "stock", "isService")
+        ) { it, printer ->
+            printer.printRecord(it.id, it.name, it.price, it.stock, it.isService)
         }
+
         // Exportar Mascotas
-        csvMap["pets.csv"] = StringWriter().use { sw ->
-            val format = CSVFormat.Builder.create(CSVFormat.DEFAULT)
-                .setHeader("petId", "name", "ownerIdFk").build()
-            CSVPrinter(sw, format).use { printer ->
-                petDao.getAllPetsWithOwners().first().forEach {
-                    printer.printRecord(it.pet.petId, it.pet.name, it.pet.ownerIdFk)
-                }
-            }
-            sw.toString()
+        exportBatch(
+            daoMethod = { limit, offset -> petDao.getPetsPaged(limit, offset) },
+            fileName = "pets.csv",
+            headers = arrayOf("petId", "name", "ownerIdFk")
+        ) { it, printer ->
+            printer.printRecord(it.petId, it.name, it.ownerIdFk)
         }
+
         // Exportar Tratamientos
-        csvMap["treatments.csv"] = StringWriter().use { sw ->
-            val format = CSVFormat.Builder.create(CSVFormat.DEFAULT)
-                .setHeader("treatmentId", "petIdFk", "treatmentDate", "description", "nextTreatmentDate", "isNextTreatmentCompleted").build()
-            CSVPrinter(sw, format).use { printer ->
-                treatmentDao.getAllTreatments().first().forEach {
-                    printer.printRecord(it.treatmentId, it.petIdFk, it.treatmentDate, it.description, it.nextTreatmentDate ?: "", it.isNextTreatmentCompleted)
-                }
-            }
-            sw.toString()
+        exportBatch(
+            daoMethod = { limit, offset -> treatmentDao.getTreatmentsPaged(limit, offset) },
+            fileName = "treatments.csv",
+            headers = arrayOf("treatmentId", "petIdFk", "treatmentDate", "description", "nextTreatmentDate", "isNextTreatmentCompleted")
+        ) { it, printer ->
+            printer.printRecord(it.treatmentId, it.petIdFk, it.treatmentDate, it.description, it.nextTreatmentDate ?: "", it.isNextTreatmentCompleted)
         }
+
         // Exportar Ventas
-        csvMap["sales.csv"] = StringWriter().use { sw ->
-            val format = CSVFormat.Builder.create(CSVFormat.DEFAULT)
-                .setHeader("saleId", "clientIdFk", "date", "totalAmount").build()
-            CSVPrinter(sw, format).use { printer ->
-                saleDao.getAllSalesWithProducts().first().forEach {
-                    printer.printRecord(it.sale.saleId, it.sale.clientIdFk, it.sale.date, it.sale.totalAmount)
-                }
-            }
-            sw.toString()
+        exportBatch(
+            daoMethod = { limit, offset -> saleDao.getSalesPaged(limit, offset) },
+            fileName = "sales.csv",
+            headers = arrayOf("saleId", "clientIdFk", "date", "totalAmount")
+        ) { it, printer ->
+            printer.printRecord(it.saleId, it.clientIdFk, it.date, it.totalAmount)
         }
+
         // Exportar Transacciones
-        csvMap["transactions.csv"] = StringWriter().use { sw ->
-            val format = CSVFormat.Builder.create(CSVFormat.DEFAULT)
-                .setHeader("transactionId", "saleIdFk", "date", "type", "amount", "description").build()
-            CSVPrinter(sw, format).use { printer ->
-                transactionDao.getAllTransactions().first().forEach {
-                    printer.printRecord(it.transactionId, it.saleIdFk ?: "", it.date, it.type, it.amount, it.description ?: "")
-                }
-            }
-            sw.toString()
+        exportBatch(
+            daoMethod = { limit, offset -> transactionDao.getTransactionsPaged(limit, offset) },
+            fileName = "transactions.csv",
+            headers = arrayOf("transactionId", "saleIdFk", "date", "type", "amount", "description")
+        ) { it, printer ->
+            printer.printRecord(it.transactionId, it.saleIdFk ?: "", it.date, it.type, it.amount, it.description ?: "")
         }
+
         // Exportar Pagos
-        csvMap["payments.csv"] = StringWriter().use { sw ->
-            val format = CSVFormat.Builder.create(CSVFormat.DEFAULT)
-                .setHeader("paymentId", "clientIdFk", "paymentDate", "amountPaid").build()
-            CSVPrinter(sw, format).use { printer ->
-                paymentDao.getAllPayments().first().forEach {
-                    printer.printRecord(it.paymentId, it.clientIdFk, it.paymentDate, it.amountPaid)
-                }
-            }
-            sw.toString()
+        exportBatch(
+            daoMethod = { limit, offset -> paymentDao.getPaymentsPaged(limit, offset) },
+            fileName = "payments.csv",
+            headers = arrayOf("paymentId", "clientIdFk", "paymentDate", "amountPaid")
+        ) { it, printer ->
+            printer.printRecord(it.paymentId, it.clientIdFk, it.paymentDate, it.amountPaid)
         }
+
         // Exportar Detalles de Venta (Tabla de Unión)
-        csvMap["sale_product_cross_refs.csv"] = StringWriter().use { sw ->
-            val format = CSVFormat.Builder.create(CSVFormat.DEFAULT)
-                .setHeader("saleId", "productId", "quantity", "priceAtTimeOfSale").build()
-            CSVPrinter(sw, format).use { printer ->
-                saleDao.getAllSaleProductCrossRefs().first().forEach {
-                    printer.printRecord(it.saleId, it.productId, it.quantity, it.priceAtTimeOfSale)
-                }
-            }
-            sw.toString()
+        exportBatch(
+            daoMethod = { limit, offset -> saleDao.getSaleProductCrossRefsPaged(limit, offset) },
+            fileName = "sale_product_cross_refs.csv",
+            headers = arrayOf("saleId", "productId", "quantity", "priceAtTimeOfSale")
+        ) { it, printer ->
+            printer.printRecord(it.saleId, it.productId, it.quantity, it.priceAtTimeOfSale)
         }
 
         return@withContext csvMap
