@@ -42,9 +42,8 @@ fun VetFinanceTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            // 👇 CORRECCIÓN DEFINITIVA: Se utiliza el método setter explícito
             window.setStatusBarColor(colorScheme.primary.toArgb())
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 

@@ -23,15 +23,15 @@ import javax.inject.Singleton
 
 // Definición de la migración de la versión 10 a la 11
 val MIGRATION_10_11 = object : Migration(10, 11) {
-    override fun migrate(database: SupportSQLiteDatabase) {
+    override fun migrate(db: SupportSQLiteDatabase) {
         // Añade la columna 'cost' a la tabla 'products' con un valor por defecto de 0.0
-        database.execSQL("ALTER TABLE products ADD COLUMN cost REAL NOT NULL DEFAULT 0.0")
+        db.execSQL("ALTER TABLE products ADD COLUMN cost REAL NOT NULL DEFAULT 0.0")
         // Columnas faltantes en la tabla 'treatments'
-        database.execSQL("ALTER TABLE treatments ADD COLUMN weight REAL")
-        database.execSQL("ALTER TABLE treatments ADD COLUMN temperature REAL")
-        database.execSQL("ALTER TABLE treatments ADD COLUMN symptoms TEXT")
-        database.execSQL("ALTER TABLE treatments ADD COLUMN diagnosis TEXT")
-        database.execSQL("ALTER TABLE treatments ADD COLUMN treatmentPlan TEXT")
+        db.execSQL("ALTER TABLE treatments ADD COLUMN weight REAL")
+        db.execSQL("ALTER TABLE treatments ADD COLUMN temperature REAL")
+        db.execSQL("ALTER TABLE treatments ADD COLUMN symptoms TEXT")
+        db.execSQL("ALTER TABLE treatments ADD COLUMN diagnosis TEXT")
+        db.execSQL("ALTER TABLE treatments ADD COLUMN treatmentPlan TEXT")
     }
 }
 

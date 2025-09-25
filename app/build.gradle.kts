@@ -1,19 +1,18 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("kotlin-kapt") // Puedes mantener esta línea por si otra librería la necesita, o eliminarla si ya no es necesaria.
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp") // AÑADIR ESTA LÍNEA
 }
 
 android {
     namespace = "com.example.vetfinance"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.example.vetfinance"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0"
 

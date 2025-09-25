@@ -134,13 +134,13 @@ fun TreatmentHistoryItem(treatment: Treatment) {
             )
 
             if (treatment.symptoms?.isNotBlank() == true) {
-                ClinicalDetailItem("Síntomas", treatment.symptoms!!)
+                ClinicalDetailItem("Síntomas", treatment.symptoms)
             }
             if (treatment.diagnosis?.isNotBlank() == true) {
-                ClinicalDetailItem("Diagnóstico", treatment.diagnosis!!)
+                ClinicalDetailItem("Diagnóstico", treatment.diagnosis)
             }
             if (treatment.treatmentPlan?.isNotBlank() == true) {
-                ClinicalDetailItem("Plan de Tratamiento", treatment.treatmentPlan!!)
+                ClinicalDetailItem("Plan de Tratamiento", treatment.treatmentPlan)
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
