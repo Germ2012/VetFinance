@@ -11,9 +11,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.data.Client
+import ui.utils.ThousandsSeparatorTransformation
 
 /**
- * Componente que muestra la información de un cliente en una tarjeta.
+ * Componente que muestra la informaciÃ³n de un cliente en una tarjeta.
  */
 @Composable
 fun ClientItem(client: Client, onPayClick: () -> Unit, onItemClick: () -> Unit) {
@@ -42,7 +43,7 @@ fun ClientItem(client: Client, onPayClick: () -> Unit, onItemClick: () -> Unit) 
 }
 
 /**
- * Diálogo para registrar un pago para un cliente específico.
+ * DiÃ¡logo para registrar un pago para un cliente especÃ­fico.
  */
 @Composable
 fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
@@ -59,13 +60,14 @@ fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> 
                 prefix = { Text("Gs ") },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number
-                )
+                ),
+                visualTransformation = ThousandsSeparatorTransformation()
             )
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val paymentAmount = amount.toDoubleOrNull() ?: 0.0
+                    val paymentAmount = amount.replace(".", "").toDoubleOrNull() ?: 0.0
                     if (paymentAmount > 0) {
                         onConfirm(paymentAmount)
                     }
@@ -84,7 +86,7 @@ fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> 
 }
 
 /**
- * Diálogo para añadir un nuevo dueño (cliente).
+ * DiÃ¡logo para aÃ±adir un nuevo dueÃ±o (cliente).
  */
 @Composable
 fun AddOwnerDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
@@ -93,19 +95,19 @@ fun AddOwnerDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Añadir Nuevo Dueño") },
+        title = { Text("AÃ±adir Nuevo DueÃ±o") },
         text = {
             Column {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Nombre del dueño") }
+                    label = { Text("Nombre del dueÃ±o") }
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("Teléfono (Opcional)") }
+                    label = { Text("TelÃ©fono (Opcional)") }
                 )
             }
         },

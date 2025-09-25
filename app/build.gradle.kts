@@ -1,8 +1,9 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("kotlin-kapt")
+    id("kotlin-kapt") // Puedes mantener esta línea por si otra librería la necesita, o eliminarla si ya no es necesaria.
     id("com.google.dagger.hilt.android")
+    id("com.google.devtools.ksp") // AÑADIR ESTA LÍNEA
 }
 
 android {
@@ -78,7 +79,7 @@ dependencies {
 
     // ---- Hilt (Inyección de Dependencias) ----
     implementation(libs.hilt.android)
-    kapt(libs.hilt.compiler)
+    ksp(libs.hilt.compiler)     // CAMBIO: Agrega esta línea
     implementation(libs.hilt.navigation.compose)
 
     // ---- Navigation y Componentes de UI ----
@@ -89,7 +90,7 @@ dependencies {
 
     // ---- Room (Base de Datos Local) ----
     implementation(libs.room.runtime)
-    kapt(libs.room.compiler)
+    ksp(libs.room.compiler)      // CAMBIO: Agrega esta línea
     implementation(libs.room.ktx)
     implementation(libs.room.paging)
 
@@ -117,8 +118,4 @@ dependencies {
 
 
     implementation("androidx.work:work-runtime-ktx:2.9.0")
-}
-
-kapt {
-    correctErrorTypes = true
 }

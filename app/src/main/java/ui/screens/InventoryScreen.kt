@@ -1,5 +1,6 @@
 package com.example.vetfinance.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +16,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.viewmodel.VetViewModel
+import ui.utils.ThousandsSeparatorTransformation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,6 +24,8 @@ fun InventoryScreen(viewModel: VetViewModel) {
     val showDialog by viewModel.showAddProductDialog.collectAsState()
     val filter by viewModel.inventoryFilter.collectAsState()
     val inventory by viewModel.inventory.collectAsState()
+    var productToEdit by remember { mutableStateOf<Product?>(null) }
+
 
     val filteredProducts = remember(inventory, filter) {
         when (filter) {
@@ -36,6 +40,17 @@ fun InventoryScreen(viewModel: VetViewModel) {
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { name, price, stock, cost, isService ->
                 viewModel.addProduct(name, price, stock, cost, isService)
+            }
+        )
+    }
+
+    if (productToEdit != null) {
+        EditProductDialog(
+            product = productToEdit!!,
+            onDismiss = { productToEdit = null },
+            onConfirm = {
+                viewModel.updateProduct(it)
+                productToEdit = null
             }
         )
     }
@@ -55,7 +70,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(filteredProducts) { product ->
-                    InventoryItem(product)
+                    InventoryItem(product, onEdit = { productToEdit = it })
                 }
 
                 if (filteredProducts.isEmpty()) {
@@ -93,8 +108,10 @@ fun InventoryFilter(selectedFilter: String, onFilterSelected: (String) -> Unit) 
 }
 
 @Composable
-fun InventoryItem(product: Product) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+fun InventoryItem(product: Product, onEdit: (Product) -> Unit) {
+    Card(modifier = Modifier
+        .fillMaxWidth()
+        .clickable { onEdit(product) }) {
         Row(
             modifier = Modifier.padding(16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -148,16 +165,18 @@ fun AddProductDialog(
                 )
                 OutlinedTextField(
                     value = price,
-                    onValueChange = { price = it },
+                    onValueChange = { if (it.all { char -> char.isDigit() }) price = it },
                     label = { Text("Precio") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = ThousandsSeparatorTransformation(),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
                     value = cost,
-                    onValueChange = { cost = it },
+                    onValueChange = { if (it.all { char -> char.isDigit() }) cost = it },
                     label = { Text("Costo") }, // Nuevo campo de texto
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = ThousandsSeparatorTransformation(),
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -179,15 +198,93 @@ fun AddProductDialog(
                 onClick = {
                     onConfirm(
                         name,
-                        price.toDoubleOrNull() ?: 0.0,
+                        price.replace(".", "").toDoubleOrNull() ?: 0.0,
                         if (isService) 9999 else stock.toIntOrNull() ?: 0,
-                        cost.toDoubleOrNull() ?: 0.0, // Pasar el nuevo valor
+                        cost.replace(".", "").toDoubleOrNull() ?: 0.0, // Pasar el nuevo valor
                         isService
                     )
                 },
                 enabled = name.isNotBlank() && price.isNotBlank() && cost.isNotBlank()
             ) {
                 Text("Guardar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancelar")
+            }
+        }
+    )
+}
+
+@Composable
+fun EditProductDialog(
+    product: Product,
+    onDismiss: () -> Unit,
+    onConfirm: (Product) -> Unit
+) {
+    var name by remember { mutableStateOf(product.name) }
+    var price by remember { mutableStateOf(product.price.toLong().toString()) }
+    var stock by remember { mutableStateOf(product.stock.toString()) }
+    var cost by remember { mutableStateOf(product.cost.toLong().toString()) }
+    var isService by remember { mutableStateOf(product.isService) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Editar Producto/Servicio") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Nombre") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = price,
+                    onValueChange = { if (it.all { char -> char.isDigit() }) price = it },
+                    label = { Text("Precio") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = ThousandsSeparatorTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = cost,
+                    onValueChange = { if (it.all { char -> char.isDigit() }) cost = it },
+                    label = { Text("Costo") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = ThousandsSeparatorTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = stock,
+                    onValueChange = { if (it.all { char -> char.isDigit() }) stock = it },
+                    label = { Text("Stock") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    enabled = !isService,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = isService, onCheckedChange = { isService = it })
+                    Text("Es un servicio")
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val updatedProduct = product.copy(
+                        name = name,
+                        price = price.replace(".", "").toDoubleOrNull() ?: 0.0,
+                        stock = if (isService) 9999 else stock.toIntOrNull() ?: 0,
+                        cost = cost.replace(".", "").toDoubleOrNull() ?: 0.0,
+                        isService = isService
+                    )
+                    onConfirm(updatedProduct)
+                },
+                enabled = name.isNotBlank() && price.isNotBlank() && cost.isNotBlank()
+            ) {
+                Text("Actualizar")
             }
         },
         dismissButton = {

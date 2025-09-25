@@ -9,6 +9,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.viewmodel.VetViewModel
+import ui.utils.ThousandsSeparatorTransformation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,13 +56,14 @@ fun AddClientScreen(
                 label = { Text("Deuda Inicial (Opcional)") },
                 prefix = { Text("₲") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                visualTransformation = ThousandsSeparatorTransformation(),
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(24.dp))
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
-                        val debtAmount = debt.toDoubleOrNull() ?: 0.0
+                        val debtAmount = debt.replace(".", "").toDoubleOrNull() ?: 0.0
                         viewModel.addClient(name, phone, debtAmount)
                         navController.popBackStack()
                     } else {
