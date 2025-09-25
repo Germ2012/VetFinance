@@ -58,10 +58,12 @@ class VetRepository @Inject constructor(
         ).flow
     }
 
-    fun getDebtClientsPaginated(): Flow<PagingData<Client>> {
+    // 👇 CORRECCIÓN: La función ahora acepta un searchQuery
+    fun getDebtClientsPaginated(searchQuery: String): Flow<PagingData<Client>> {
         return Pager(
             config = PagingConfig(pageSize = 20, enablePlaceholders = false),
-            pagingSourceFactory = { clientDao.getDebtClientsPaginated() }
+            // 👇 CORRECCIÓN: Se pasa el searchQuery al DAO
+            pagingSourceFactory = { clientDao.getDebtClientsPagedSource(searchQuery) }
         ).flow
     }
 
@@ -241,10 +243,8 @@ class VetRepository @Inject constructor(
     private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["id"], r["name"], r["price"].toDouble(), r["stock"].toInt(), r["isService"].toBoolean())
     private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r["birthDate"].toLongOrNull(), r["breed"].ifEmpty { null }, r["allergies"].ifEmpty { null })
     private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r["description"], r["treatmentDate"].toLong(), r["nextTreatmentDate"].toLongOrNull(), r["isNextTreatmentCompleted"].toBoolean())
-    // 👇 CORRECCIÓN: Se corrige el orden de los parámetros para que coincida con el constructor de Sale
     private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["clientIdFk"], r["totalAmount"].toDouble(), r["date"].toLong())
     private fun parseTransaction(r: org.apache.commons.csv.CSVRecord) = Transaction(r["transactionId"], r["saleIdFk"].ifEmpty { null }, r["date"].toLong(), r["type"], r["amount"].toDouble(), r["description"].ifEmpty { null })
-    // 👇 CORRECCIÓN: Se corrige el orden de los parámetros para que coincida con el constructor de Payment
     private fun parsePayment(r: org.apache.commons.csv.CSVRecord) = Payment(r["paymentId"], r["clientIdFk"], r["amountPaid"].toDouble(), r["paymentDate"].toLong())
     private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(r["saleId"], r["productId"], r["quantity"].toInt(), r["priceAtTimeOfSale"].toDouble())
     private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], r["appointmentDate"].toLong(), r["description"], r["isCompleted"].toBoolean())

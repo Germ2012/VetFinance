@@ -83,7 +83,7 @@ interface SaleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllSaleProductCrossRefs(crossRefs: List<SaleProductCrossRef>)
 
-    @androidx.room.Transaction // <-- CORREGIDO
+    @androidx.room.Transaction
     @Query("SELECT * FROM sales ORDER BY date DESC")
     fun getAllSalesWithProducts(): Flow<List<SaleWithProducts>>
 
@@ -121,8 +121,9 @@ interface ClientDao {
     @Query("SELECT * FROM clients ORDER BY name ASC LIMIT :limit OFFSET :offset")
     suspend fun getClientsPaged(limit: Int, offset: Int): List<Client>
 
-    @Query("SELECT * FROM clients WHERE debtAmount > 0 ORDER BY name ASC")
-    fun getDebtClientsPagedSource(): PagingSource<Int, Client>
+    // 👇 CORRECCIÓN: La consulta ahora filtra por nombre y deuda
+    @Query("SELECT * FROM clients WHERE debtAmount > 0 AND name LIKE '%' || :searchQuery || '%' ORDER BY name ASC")
+    fun getDebtClientsPagedSource(searchQuery: String): PagingSource<Int, Client>
 
     @Query("SELECT SUM(debtAmount) FROM clients")
     fun getTotalDebt(): Flow<Double>
@@ -154,7 +155,7 @@ interface PetDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(pets: List<Pet>)
 
-    @androidx.room.Transaction // <-- CORREGIDO
+    @androidx.room.Transaction
     @Query("SELECT * FROM pets ORDER BY name ASC")
     fun getAllPetsWithOwners(): Flow<List<PetWithOwner>>
 
@@ -194,7 +195,7 @@ interface AppointmentDao {
     @Delete
     suspend fun delete(appointment: Appointment)
 
-    @androidx.room.Transaction // <-- CORREGIDO
+    @androidx.room.Transaction
     @Query("SELECT * FROM appointments WHERE appointmentDate >= :startDate AND appointmentDate < :endDate ORDER BY appointmentDate ASC")
     fun getAppointmentsForDateRange(startDate: Long, endDate: Long): Flow<List<AppointmentWithDetails>>
 

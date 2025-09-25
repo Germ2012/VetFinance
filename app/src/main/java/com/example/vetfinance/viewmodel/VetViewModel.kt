@@ -5,6 +5,8 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.paging.PagingData
+import androidx.paging.cachedIn
 import com.example.vetfinance.data.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
@@ -33,22 +35,6 @@ class VetViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    // --- ESTADOS DE DATOS PRINCIPALES (RAW)---
-    val clients: StateFlow<List<Client>> = repository.getAllClients()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    private val _sales = MutableStateFlow<List<SaleWithProducts>>(emptyList())
-    val petsWithOwners: StateFlow<List<PetWithOwner>> = repository.getAllPetsWithOwners()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    private val _treatmentHistory = MutableStateFlow<List<Treatment>>(emptyList())
-    val treatmentHistory: StateFlow<List<Treatment>> = _treatmentHistory.asStateFlow()
-    val upcomingTreatments: StateFlow<List<Treatment>> = repository.getUpcomingTreatments()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val inventory: StateFlow<List<Product>> = repository.getAllProducts()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    private val _paymentHistory = MutableStateFlow<List<Payment>>(emptyList())
-    val paymentHistory: StateFlow<List<Payment>> = _paymentHistory.asStateFlow()
-
-
     // --- FILTROS Y BÚSQUEDA ---
     private val _inventoryFilter = MutableStateFlow("Todos")
     val inventoryFilter: StateFlow<String> = _inventoryFilter.asStateFlow()
@@ -61,8 +47,14 @@ class VetViewModel @Inject constructor(
     private val _selectedSaleDateFilter = MutableStateFlow<Long?>(null)
     val selectedSaleDateFilter: StateFlow<Long?> = _selectedSaleDateFilter.asStateFlow()
 
+    // --- DATOS PAGINADOS Y DERIVADOS ---
 
-    // --- DATOS DERIVADOS (FILTRADOS) ---
+    // 👇 CORRECCIÓN: Se reemplaza la propiedad para que reaccione a los cambios de búsqueda
+    val debtClientsPaginated: Flow<PagingData<Client>> =
+        clientSearchQuery.flatMapLatest { query ->
+            repository.getDebtClientsPaginated(query)
+        }.cachedIn(viewModelScope)
+
     val filteredPetsWithOwners: StateFlow<List<PetWithOwner>> =
         combine(petsWithOwners, _petSearchQuery) { pets, query ->
             if (query.isBlank()) pets else pets.filter {
@@ -88,17 +80,27 @@ class VetViewModel @Inject constructor(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // --- ESTADOS DE DATOS PRINCIPALES (RAW)---
+    private val _sales = MutableStateFlow<List<SaleWithProducts>>(emptyList())
+    val petsWithOwners: StateFlow<List<PetWithOwner>> = repository.getAllPetsWithOwners()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _treatmentHistory = MutableStateFlow<List<Treatment>>(emptyList())
+    val treatmentHistory: StateFlow<List<Treatment>> = _treatmentHistory.asStateFlow()
+    val upcomingTreatments: StateFlow<List<Treatment>> = repository.getUpcomingTreatments()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val inventory: StateFlow<List<Product>> = repository.getAllProducts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _paymentHistory = MutableStateFlow<List<Payment>>(emptyList())
+    val paymentHistory: StateFlow<List<Payment>> = _paymentHistory.asStateFlow()
 
     // --- CALENDARIO Y CITAS ---
     private val _selectedCalendarDate = MutableStateFlow(LocalDate.now())
     val selectedCalendarDate: StateFlow<LocalDate> = _selectedCalendarDate.asStateFlow()
 
-    // 👇 CORRECCIÓN: Se vuelve a añadir la lógica para las citas de la fecha seleccionada
     val appointmentsOnSelectedDate: StateFlow<List<AppointmentWithDetails>> =
         _selectedCalendarDate.flatMapLatest { date ->
             repository.getAppointmentsForDate(date)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
 
     // --- REPORTES ---
     val topSellingProducts: StateFlow<List<TopSellingProduct>> = repository.getTopSellingProducts(10)
@@ -130,6 +132,7 @@ class VetViewModel @Inject constructor(
         viewModelScope.launch { repository.getAllSales().collect { _sales.value = it } }
         // Asegura que los datos iniciales (como el Cliente General) existan
         viewModelScope.launch {
+            // Esta comprobación es una simplificación. En un caso real, podría ser más robusta.
             if (repository.getAllClients().firstOrNull()?.none { it.clientId == GENERAL_CLIENT_ID } == true) {
                 addSampleData()
             }
