@@ -1,4 +1,3 @@
-// ruta: app/src/main/java/com/example/vetfinance/data/Appointment.kt
 package com.example.vetfinance.data
 
 import androidx.room.Entity
@@ -7,6 +6,16 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.UUID
 
+/**
+ * Representa una cita agendada en la base de datos.
+ *
+ * @property appointmentId El identificador único para la cita, generado automáticamente.
+ * @property petIdFk La clave foránea que vincula la cita con la [Pet] correspondiente.
+ * @property clientIdFk La clave foránea que vincula la cita con el [Client] (dueño) correspondiente.
+ * @property appointmentDate La fecha y hora para la cual está programada la cita, almacenada como milisegundos.
+ * @property description El motivo o la descripción de la cita.
+ * @property isCompleted Un booleano que indica si la cita ya se ha completado.
+ */
 @Entity(
     tableName = "appointments",
     foreignKeys = [

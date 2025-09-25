@@ -19,7 +19,6 @@ import com.example.vetfinance.ui.theme.OnPrimaryTitle
 import com.example.vetfinance.ui.theme.TextPrimary
 import com.example.vetfinance.ui.theme.Typography
 
-// CORRECCIÓN: Se usa 'lightColorScheme' de Material 3.
 private val LightColorScheme = lightColorScheme(
     primary = GreenPrimary,
     onPrimary = OnPrimaryTitle,
@@ -37,19 +36,18 @@ fun VetFinanceTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit
 ) {
-    // Por ahora, solo usaremos el tema claro. Puedes expandir esto para un tema oscuro.
     val colorScheme = LightColorScheme
 
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.primary.toArgb()
+            // 👇 CORRECCIÓN DEFINITIVA: Se utiliza el método setter explícito
+            window.setStatusBarColor(colorScheme.primary.toArgb())
             WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = darkTheme
         }
     }
 
-    // CORRECCIÓN: Se usa 'colorScheme' en lugar de 'colors'.
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,

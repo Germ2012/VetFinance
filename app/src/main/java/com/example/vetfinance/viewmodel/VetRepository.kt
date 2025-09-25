@@ -35,6 +35,23 @@ private data class ParsedBackupData(
     val appointments: List<Appointment>
 )
 
+/**
+ * Repositorio central que maneja todas las operaciones de datos de la aplicación.
+ *
+ * Actúa como una única fuente de verdad (Single Source of Truth) para la UI, abstrayendo los
+ * orígenes de datos (en este caso, la base de datos de Room). Proporciona métodos limpios
+ * para que el `VetViewModel` acceda y manipule los datos sin conocer los detalles de la
+ * implementación de la base de datos.
+ *
+ * @property db Instancia de la base de datos Room de la aplicación.
+ * @property productDao DAO para acceder a los datos de los productos.
+ * @property saleDao DAO para acceder a los datos de las ventas.
+ * @property clientDao DAO para acceder a los datos de los clientes.
+ * @property paymentDao DAO para acceder a los datos de los pagos.
+ * @property petDao DAO para acceder a los datos de las mascotas.
+ * @property treatmentDao DAO para acceder a los datos de los tratamientos.
+ * @property appointmentDao DAO para acceder a los datos de las citas.
+ */
 @Singleton
 class VetRepository @Inject constructor(
     private val db: AppDatabase,
@@ -48,9 +65,12 @@ class VetRepository @Inject constructor(
     private val appointmentDao: AppointmentDao
 ) {
 
+    /** Tamaño del lote para operaciones de exportación para no sobrecargar la memoria. */
     private val BATCH_SIZE = 500
 
-    // --- MÉTODOS DE PAGINACIÓN ---
+    // --- OPERACIONES DE PAGINACIÓN ---
+
+    /** Obtiene un flujo paginado de productos, opcionalmente filtrado por tipo. */
     fun getProductsPaginated(filterType: String): Flow<PagingData<Product>> {
         return Pager(
             config = PagingConfig(pageSize = 20, enablePlaceholders = false),
@@ -58,31 +78,36 @@ class VetRepository @Inject constructor(
         ).flow
     }
 
-    // 👇 CORRECCIÓN: La función ahora acepta un searchQuery
+    /** Obtiene un flujo paginado de clientes con deuda, filtrado por una consulta de búsqueda. */
     fun getDebtClientsPaginated(searchQuery: String): Flow<PagingData<Client>> {
         return Pager(
             config = PagingConfig(pageSize = 20, enablePlaceholders = false),
-            // 👇 CORRECCIÓN: Se pasa el searchQuery al DAO
             pagingSourceFactory = { clientDao.getDebtClientsPagedSource(searchQuery) }
         ).flow
     }
 
-    // --- MÉTODOS DE CITAS ---
+    // --- OPERACIONES CON FECHAS (CITAS) ---
+
+    /** Obtiene todas las citas con sus detalles para una fecha específica. */
     fun getAppointmentsForDate(date: LocalDate): Flow<List<AppointmentWithDetails>> {
         val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         return appointmentDao.getAppointmentsForDateRange(startOfDay, endOfDay)
     }
 
-    suspend fun insertAppointment(appointment: Appointment) = appointmentDao.insert(appointment)
-    suspend fun updateAppointment(appointment: Appointment) = appointmentDao.update(appointment)
-    suspend fun deleteAppointment(appointment: Appointment) = appointmentDao.delete(appointment)
+    // --- OPERACIONES DE REPORTES ---
 
-    // --- MÉTODOS DE REPORTES ---
+    /** Obtiene los productos más vendidos, limitados por la cantidad especificada. */
     fun getTopSellingProducts(limit: Int): Flow<List<TopSellingProduct>> = saleDao.getTopSellingProducts(limit)
-    fun getTotalDebt(): Flow<Double> = clientDao.getTotalDebt()
 
-    // --- MÉTODOS DE LECTURA (FLUJOS) ---
+    /** Obtiene la suma total de la deuda de todos los clientes. */
+    fun getTotalDebt(): Flow<Double?> = clientDao.getTotalDebt()
+
+    /** Calcula el valor total del inventario (precio * stock) para productos físicos. */
+    fun getTotalInventoryValue(): Flow<Double?> = productDao.getTotalInventoryValue()
+
+    // --- OPERACIONES DE LECTURA (FLUJOS DE DATOS) ---
+
     fun getAllProducts(): Flow<List<Product>> = productDao.getAllProducts()
     fun getAllSales(): Flow<List<SaleWithProducts>> = saleDao.getAllSalesWithProducts()
     fun getAllClients(): Flow<List<Client>> = clientDao.getAllClients()
@@ -91,16 +116,26 @@ class VetRepository @Inject constructor(
     fun getTreatmentsForPet(petId: String): Flow<List<Treatment>> = treatmentDao.getTreatmentsForPet(petId)
     fun getUpcomingTreatments(): Flow<List<Treatment>> = treatmentDao.getUpcomingTreatments()
 
-    // --- MÉTODOS DE ESCRITURA (SUSPEND) ---
-    suspend fun insertProduct(product: Product) { productDao.insertAll(listOf(product)) }
-    suspend fun updateProduct(product: Product) { productDao.update(product) }
-    suspend fun insertClient(client: Client) { clientDao.insertAll(listOf(client)) }
-    suspend fun updateClient(client: Client) { clientDao.update(client) }
+    // --- OPERACIONES DE ESCRITURA (SUSPEND) ---
+
+    suspend fun insertProduct(product: Product) = productDao.insertAll(listOf(product))
+    suspend fun updateProduct(product: Product) = productDao.update(product)
+    suspend fun insertClient(client: Client) = clientDao.insertAll(listOf(client))
+    suspend fun updateClient(client: Client) = clientDao.update(client)
     suspend fun insertPet(pet: Pet) = petDao.insert(pet)
     suspend fun updatePet(pet: Pet) = petDao.update(pet)
     suspend fun insertTreatment(treatment: Treatment) = treatmentDao.insert(treatment)
+    suspend fun insertAppointment(appointment: Appointment) = appointmentDao.insert(appointment)
+    suspend fun updateAppointment(appointment: Appointment) = appointmentDao.update(appointment)
+    suspend fun deleteAppointment(appointment: Appointment) = appointmentDao.delete(appointment)
+
+    /** Marca un tratamiento como completado y crea el siguiente si es necesario. */
     suspend fun markTreatmentAsCompleted(treatmentId: String) = treatmentDao.markAsCompleted(treatmentId)
 
+    /**
+     * Registra un pago para un cliente y actualiza su deuda total.
+     * La operación se asegura de que la deuda nunca sea negativa.
+     */
     suspend fun makePayment(client: Client, amount: Double) {
         val payment = Payment(clientIdFk = client.clientId, amountPaid = amount)
         paymentDao.insert(payment)
@@ -108,6 +143,10 @@ class VetRepository @Inject constructor(
         clientDao.updateDebt(client.clientId, if (newDebt < 0) 0.0 else newDebt)
     }
 
+    /**
+     * Inserta una nueva venta y sus productos asociados en una única transacción.
+     * También actualiza el stock de los productos vendidos.
+     */
     suspend fun insertSale(sale: Sale, items: Map<Product, Int>) {
         db.withTransaction {
             saleDao.insertSale(sale)
@@ -119,6 +158,7 @@ class VetRepository @Inject constructor(
                     priceAtTimeOfSale = product.price
                 )
                 saleDao.insertSaleProductCrossRef(crossRef)
+                // Solo se descuenta el stock si no es un servicio.
                 if (!product.isService) {
                     val updatedStock = product.stock - quantity
                     updateProduct(product.copy(stock = updatedStock))
@@ -129,10 +169,23 @@ class VetRepository @Inject constructor(
 
     // --- LÓGICA DE IMPORTACIÓN Y EXPORTACIÓN ---
 
+    /**
+     * Exporta todas las tablas de la base de datos a un mapa de [NombreDeArchivo, ContenidoCSV].
+     * Se ejecuta en el despachador de IO para no bloquear el hilo principal.
+     */
     suspend fun exportarDatosCompletos(): Map<String, String> = withContext(Dispatchers.IO) {
         val csvMap = mutableMapOf<String, String>()
 
-        suspend fun <T> exportBatch(daoMethod: suspend (limit: Int, offset: Int) -> List<T>, fileName: String, headers: Array<String>, recordMapper: (T, CSVPrinter) -> Unit) {
+        /**
+         * Función genérica para exportar una tabla en lotes (batches) para evitar
+         * problemas de memoria con bases de datos grandes.
+         */
+        suspend fun <T> exportBatch(
+            daoMethod: suspend (limit: Int, offset: Int) -> List<T>,
+            fileName: String,
+            headers: Array<String>,
+            recordMapper: (T, CSVPrinter) -> Unit
+        ) {
             val sw = StringWriter()
             val format = CSVFormat.Builder.create(CSVFormat.DEFAULT).setHeader(*headers).build()
             CSVPrinter(sw, format).use { printer ->
@@ -147,6 +200,7 @@ class VetRepository @Inject constructor(
             csvMap[fileName] = sw.toString()
         }
 
+        // Se exporta cada tabla a su respectivo archivo CSV.
         exportBatch(clientDao::getClientsPaged, "clients.csv", arrayOf("clientId", "name", "phone", "debtAmount")) { it, p -> p.printRecord(it.clientId, it.name, it.phone ?: "", it.debtAmount) }
         exportBatch(productDao::getProductsPaged, "products.csv", arrayOf("id", "name", "price", "stock", "isService")) { it, p -> p.printRecord(it.id, it.name, it.price, it.stock, it.isService) }
         exportBatch(petDao::getPetsPaged, "pets.csv", arrayOf("petId", "name", "ownerIdFk", "birthDate", "breed", "allergies")) { it, p -> p.printRecord(it.petId, it.name, it.ownerIdFk, it.birthDate ?: "", it.breed ?: "", it.allergies ?: "") }
@@ -160,8 +214,15 @@ class VetRepository @Inject constructor(
         return@withContext csvMap
     }
 
+    /**
+     * Importa datos desde un archivo ZIP, valida su integridad y los fusiona con la base de datos local.
+     * @param uri El URI del archivo ZIP seleccionado por el usuario.
+     * @param context El contexto de la aplicación, necesario para acceder al ContentResolver.
+     * @return Un mensaje de éxito o error.
+     */
     suspend fun importarDatosDesdeZIP(uri: Uri, context: Context): String = withContext(Dispatchers.IO) {
         try {
+            // 1. Descomprimir el contenido del ZIP en memoria.
             val archivosDelZip = mutableMapOf<String, String>()
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 ZipInputStream(inputStream).use { zis ->
@@ -172,7 +233,10 @@ class VetRepository @Inject constructor(
             }
             if (archivosDelZip.isEmpty()) return@withContext "Error: El archivo ZIP está vacío o no es válido."
 
+            // 2. Validar y parsear los datos CSV.
             val backupData = validateAndParseBackupData(archivosDelZip)
+            
+            // 3. Insertar los datos validados en la base de datos en una única transacción.
             performMergeImport(backupData)
 
             return@withContext "Fusión de datos completada con éxito."
@@ -185,8 +249,13 @@ class VetRepository @Inject constructor(
         }
     }
 
+    /**
+     * Valida la integridad referencial de los datos del backup antes de importarlos.
+     * Lanza una [BackupValidationException] si se encuentra una inconsistencia.
+     */
     @Throws(BackupValidationException::class)
     private fun validateAndParseBackupData(archivos: Map<String, String>): ParsedBackupData {
+        // Se parsean todas las entidades desde sus respectivos CSVs.
         val clients = parseCSV(archivos["clients.csv"], ::parseClient)
         val products = parseCSV(archivos["products.csv"], ::parseProduct)
         val pets = parseCSV(archivos["pets.csv"], ::parsePet)
@@ -197,11 +266,13 @@ class VetRepository @Inject constructor(
         val saleProductCrossRefs = parseCSV(archivos["sale_product_cross_refs.csv"], ::parseSaleProductCrossRef)
         val appointments = parseCSV(archivos["appointments.csv"], ::parseAppointment)
 
+        // Se crean conjuntos de IDs para una validación eficiente.
         val clientIds = clients.map { it.clientId }.toSet()
         val petIds = pets.map { it.petId }.toSet()
         val productIds = products.map { it.id }.toSet()
         val saleIds = sales.map { it.saleId }.toSet()
 
+        // Se comprueba que todas las claves foráneas apunten a entidades existentes.
         pets.forEach { if (it.ownerIdFk !in clientIds) throw BackupValidationException("Mascota con dueño inválido: ${it.name}") }
         treatments.forEach { if (it.petIdFk !in petIds) throw BackupValidationException("Tratamiento con mascota inválida: ${it.treatmentId}") }
         sales.forEach { if (it.clientIdFk !in clientIds) throw BackupValidationException("Venta con cliente inválido: ${it.saleId}") }
@@ -218,6 +289,7 @@ class VetRepository @Inject constructor(
         return ParsedBackupData(clients, products, pets, treatments, sales, transactions, payments, saleProductCrossRefs, appointments)
     }
 
+    /** Inserta todos los datos del backup en la base de datos dentro de una transacción. */
     private suspend fun performMergeImport(data: ParsedBackupData) {
         db.withTransaction {
             if (data.clients.isNotEmpty()) clientDao.insertAll(data.clients)
@@ -232,13 +304,14 @@ class VetRepository @Inject constructor(
         }
     }
 
+    /** Función de utilidad para parsear un contenido de texto CSV a una lista de objetos. */
     private inline fun <T> parseCSV(content: String?, parser: (org.apache.commons.csv.CSVRecord) -> T): List<T> {
         if (content.isNullOrBlank()) return emptyList()
         val format = CSVFormat.Builder.create(CSVFormat.DEFAULT).setHeader().setSkipHeaderRecord(true).setIgnoreEmptyLines(true).build()
         return CSVParser.parse(content, format).map(parser)
     }
 
-    // --- Funciones de Parseo ---
+    // --- Funciones de Parseo de CSV ---
     private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r["phone"].ifEmpty { null }, r["debtAmount"].toDouble())
     private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["id"], r["name"], r["price"].toDouble(), r["stock"].toInt(), r["isService"].toBoolean())
     private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r["birthDate"].toLongOrNull(), r["breed"].ifEmpty { null }, r["allergies"].ifEmpty { null })

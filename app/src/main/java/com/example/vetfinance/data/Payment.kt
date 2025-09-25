@@ -1,12 +1,19 @@
-// ruta: app/src/main/java/com/example/vetfinance/data/Payment.kt
-
 package com.example.vetfinance.data
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
-import androidx.room.Index // Asegúrate de que este import exista
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.UUID
+
+/**
+ * Representa un pago o abono realizado por un cliente para reducir su deuda.
+ *
+ * @property paymentId El identificador único para el pago, generado automáticamente.
+ * @property clientIdFk La clave foránea que vincula el pago con el [Client] que lo realizó.
+ * @property amountPaid El monto de dinero que fue pagado.
+ * @property paymentDate La fecha y hora en que se registró el pago, almacenada como milisegundos.
+ */
 @Entity(
     tableName = "payments",
     foreignKeys = [
@@ -17,13 +24,12 @@ import java.util.UUID
             onDelete = ForeignKey.CASCADE // Si se borra un cliente, se borran sus pagos.
         )
     ],
-    // 👇 AÑADE ESTA LÍNEA PARA CREAR EL ÍNDICE Y RESOLVER LA ADVERTENCIA
     indices = [Index(value = ["clientIdFk"])]
 )
 data class Payment(
     @PrimaryKey
-    val paymentId:  String = UUID.randomUUID().toString(),
-    val clientIdFk: String, // Clave foránea para relacionarlo con el cliente
+    val paymentId: String = UUID.randomUUID().toString(),
+    val clientIdFk: String,
     val amountPaid: Double,
     val paymentDate: Long = System.currentTimeMillis()
 )

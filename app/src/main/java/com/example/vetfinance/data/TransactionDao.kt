@@ -11,11 +11,11 @@ import androidx.room.Relation
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
-// --- CLASES DE RELACIÓN (NUEVAS Y CORREGIDAS) ---
+// --- CLASES DE RELACIÓN ---
 
 /**
- * Data class para obtener los detalles completos de una cita,
- * incluyendo la mascota y el cliente asociados.
+ * Representa una cita con todos sus detalles, incluyendo la información de la mascota y el cliente.
+ * Room utiliza esta clase para unir las tablas de citas, mascotas y clientes.
  */
 data class AppointmentWithDetails(
     @Embedded val appointment: Appointment,
@@ -32,13 +32,19 @@ data class AppointmentWithDetails(
 )
 
 /**
- * Data class para el resultado de la consulta de los productos más vendidos.
+ * Representa el resultado de una consulta de agregación para encontrar los productos más vendidos.
+ * @property name El nombre del producto.
+ * @property totalSold La cantidad total vendida de ese producto.
  */
 data class TopSellingProduct(val name: String, val totalSold: Int)
 
 
-// --- DAOs ---
+// --- DAOs (Data Access Objects) ---
 
+/**
+ * DAO para la entidad [Transaction].
+ * Actualmente no se utiliza activamente, pero está disponible para futuras funcionalidades de contabilidad.
+ */
 @Dao
 interface TransactionDao {
     @Query("SELECT * FROM transactions ORDER BY date DESC")
@@ -51,6 +57,9 @@ interface TransactionDao {
     suspend fun getTransactionsPaged(limit: Int, offset: Int): List<Transaction>
 }
 
+/**
+ * DAO para la entidad [Product]. Gestiona el acceso a los productos y servicios.
+ */
 @Dao
 interface ProductDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -65,10 +74,18 @@ interface ProductDao {
     @Query("SELECT * FROM products ORDER BY name ASC LIMIT :limit OFFSET :offset")
     suspend fun getProductsPaged(limit: Int, offset: Int): List<Product>
 
+    /** Proporciona una fuente de datos paginada para el inventario, con soporte para filtrado. */
     @Query("SELECT * FROM products WHERE (:filterType = 'Todos') OR (:filterType = 'Productos' AND isService = 0) OR (:filterType = 'Servicios' AND isService = 1) ORDER BY name ASC")
     fun getProductsPagedSource(filterType: String): PagingSource<Int, Product>
+
+    /** Calcula el valor total del inventario sumando (precio * stock) para todos los productos físicos. */
+    @Query("SELECT SUM(price * stock) FROM products WHERE isService = 0")
+    fun getTotalInventoryValue(): Flow<Double?>
 }
 
+/**
+ * DAO para las entidades [Sale] y [SaleProductCrossRef]. Gestiona las ventas.
+ */
 @Dao
 interface SaleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -83,6 +100,7 @@ interface SaleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllSaleProductCrossRefs(crossRefs: List<SaleProductCrossRef>)
 
+    /** Obtiene todas las ventas con su lista de productos asociados. La anotación @Transaction asegura la atomicidad. */
     @androidx.room.Transaction
     @Query("SELECT * FROM sales ORDER BY date DESC")
     fun getAllSalesWithProducts(): Flow<List<SaleWithProducts>>
@@ -93,6 +111,11 @@ interface SaleDao {
     @Query("SELECT * FROM sales_products_cross_ref LIMIT :limit OFFSET :offset")
     suspend fun getSaleProductCrossRefsPaged(limit: Int, offset: Int): List<SaleProductCrossRef>
 
+    /**
+     * Calcula los productos más vendidos.
+     * Une las tablas de productos y referencias de venta, agrupa por nombre de producto,
+     * suma las cantidades vendidas y ordena de forma descendente.
+     */
     @Query("""
         SELECT P.name, SUM(SP.quantity) as totalSold
         FROM sales_products_cross_ref AS SP
@@ -104,6 +127,9 @@ interface SaleDao {
     fun getTopSellingProducts(limit: Int): Flow<List<TopSellingProduct>>
 }
 
+/**
+ * DAO para la entidad [Client]. Gestiona el acceso a los datos de los clientes.
+ */
 @Dao
 interface ClientDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -115,20 +141,25 @@ interface ClientDao {
     @Query("SELECT * FROM clients ORDER BY name ASC")
     fun getAllClients(): Flow<List<Client>>
 
+    /** Actualiza el monto de la deuda para un cliente específico. */
     @Query("UPDATE clients SET debtAmount = :newDebtAmount WHERE clientId = :clientId")
     suspend fun updateDebt(clientId: String, newDebtAmount: Double)
 
     @Query("SELECT * FROM clients ORDER BY name ASC LIMIT :limit OFFSET :offset")
     suspend fun getClientsPaged(limit: Int, offset: Int): List<Client>
 
-    // 👇 CORRECCIÓN: La consulta ahora filtra por nombre y deuda
+    /** Proporciona una fuente de datos paginada para clientes con deuda, con soporte para búsqueda por nombre. */
     @Query("SELECT * FROM clients WHERE debtAmount > 0 AND name LIKE '%' || :searchQuery || '%' ORDER BY name ASC")
     fun getDebtClientsPagedSource(searchQuery: String): PagingSource<Int, Client>
 
+    /** Calcula la suma total de la deuda de todos los clientes. */
     @Query("SELECT SUM(debtAmount) FROM clients")
-    fun getTotalDebt(): Flow<Double>
+    fun getTotalDebt(): Flow<Double?>
 }
 
+/**
+ * DAO para la entidad [Payment]. Gestiona el acceso a los datos de los pagos.
+ */
 @Dao
 interface PaymentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -137,6 +168,7 @@ interface PaymentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(payments: List<Payment>)
 
+    /** Obtiene todos los pagos de un cliente específico, ordenados por fecha descendente. */
     @Query("SELECT * FROM payments WHERE clientIdFk = :clientId ORDER BY paymentDate DESC")
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>>
 
@@ -144,6 +176,9 @@ interface PaymentDao {
     suspend fun getPaymentsPaged(limit: Int, offset: Int): List<Payment>
 }
 
+/**
+ * DAO para la entidad [Pet]. Gestiona el acceso a los datos de las mascotas.
+ */
 @Dao
 interface PetDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -155,6 +190,7 @@ interface PetDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(pets: List<Pet>)
 
+    /** Obtiene todas las mascotas con la información de su dueño. La anotación @Transaction asegura la atomicidad. */
     @androidx.room.Transaction
     @Query("SELECT * FROM pets ORDER BY name ASC")
     fun getAllPetsWithOwners(): Flow<List<PetWithOwner>>
@@ -163,6 +199,9 @@ interface PetDao {
     suspend fun getPetsPaged(limit: Int, offset: Int): List<Pet>
 }
 
+/**
+ * DAO para la entidad [Treatment]. Gestiona el acceso a los datos de los tratamientos.
+ */
 @Dao
 interface TreatmentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -171,12 +210,15 @@ interface TreatmentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(treatments: List<Treatment>)
 
+    /** Obtiene el historial de tratamientos para una mascota específica. */
     @Query("SELECT * FROM treatments WHERE petIdFk = :petId ORDER BY treatmentDate DESC")
     fun getTreatmentsForPet(petId: String): Flow<List<Treatment>>
 
+    /** Obtiene los tratamientos futuros que aún no han sido marcados como completados. */
     @Query("SELECT * FROM treatments WHERE nextTreatmentDate IS NOT NULL AND isNextTreatmentCompleted = 0 ORDER BY nextTreatmentDate ASC")
     fun getUpcomingTreatments(): Flow<List<Treatment>>
 
+    /** Marca un tratamiento específico como completado. */
     @Query("UPDATE treatments SET isNextTreatmentCompleted = 1 WHERE treatmentId = :treatmentId")
     suspend fun markAsCompleted(treatmentId: String)
 
@@ -184,6 +226,9 @@ interface TreatmentDao {
     suspend fun getTreatmentsPaged(limit: Int, offset: Int): List<Treatment>
 }
 
+/**
+ * DAO para la entidad [Appointment]. Gestiona el acceso a los datos de las citas.
+ */
 @Dao
 interface AppointmentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -195,6 +240,7 @@ interface AppointmentDao {
     @Delete
     suspend fun delete(appointment: Appointment)
 
+    /** Obtiene todas las citas para un rango de fechas con los detalles de mascota y cliente. */
     @androidx.room.Transaction
     @Query("SELECT * FROM appointments WHERE appointmentDate >= :startDate AND appointmentDate < :endDate ORDER BY appointmentDate ASC")
     fun getAppointmentsForDateRange(startDate: Long, endDate: Long): Flow<List<AppointmentWithDetails>>

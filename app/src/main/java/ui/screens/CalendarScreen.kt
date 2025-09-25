@@ -20,6 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.vetfinance.data.AppointmentWithDetails
+import com.example.vetfinance.ui.screens.AddAppointmentDialog
 import com.example.vetfinance.viewmodel.VetViewModel
 import com.kizitonwose.calendar.compose.HorizontalCalendar
 import com.kizitonwose.calendar.compose.rememberCalendarState
@@ -33,10 +34,28 @@ import java.util.Locale
 
 @Composable
 fun CalendarScreen(viewModel: VetViewModel) {
+    // --- Estados del ViewModel ---
     val selectedDate by viewModel.selectedCalendarDate.collectAsState()
     val appointments by viewModel.appointmentsOnSelectedDate.collectAsState()
+    val showDialog by viewModel.showAddAppointmentDialog.collectAsState()
+    val clients by viewModel.clients.collectAsState()
+    val petsWithOwners by viewModel.petsWithOwners.collectAsState()
 
-    // Configuración del estado del calendario
+    // --- Lógica del Diálogo ---
+    if (showDialog) {
+        AddAppointmentDialog(
+            clients = clients,
+            petsWithOwners = petsWithOwners,
+            selectedDate = selectedDate,
+            onDismiss = { viewModel.onDismissAddAppointmentDialog() },
+            onConfirm = {
+                viewModel.addAppointment(it)
+                viewModel.onDismissAddAppointmentDialog()
+            }
+        )
+    }
+
+    // --- Configuración del Calendario ---
     val currentMonth = YearMonth.now()
     val startMonth = currentMonth.minusMonths(100)
     val endMonth = currentMonth.plusMonths(100)
@@ -51,7 +70,7 @@ fun CalendarScreen(viewModel: VetViewModel) {
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(onClick = { /* TODO: Implementar diálogo para añadir cita */ }) {
+            FloatingActionButton(onClick = { viewModel.onShowAddAppointmentDialog() }) {
                 Icon(Icons.Default.Add, contentDescription = "Agendar Cita")
             }
         }
@@ -61,15 +80,13 @@ fun CalendarScreen(viewModel: VetViewModel) {
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // Calendario horizontal
             HorizontalCalendar(
                 state = state,
                 dayContent = { day ->
                     Day(
                         day = day,
                         isSelected = selectedDate == day.date,
-                        hasAppointment = appointments.any { appointmentDetails -> // <-- CORREGIDO
-                            // Comprueba si la fecha de la cita coincide con el día del calendario
+                        hasAppointment = appointments.any { appointmentDetails ->
                             val appointmentDate = java.time.Instant.ofEpochMilli(appointmentDetails.appointment.appointmentDate)
                                 .atZone(java.time.ZoneId.systemDefault())
                                 .toLocalDate()
@@ -80,16 +97,14 @@ fun CalendarScreen(viewModel: VetViewModel) {
                     }
                 },
                 monthHeader = { month ->
-                    // Encabezado del mes con los días de la semana
                     val daysOfWeek = month.weekDays.first().map { it.date.dayOfWeek }
-                    val monthName = month.yearMonth.month.getDisplayName(TextStyle.FULL, Locale("es", "ES")).replaceFirstChar { it.uppercase() }
+                    // 👇 CORRECCIÓN: Se usa el constructor moderno de Locale
+                    val monthName = month.yearMonth.month.getDisplayName(TextStyle.FULL, Locale.forLanguageTag("es-ES")).replaceFirstChar { it.uppercase() }
                     val year = month.yearMonth.year
                     MonthHeader(daysOfWeek = daysOfWeek, monthName = "$monthName $year")
                 }
             )
             HorizontalDivider()
-
-            // Lista de citas para el día seleccionado
             AppointmentList(appointments = appointments)
         }
     }
@@ -107,12 +122,12 @@ fun MonthHeader(daysOfWeek: List<DayOfWeek>, monthName: String) {
             textAlign = TextAlign.Center
         )
         Row(modifier = Modifier.fillMaxWidth()) {
-            // Muestra las iniciales de los días de la semana (L, M, M, etc.)
             for (dayOfWeek in daysOfWeek) {
                 Text(
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
-                    text = dayOfWeek.getDisplayName(TextStyle.SHORT, Locale("es", "ES")),
+                    // 👇 CORRECCIÓN: Se usa el constructor moderno de Locale
+                    text = dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("es-ES")),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -141,7 +156,6 @@ fun Day(day: CalendarDay, isSelected: Boolean, hasAppointment: Boolean, onClick:
                 text = day.date.dayOfMonth.toString(),
                 color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color.Unspecified
             )
-            // Indicador visual si el día tiene una cita
             if (hasAppointment) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Box(

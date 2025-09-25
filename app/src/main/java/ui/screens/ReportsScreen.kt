@@ -29,18 +29,16 @@ import java.util.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-/**
- * Pantalla principal de reportes, organizada con pestañas para una mejor navegación.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReportsScreen(viewModel: VetViewModel) {
-    val pagerState = rememberPagerState(pageCount = { 3 })
+    // 👇 CORRECCIÓN 1: Se aumenta el número de páginas
+    val pagerState = rememberPagerState(pageCount = { 4 })
     val scope = rememberCoroutineScope()
-    val tabTitles = listOf("Ventas y Backups", "Top Productos", "Deudas")
+    // 👇 CORRECCIÓN 2: Se añade el nuevo título de la pestaña
+    val tabTitles = listOf("Ventas y Backups", "Top Productos", "Deudas", "Inventario")
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // Pestañas de navegación para los diferentes reportes
         TabRow(selectedTabIndex = pagerState.currentPage) {
             tabTitles.forEachIndexed { index, title ->
                 Tab(
@@ -51,7 +49,7 @@ fun ReportsScreen(viewModel: VetViewModel) {
             }
         }
 
-        // Contenedor que permite deslizar entre las pestañas
+        // 👇 CORRECCIÓN 4: Se actualiza el Pager para incluir la nueva pestaña
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.weight(1f),
@@ -61,14 +59,12 @@ fun ReportsScreen(viewModel: VetViewModel) {
                 0 -> SalesAndBackupTab(viewModel)
                 1 -> TopProductsReportTab(viewModel)
                 2 -> DebtsReportTab(viewModel)
+                3 -> InventoryReportTab(viewModel) // <-- Pestaña añadida
             }
         }
     }
 }
 
-/**
- * Pestaña que muestra el resumen de ventas y los botones para importar/exportar datos.
- */
 @Composable
 fun SalesAndBackupTab(viewModel: VetViewModel) {
     var selectedPeriod by remember { mutableStateOf(Period.DAY) }
@@ -76,7 +72,6 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // Launcher para seleccionar un archivo ZIP para importar.
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
             scope.launch {
@@ -86,7 +81,6 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
         }
     }
 
-    // Launcher para crear un archivo ZIP para exportar.
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let {
             scope.launch {
@@ -132,9 +126,6 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
     }
 }
 
-/**
- * Pestaña que muestra un gráfico de barras con los productos y servicios más vendidos.
- */
 @Composable
 fun TopProductsReportTab(viewModel: VetViewModel) {
     val topProducts by viewModel.topSellingProducts.collectAsState()
@@ -168,7 +159,6 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
                     .labelData { value -> "%.0f".format(value) }
                     .build(),
                 barStyle = BarStyle(barWidth = 35.dp)
-                // 👇 CORRECCIÓN: Se elimina el parámetro `maxHeight` que no existe.
             )
             BarChart(modifier = Modifier.height(450.dp), barChartData = barChartData)
         } else {
@@ -179,9 +169,6 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
     }
 }
 
-/**
- * Pestaña que muestra una tarjeta con el monto total de la deuda de todos los clientes.
- */
 @Composable
 fun DebtsReportTab(viewModel: VetViewModel) {
     val totalDebt by viewModel.totalDebt.collectAsState()
@@ -195,9 +182,20 @@ fun DebtsReportTab(viewModel: VetViewModel) {
     }
 }
 
-/**
- * Componente para seleccionar el período de tiempo (Día, Semana, Mes).
- */
+// 👇 CORRECCIÓN 3: Se añade el nuevo Composable para la pestaña de inventario
+@Composable
+fun InventoryReportTab(viewModel: VetViewModel) {
+    val totalValue by viewModel.totalInventoryValue.collectAsState()
+    val formattedValue = String.format("₲ %,.0f", totalValue ?: 0.0).replace(",", ".")
+
+    Box(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        SummaryCard(title = "Valor Total del Inventario", value = formattedValue)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SegmentedControl(selected: Period, onPeriodSelected: (Period) -> Unit) {
@@ -215,9 +213,6 @@ fun SegmentedControl(selected: Period, onPeriodSelected: (Period) -> Unit) {
     }
 }
 
-/**
- * Tarjeta genérica para mostrar un título y un valor grande.
- */
 @Composable
 fun SummaryCard(title: String, value: String) {
     Card(

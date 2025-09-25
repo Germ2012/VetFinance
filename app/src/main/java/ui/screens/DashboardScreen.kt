@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
+import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.Period
@@ -24,7 +25,7 @@ import java.util.concurrent.TimeUnit
 
 @Composable
 fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
-    // --- Recopila los estados desde el ViewModel (sin cambios) ---
+    // --- Recopila los estados desde el ViewModel ---
     val salesToday = viewModel.getSalesSummary(Period.DAY)
     val upcomingTreatments by viewModel.upcomingTreatments.collectAsState()
     val petsWithOwners by viewModel.petsWithOwners.collectAsState()
@@ -36,10 +37,11 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val services = remember(inventory) { inventory.filter { it.isService } }
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     var showManagementDialog by remember { mutableStateOf(false) }
+    // 👇 CORRECCIÓN 1: Se recopila el nuevo estado de productos con bajo stock
+    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
 
-    // --- Diálogo para AÑADIR el siguiente tratamiento ---
+    // --- Diálogos ---
     if (treatmentForNextDialog != null && petForDialog != null) {
-        // 👇 CORRECCIÓN: Se completa esta llamada con los parámetros que faltaban
         AddTreatmentDialog(
             services = services,
             onDismiss = { treatmentForNextDialog = null },
@@ -54,7 +56,6 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         )
     }
 
-    // --- Diálogo para añadir nuevo servicio (sin cambios) ---
     if (showAddProductDialog) {
         AddProductDialog(
             onDismiss = { viewModel.onDismissAddProductDialog() },
@@ -64,7 +65,6 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         )
     }
 
-    // --- Diálogo de gestión (sin cambios) ---
     if (showManagementDialog) {
         AlertDialog(
             onDismissRequest = { showManagementDialog = false },
@@ -125,6 +125,14 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                 val formattedSales = String.format("₲ %,.0f", salesToday).replace(",", ".")
                 ReportSummaryCard("Ventas de Hoy", formattedSales)
             }
+
+            // 👇 CORRECCIÓN 2: Se añade el bloque para mostrar la alerta de stock bajo
+            if (lowStockProducts.isNotEmpty()) {
+                item {
+                    LowStockAlert(lowStockProducts = lowStockProducts)
+                }
+            }
+
             if (upcomingTreatments.isNotEmpty()) {
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
@@ -145,8 +153,6 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     }
 }
 
-
-// El resto de los composables de esta pantalla no necesitan cambios.
 @Composable
 fun ReportSummaryCard(title: String, value: String) {
     Card(
@@ -205,6 +211,41 @@ fun TreatmentReminderItem(
                     onCheckedChange = { onMarkAsCompleted(treatment) }
                 )
                 Text("Recibido", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+// 👇 NUEVO COMPOSABLE AÑADIDO
+@Composable
+fun LowStockAlert(lowStockProducts: List<Product>) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Alerta de Stock Bajo",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            lowStockProducts.forEach { product ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = product.name,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Quedan: ${product.stock}",
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
             }
         }
     }

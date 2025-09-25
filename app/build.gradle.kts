@@ -100,7 +100,7 @@ dependencies {
     // ---- Gráficos ----
     implementation(libs.ycharts)
 
-    // ---- Calendario (Librería reemplazada y alias corregido) ----
+    // ---- Calendario ----
     implementation(libs.calendar.compose)
 
     //---CSV---//
@@ -119,4 +119,3 @@ dependencies {
 kapt {
     correctErrorTypes = true
 }
-
