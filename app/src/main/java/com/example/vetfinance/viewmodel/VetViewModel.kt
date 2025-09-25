@@ -253,8 +253,8 @@ class VetViewModel @Inject constructor(
         try { action() } finally { _isLoading.value = false }
     }
 
-    fun addProduct(name: String, price: Double, stock: Int, isService: Boolean) = executeWithLoading {
-        repository.insertProduct(Product(name = name, price = price, stock = stock, isService = isService))
+    fun addProduct(name: String, price: Double, stock: Int, cost: Double, isService: Boolean) = executeWithLoading {
+        repository.insertProduct(Product(name = name, price = price, stock = stock, cost = cost, isService = isService))
         onDismissAddProductDialog()
     }
 
@@ -279,7 +279,31 @@ class VetViewModel @Inject constructor(
         repository.getPaymentsForClient(clientId).collect { _paymentHistory.value = it }
     }
 
-    fun addTreatment(pet: Pet, description: String, nextDate: Long?) = executeWithLoading { repository.insertTreatment(Treatment(petIdFk = pet.petId, description = description, nextTreatmentDate = nextDate)) }
+    /**
+     * Añade una nueva entrada clínica (tratamiento) a una mascota.
+     */
+    fun addTreatment(
+        pet: Pet,
+        description: String,
+        weight: Double?,
+        temperature: Double?,
+        symptoms: String?,
+        diagnosis: String?,
+        treatmentPlan: String?,
+        nextDate: Long?
+    ) = executeWithLoading {
+        val newTreatment = Treatment(
+            petIdFk = pet.petId,
+            description = description,
+            weight = weight,
+            temperature = temperature,
+            symptoms = symptoms,
+            diagnosis = diagnosis,
+            treatmentPlan = treatmentPlan,
+            nextTreatmentDate = nextDate
+        )
+        repository.insertTreatment(newTreatment)
+    }
 
     fun markTreatmentAsCompleted(treatment: Treatment) = executeWithLoading { repository.markTreatmentAsCompleted(treatment.treatmentId) }
 
@@ -348,6 +372,31 @@ class VetViewModel @Inject constructor(
             .filter { it.sale.date >= startEpoch }
             .sumOf { it.sale.totalAmount }
     }
+
+    /** Calcula el beneficio bruto para un período de tiempo dado (Día, Semana, Mes). */
+    fun getGrossProfitSummary(period: Period): Double {
+        val now = LocalDate.now()
+        val startOfPeriod = when (period) {
+            Period.DAY -> now
+            Period.WEEK -> now.minusDays(now.dayOfWeek.value.toLong() - 1)
+            Period.MONTH -> now.withDayOfMonth(1)
+        }
+        val startEpoch = startOfPeriod.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+        val relevantSales = _sales.value.filter { it.sale.date >= startEpoch }
+
+        val totalRevenue = relevantSales.sumOf { it.sale.totalAmount }
+        val totalCost = relevantSales.sumOf { saleWithProducts ->
+            saleWithProducts.crossRefs.sumOf { crossRef ->
+                val product = saleWithProducts.products.find { it.id == crossRef.productId }
+                val cost = product?.cost ?: 0.0
+                cost * crossRef.quantity
+            }
+        }
+
+        return totalRevenue - totalCost
+    }
+
 
     // --- IMPORTACIÓN Y EXPORTACIÓN ---
     suspend fun exportarDatosCompletos(): Map<String, String> = repository.exportarDatosCompletos()

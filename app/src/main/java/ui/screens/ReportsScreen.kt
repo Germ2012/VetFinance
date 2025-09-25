@@ -32,10 +32,8 @@ import java.util.zip.ZipOutputStream
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReportsScreen(viewModel: VetViewModel) {
-    // 👇 CORRECCIÓN 1: Se aumenta el número de páginas
     val pagerState = rememberPagerState(pageCount = { 4 })
     val scope = rememberCoroutineScope()
-    // 👇 CORRECCIÓN 2: Se añade el nuevo título de la pestaña
     val tabTitles = listOf("Ventas y Backups", "Top Productos", "Deudas", "Inventario")
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -49,7 +47,6 @@ fun ReportsScreen(viewModel: VetViewModel) {
             }
         }
 
-        // 👇 CORRECCIÓN 4: Se actualiza el Pager para incluir la nueva pestaña
         HorizontalPager(
             state = pagerState,
             modifier = Modifier.weight(1f),
@@ -59,7 +56,7 @@ fun ReportsScreen(viewModel: VetViewModel) {
                 0 -> SalesAndBackupTab(viewModel)
                 1 -> TopProductsReportTab(viewModel)
                 2 -> DebtsReportTab(viewModel)
-                3 -> InventoryReportTab(viewModel) // <-- Pestaña añadida
+                3 -> InventoryReportTab(viewModel)
             }
         }
     }
@@ -68,7 +65,8 @@ fun ReportsScreen(viewModel: VetViewModel) {
 @Composable
 fun SalesAndBackupTab(viewModel: VetViewModel) {
     var selectedPeriod by remember { mutableStateOf(Period.DAY) }
-    val summary = viewModel.getSalesSummary(selectedPeriod)
+    val salesSummary = viewModel.getSalesSummary(selectedPeriod)
+    val grossProfit = viewModel.getGrossProfitSummary(selectedPeriod) // Nuevo cálculo
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -113,8 +111,12 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Top)
     ) {
         SegmentedControl(selected = selectedPeriod, onPeriodSelected = { newPeriod -> selectedPeriod = newPeriod })
-        val formattedSummary = String.format("₲ %,.0f", summary).replace(",", ".")
-        SummaryCard(title = "Total Ventas (${selectedPeriod.displayName})", value = formattedSummary)
+        val formattedSales = String.format("₲ %,.0f", salesSummary).replace(",", ".")
+        val formattedProfit = String.format("₲ %,.0f", grossProfit).replace(",", ".") // Formatear nuevo valor
+
+        SummaryCard(title = "Total Ventas (${selectedPeriod.displayName})", value = formattedSales)
+        SummaryCard(title = "Beneficio Bruto (${selectedPeriod.displayName})", value = formattedProfit) // Nueva tarjeta
+
         Spacer(modifier = Modifier.weight(1f))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             Button(onClick = { importLauncher.launch(arrayOf("application/zip")) }) { Text("Importar") }
@@ -182,7 +184,6 @@ fun DebtsReportTab(viewModel: VetViewModel) {
     }
 }
 
-// 👇 CORRECCIÓN 3: Se añade el nuevo Composable para la pestaña de inventario
 @Composable
 fun InventoryReportTab(viewModel: VetViewModel) {
     val totalValue by viewModel.totalInventoryValue.collectAsState()

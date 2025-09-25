@@ -12,6 +12,7 @@ import java.util.UUID
  * @property price El precio de venta.
  * @property stock La cantidad disponible en inventario. Para servicios, este campo no se utiliza y puede tener un valor por defecto.
  * @property isService Un booleano que diferencia entre productos y servicios. `true` si es un servicio, `false` si es un producto físico.
+ * @property cost El costo de adquisición del producto.
  */
 @Entity(tableName = "products")
 data class Product(
@@ -20,5 +21,6 @@ data class Product(
     val name: String,
     val price: Double,
     val stock: Int,
+    val cost: Double, // Nuevo campo para el costo
     val isService: Boolean = false
 )

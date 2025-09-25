@@ -1,5 +1,3 @@
-// ruta: app/src/main/java/com/example/vetfinance/ui/screens/PetDetailScreen.kt
-
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -27,47 +25,47 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
         viewModel.loadTreatmentsForPet(petId)
     }
 
-    // --- Observa los datos del ViewModel ---
     val pets by viewModel.petsWithOwners.collectAsState()
     val petWithOwner = pets.find { it.pet.petId == petId }
     val history by viewModel.treatmentHistory.collectAsState()
     var showTreatmentDialog by remember { mutableStateOf(false) }
-
-    // 👇 CAMBIO: Se obtiene la lista de inventario y se filtra para obtener solo los servicios
     val inventory by viewModel.inventory.collectAsState()
     val services = remember(inventory) { inventory.filter { it.isService } }
-
-    // 👇 CAMBIO: Se observa el estado del diálogo para añadir productos/servicios del ViewModel
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
 
-    // --- Diálogo para SELECCIONAR un tratamiento ---
     if (showTreatmentDialog && petWithOwner != null) {
+        // 👇 CORRECCIÓN: Se actualiza la llamada al diálogo para pasar los nuevos datos
         AddTreatmentDialog(
             services = services,
             onDismiss = { showTreatmentDialog = false },
-            onConfirm = { description, nextDateMillis ->
-                viewModel.addTreatment(petWithOwner.pet, description, nextDateMillis)
+            onConfirm = { description, weight, temperature, symptoms, diagnosis, treatmentPlan, nextDateMillis ->
+                viewModel.addTreatment(
+                    pet = petWithOwner.pet,
+                    description = description,
+                    weight = weight,
+                    temperature = temperature,
+                    symptoms = symptoms,
+                    diagnosis = diagnosis,
+                    treatmentPlan = treatmentPlan,
+                    nextDate = nextDateMillis
+                )
                 showTreatmentDialog = false
             },
             onAddNewServiceClick = {
-                // Cierra el diálogo actual y le pide al ViewModel que abra el otro
                 showTreatmentDialog = false
                 viewModel.onShowAddProductDialog()
             }
         )
     }
 
-    // --- Diálogo para AÑADIR un nuevo servicio al inventario ---
     if (showAddProductDialog) {
         AddProductDialog(
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { name, price, stock, isService ->
-                // El ViewModel se encarga de añadir el producto y cerrar el diálogo
                 viewModel.addProduct(name, price, stock, isService)
             }
         )
     }
-
 
     Scaffold(
         topBar = {
@@ -91,10 +89,11 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            Text("Historial de Tratamientos", style = MaterialTheme.typography.headlineMedium)
+            Text("Historial Clínico", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(history) { treatment ->
+                    // 👇 CORRECCIÓN: Se usa el nuevo Composable para el historial
                     TreatmentHistoryItem(treatment)
                 }
             }
@@ -102,15 +101,17 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     }
 }
 
-// Composable para mostrar un item del historial (sin cambios)
+/**
+ * Muestra una tarjeta con la información detallada de una entrada clínica (tratamiento).
+ */
 @Composable
 fun TreatmentHistoryItem(treatment: Treatment) {
     val sdf = SimpleDateFormat("dd 'de' MMMM, yyyy", Locale.Builder().setLanguage("es").setRegion("PY").build())
     val treatmentDate = Date(treatment.treatmentDate)
 
-    val daysText = treatment.nextTreatmentDate?.let { nextDate ->
+    val daysText = treatment.nextTreatmentDate?.let {
         if (!treatment.isNextTreatmentCompleted) {
-            val remainingMillis = nextDate - System.currentTimeMillis()
+            val remainingMillis = it - System.currentTimeMillis()
             val remainingDays = TimeUnit.MILLISECONDS.toDays(remainingMillis)
             when {
                 remainingDays < 0 -> "Próximo: Vencido"
@@ -118,30 +119,71 @@ fun TreatmentHistoryItem(treatment: Treatment) {
                 remainingDays == 1L -> "Próximo: Mañana"
                 else -> "Próximo: En $remainingDays días"
             }
-        } else {
-            null
-        }
+        } else null
     }
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = sdf.format(treatmentDate),
-                style = MaterialTheme.typography.bodySmall
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
                 text = treatment.description,
-                style = MaterialTheme.typography.bodyLarge,
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
+
+            // Muestra los detalles clínicos solo si existen
+            if (treatment.symptoms?.isNotBlank() == true) {
+                ClinicalDetailItem("Síntomas", treatment.symptoms!!)
+            }
+            if (treatment.diagnosis?.isNotBlank() == true) {
+                ClinicalDetailItem("Diagnóstico", treatment.diagnosis!!)
+            }
+            if (treatment.treatmentPlan?.isNotBlank() == true) {
+                ClinicalDetailItem("Plan de Tratamiento", treatment.treatmentPlan!!)
+            }
+
+            // Muestra peso y temperatura si existen
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (treatment.weight != null) {
+                    ClinicalDetailItem("Peso", "${treatment.weight} kg")
+                }
+                if (treatment.temperature != null) {
+                    ClinicalDetailItem("Temperatura", "${treatment.temperature}°C")
+                }
+            }
+
+            // Muestra la fecha del próximo tratamiento si existe
             daysText?.let {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 8.dp)
                 )
             }
         }
+    }
+}
+
+/**
+ * Pequeño Composable para mostrar un par de título y valor para los detalles clínicos.
+ */
+@Composable
+private fun ClinicalDetailItem(label: String, value: String) {
+    Column {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyLarge
+        )
     }
 }

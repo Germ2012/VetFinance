@@ -21,10 +21,8 @@ import com.example.vetfinance.viewmodel.VetViewModel
 fun InventoryScreen(viewModel: VetViewModel) {
     val showDialog by viewModel.showAddProductDialog.collectAsState()
     val filter by viewModel.inventoryFilter.collectAsState()
-    // 👇 CORRECCIÓN: Se usa la lista completa del inventario, no la paginada
     val inventory by viewModel.inventory.collectAsState()
 
-    // 👇 CORRECCIÓN: La lógica de filtrado ahora se hace en el Composable
     val filteredProducts = remember(inventory, filter) {
         when (filter) {
             "Productos" -> inventory.filter { !it.isService }
@@ -36,8 +34,8 @@ fun InventoryScreen(viewModel: VetViewModel) {
     if (showDialog) {
         AddProductDialog(
             onDismiss = { viewModel.onDismissAddProductDialog() },
-            onConfirm = { name, price, stock, isService ->
-                viewModel.addProduct(name, price, stock, isService)
+            onConfirm = { name, price, stock, cost, isService ->
+                viewModel.addProduct(name, price, stock, cost, isService)
             }
         )
     }
@@ -55,7 +53,6 @@ fun InventoryScreen(viewModel: VetViewModel) {
             InventoryFilter(selectedFilter = filter, onFilterSelected = { viewModel.onInventoryFilterChanged(it) })
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 👇 CORRECCIÓN: Se usa un LazyColumn simple con la lista filtrada
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(filteredProducts) { product ->
                     InventoryItem(product)
@@ -130,11 +127,12 @@ fun InventoryItem(product: Product) {
 @Composable
 fun AddProductDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, price: Double, stock: Int, isService: Boolean) -> Unit
+    onConfirm: (name: String, price: Double, stock: Int, cost: Double, isService: Boolean) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var price by remember { mutableStateOf("") }
     var stock by remember { mutableStateOf("") }
+    var cost by remember { mutableStateOf("") } // Nuevo estado para el costo
     var isService by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -152,6 +150,13 @@ fun AddProductDialog(
                     value = price,
                     onValueChange = { price = it },
                     label = { Text("Precio") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = cost,
+                    onValueChange = { cost = it },
+                    label = { Text("Costo") }, // Nuevo campo de texto
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -176,10 +181,11 @@ fun AddProductDialog(
                         name,
                         price.toDoubleOrNull() ?: 0.0,
                         if (isService) 9999 else stock.toIntOrNull() ?: 0,
+                        cost.toDoubleOrNull() ?: 0.0, // Pasar el nuevo valor
                         isService
                     )
                 },
-                enabled = name.isNotBlank() && price.isNotBlank()
+                enabled = name.isNotBlank() && price.isNotBlank() && cost.isNotBlank()
             ) {
                 Text("Guardar")
             }

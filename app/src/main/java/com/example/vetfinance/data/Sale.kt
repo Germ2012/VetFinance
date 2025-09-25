@@ -43,6 +43,7 @@ data class Sale(
  *
  * @property sale La entidad de la venta.
  * @property products La lista de productos asociados a esa venta.
+ * @property crossRefs La lista de referencias cruzadas que contiene la cantidad y el precio de venta de cada producto.
  */
 data class SaleWithProducts(
     @Embedded val sale: Sale,
@@ -55,7 +56,14 @@ data class SaleWithProducts(
             entityColumn = "productId"
         )
     )
-    val products: List<Product>
+    val products: List<Product>,
+
+    // Relación para obtener los detalles de la venta (cantidad, precio histórico)
+    @Relation(
+        parentColumn = "saleId",
+        entityColumn = "saleId"
+    )
+    val crossRefs: List<SaleProductCrossRef>
 )
 
 /**
