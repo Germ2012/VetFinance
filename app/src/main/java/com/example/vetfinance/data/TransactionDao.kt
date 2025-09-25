@@ -71,8 +71,8 @@ interface ProductDao {
     @Query("SELECT * FROM products ORDER BY name ASC")
     fun getAllProducts(): Flow<List<Product>>
 
-    @Query("SELECT * FROM products ORDER BY name ASC LIMIT :limit OFFSET :offset")
-    suspend fun getProductsPaged(limit: Int, offset: Int): List<Product>
+    @Query("SELECT * FROM products WHERE id = :productId")
+    suspend fun getProductById(productId: String): Product?
 
     /** Proporciona una fuente de datos paginada para el inventario, con soporte para filtrado. */
     @Query("SELECT * FROM products WHERE (:filterType = 'Todos') OR (:filterType = 'Productos' AND isService = 0) OR (:filterType = 'Servicios' AND isService = 1) ORDER BY name ASC")
@@ -111,6 +111,9 @@ interface SaleDao {
     @Query("DELETE FROM sales_products_cross_ref WHERE saleId = :saleId")
     suspend fun deleteSaleProductCrossRefs(saleId: String)
 
+    @Query("SELECT * FROM sales_products_cross_ref WHERE saleId = :saleId")
+    suspend fun getSaleDetailsBySaleId(saleId: String): List<SaleProductCrossRef>
+
 
     /** Obtiene todas las ventas con su lista de productos asociados. La anotación @Transaction asegura la atomicidad. */
     @androidx.room.Transaction
@@ -124,19 +127,19 @@ interface SaleDao {
     suspend fun getSaleProductCrossRefsPaged(limit: Int, offset: Int): List<SaleProductCrossRef>
 
     /**
-     * Calcula los productos más vendidos.
-     * Une las tablas de productos y referencias de venta, agrupa por nombre de producto,
-     * suma las cantidades vendidas y ordena de forma descendente.
+     * Calcula los productos más vendidos dentro de un rango de fechas.
      */
     @Query("""
-        SELECT P.name, SUM(SP.quantity) as totalSold
-        FROM sales_products_cross_ref AS SP
-        JOIN products AS P ON SP.productId = P.id
-        GROUP BY P.name
+        SELECT p.name, SUM(sp.quantity) as totalSold
+        FROM sales_products_cross_ref AS sp
+        JOIN sales AS s ON sp.saleId = s.saleId
+        JOIN products AS p ON sp.productId = p.id
+        WHERE s.date BETWEEN :startDate AND :endDate
+        GROUP BY p.name
         ORDER BY totalSold DESC
         LIMIT :limit
     """)
-    fun getTopSellingProducts(limit: Int): Flow<List<TopSellingProduct>>
+    fun getTopSellingProducts(startDate: Long, endDate: Long, limit: Int = 10): Flow<List<TopSellingProduct>>
 }
 
 /**

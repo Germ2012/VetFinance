@@ -73,20 +73,18 @@ class VetRepository @Inject constructor(
         productDao.delete(product)
     }
 
-    suspend fun deleteSale(saleWithProducts: SaleWithProducts) {
+    suspend fun deleteSale(sale: Sale) {
         db.withTransaction {
-            // 1. Restaurar el stock de los productos
-            saleWithProducts.crossRefs.forEach { crossRef ->
-                val product = saleWithProducts.products.find { it.id == crossRef.productId }
+            val saleDetails = saleDao.getSaleDetailsBySaleId(sale.saleId)
+            for (detail in saleDetails) {
+                val product = productDao.getProductById(detail.productId)
                 if (product != null && !product.isService) {
-                    val updatedStock = product.stock + crossRef.quantity
-                    productDao.update(product.copy(stock = updatedStock))
+                    val newStock = product.stock + detail.quantity
+                    productDao.update(product.copy(stock = newStock))
                 }
             }
-
-            // 2. Eliminar las referencias cruzadas y la venta
-            saleDao.deleteSaleProductCrossRefs(saleWithProducts.sale.saleId)
-            saleDao.deleteSale(saleWithProducts.sale)
+            saleDao.deleteSaleProductCrossRefs(sale.saleId)
+            saleDao.deleteSale(sale)
         }
     }
 
@@ -121,7 +119,7 @@ class VetRepository @Inject constructor(
     // --- OPERACIONES DE REPORTES ---
 
     /** Obtiene los productos más vendidos, limitados por la cantidad especificada. */
-    fun getTopSellingProducts(limit: Int): Flow<List<TopSellingProduct>> = saleDao.getTopSellingProducts(limit)
+    fun getTopSellingProducts(startDate: Long, endDate: Long, limit: Int): Flow<List<TopSellingProduct>> = saleDao.getTopSellingProducts(startDate, endDate, limit)
 
     /** Obtiene la suma total de la deuda de todos los clientes. */
     fun getTotalDebt(): Flow<Double?> = clientDao.getTotalDebt()
@@ -138,6 +136,9 @@ class VetRepository @Inject constructor(
     fun getAllPetsWithOwners(): Flow<List<PetWithOwner>> = petDao.getAllPetsWithOwners()
     fun getTreatmentsForPet(petId: String): Flow<List<Treatment>> = treatmentDao.getTreatmentsForPet(petId)
     fun getUpcomingTreatments(): Flow<List<Treatment>> = treatmentDao.getUpcomingTreatments()
+    suspend fun getSaleDetailsBySaleId(saleId: String): List<SaleProductCrossRef> = saleDao.getSaleDetailsBySaleId(saleId)
+    suspend fun getProductById(productId: String): Product? = productDao.getProductById(productId)
+
 
     // --- OPERACIONES DE ESCRITURA (SUSPEND) ---
 
