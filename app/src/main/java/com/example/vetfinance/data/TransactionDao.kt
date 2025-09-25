@@ -105,6 +105,13 @@ interface SaleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllSaleProductCrossRefs(crossRefs: List<SaleProductCrossRef>)
 
+    @Delete
+    suspend fun deleteSale(sale: Sale)
+
+    @Query("DELETE FROM sales_products_cross_ref WHERE saleId = :saleId")
+    suspend fun deleteSaleProductCrossRefs(saleId: String)
+
+
     /** Obtiene todas las ventas con su lista de productos asociados. La anotación @Transaction asegura la atomicidad. */
     @androidx.room.Transaction
     @Query("SELECT * FROM sales ORDER BY date DESC")

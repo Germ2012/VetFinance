@@ -73,6 +73,24 @@ class VetRepository @Inject constructor(
         productDao.delete(product)
     }
 
+    suspend fun deleteSale(saleWithProducts: SaleWithProducts) {
+        db.withTransaction {
+            // 1. Restaurar el stock de los productos
+            saleWithProducts.crossRefs.forEach { crossRef ->
+                val product = saleWithProducts.products.find { it.id == crossRef.productId }
+                if (product != null && !product.isService) {
+                    val updatedStock = product.stock + crossRef.quantity
+                    productDao.update(product.copy(stock = updatedStock))
+                }
+            }
+
+            // 2. Eliminar las referencias cruzadas y la venta
+            saleDao.deleteSaleProductCrossRefs(saleWithProducts.sale.saleId)
+            saleDao.deleteSale(saleWithProducts.sale)
+        }
+    }
+
+
     // --- OPERACIONES DE PAGINACIÓN ---
 
     /** Obtiene un flujo paginado de productos, opcionalmente filtrado por tipo. */
@@ -240,7 +258,7 @@ class VetRepository @Inject constructor(
 
             // 2. Validar y parsear los datos CSV.
             val backupData = validateAndParseBackupData(archivosDelZip)
-            
+
             // 3. Insertar los datos validados en la base de datos en una única transacción.
             performMergeImport(backupData)
 

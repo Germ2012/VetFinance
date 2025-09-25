@@ -6,6 +6,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.*
@@ -66,7 +68,7 @@ fun ReportsScreen(viewModel: VetViewModel) {
 fun SalesAndBackupTab(viewModel: VetViewModel) {
     var selectedPeriod by remember { mutableStateOf(Period.DAY) }
     val salesSummary = viewModel.getSalesSummary(selectedPeriod)
-    val grossProfit = viewModel.getGrossProfitSummary(selectedPeriod) // Nuevo cálculo
+    val grossProfit = viewModel.getGrossProfitSummary(selectedPeriod)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -112,10 +114,10 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
     ) {
         SegmentedControl(selected = selectedPeriod, onPeriodSelected = { newPeriod -> selectedPeriod = newPeriod })
         val formattedSales = String.format("₲ %,.0f", salesSummary).replace(",", ".")
-        val formattedProfit = String.format("₲ %,.0f", grossProfit).replace(",", ".") // Formatear nuevo valor
+        val formattedProfit = String.format("₲ %,.0f", grossProfit).replace(",", ".")
 
         SummaryCard(title = "Total Ventas (${selectedPeriod.displayName})", value = formattedSales)
-        SummaryCard(title = "Beneficio Bruto (${selectedPeriod.displayName})", value = formattedProfit) // Nueva tarjeta
+        SummaryCard(title = "Beneficio Bruto (${selectedPeriod.displayName})", value = formattedProfit)
 
         Spacer(modifier = Modifier.weight(1f))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -175,25 +177,81 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
 fun DebtsReportTab(viewModel: VetViewModel) {
     val totalDebt by viewModel.totalDebt.collectAsState()
     val formattedDebt = String.format("₲ %,.0f", totalDebt ?: 0.0).replace(",", ".")
+    val clients by viewModel.clients.collectAsState()
+    val clientsWithDebt = remember(clients) { clients.filter { it.debtAmount > 0 } }
 
-    Box(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        contentAlignment = Alignment.Center
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         SummaryCard(title = "Deuda Total Pendiente de Clientes", value = formattedDebt)
+
+        HorizontalDivider()
+
+        Text("Detalle de Deudas", style = MaterialTheme.typography.titleLarge)
+
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(clientsWithDebt) { client ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = client.name)
+                    Text(text = String.format("₲ %,.0f", client.debtAmount).replace(",", "."))
+                }
+            }
+        }
     }
 }
+
 
 @Composable
 fun InventoryReportTab(viewModel: VetViewModel) {
     val totalValue by viewModel.totalInventoryValue.collectAsState()
     val formattedValue = String.format("₲ %,.0f", totalValue ?: 0.0).replace(",", ".")
+    val inventory by viewModel.inventory.collectAsState()
+    // **CORRECCIÓN**: Filtra la lista para excluir servicios
+    val productsOnly = remember(inventory) { inventory.filter { !it.isService } }
 
-    Box(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        contentAlignment = Alignment.Center
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         SummaryCard(title = "Valor Total del Inventario", value = formattedValue)
+
+        HorizontalDivider()
+
+        Text("Detalle de Stock (Productos)", style = MaterialTheme.typography.titleLarge)
+
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // **CORRECCIÓN**: Usa la lista filtrada 'productsOnly'
+            items(productsOnly) { product ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(text = product.name)
+                    Text(text = "Stock: ${product.stock}")
+                }
+            }
+        }
     }
 }
 

@@ -54,6 +54,12 @@ class VetViewModel @Inject constructor(
         }
     }
 
+    fun deleteSale(sale: SaleWithProducts) {
+        viewModelScope.launch {
+            repository.deleteSale(sale)
+        }
+    }
+
     // --- ESTADOS DE FILTROS Y BÚSQUEDA ---
     /** Filtro actual para la lista de inventario ("Todos", "Productos", "Servicios"). */
     private val _inventoryFilter = MutableStateFlow("Todos")
