@@ -1,16 +1,15 @@
-// ruta: app/src/main/java/com/example/vetfinance/viewmodel/VetViewModel.kt
+
 package com.example.vetfinance.viewmodel
 
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.paging.PagingData
-import androidx.paging.cachedIn
 import com.example.vetfinance.data.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import javax.inject.Inject
@@ -34,7 +33,7 @@ class VetViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    // --- ESTADOS DE DATOS PRINCIPALES ---
+    // --- ESTADOS DE DATOS PRINCIPALES (RAW)---
     val clients: StateFlow<List<Client>> = repository.getAllClients()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _sales = MutableStateFlow<List<SaleWithProducts>>(emptyList())
@@ -44,23 +43,26 @@ class VetViewModel @Inject constructor(
     val treatmentHistory: StateFlow<List<Treatment>> = _treatmentHistory.asStateFlow()
     val upcomingTreatments: StateFlow<List<Treatment>> = repository.getUpcomingTreatments()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val inventory: StateFlow<List<Product>> = repository.getAllProducts()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _paymentHistory = MutableStateFlow<List<Payment>>(emptyList())
+    val paymentHistory: StateFlow<List<Payment>> = _paymentHistory.asStateFlow()
+
 
     // --- FILTROS Y BÚSQUEDA ---
-    private val _inventoryFilter = MutableStateFlow("Todos") // Para filtrar por categoría (Todos, Productos, Servicios)
+    private val _inventoryFilter = MutableStateFlow("Todos")
     val inventoryFilter: StateFlow<String> = _inventoryFilter.asStateFlow()
     private val _petSearchQuery = MutableStateFlow("")
     val petSearchQuery: StateFlow<String> = _petSearchQuery.asStateFlow()
+    private val _clientSearchQuery = MutableStateFlow("")
+    val clientSearchQuery: StateFlow<String> = _clientSearchQuery.asStateFlow()
+    private val _productSearchQuery = MutableStateFlow("")
+    val productSearchQuery: StateFlow<String> = _productSearchQuery.asStateFlow()
+    private val _selectedSaleDateFilter = MutableStateFlow<Long?>(null)
+    val selectedSaleDateFilter: StateFlow<Long?> = _selectedSaleDateFilter.asStateFlow()
 
-    // --- DATOS PAGINADOS (PARA LISTAS LARGAS) ---
-    val productsPaginated: Flow<PagingData<Product>> =
-        _inventoryFilter.flatMapLatest { filter ->
-            repository.getProductsPaginated(filter)
-        }.cachedIn(viewModelScope)
 
-    val debtClientsPaginated: Flow<PagingData<Client>> =
-        repository.getDebtClientsPaginated().cachedIn(viewModelScope)
-
-    // --- DATOS DERIVADOS (FILTRADOS EN MEMORIA PARA LISTAS CORTAS) ---
+    // --- DATOS DERIVADOS (FILTRADOS) ---
     val filteredPetsWithOwners: StateFlow<List<PetWithOwner>> =
         combine(petsWithOwners, _petSearchQuery) { pets, query ->
             if (query.isBlank()) pets else pets.filter {
@@ -68,14 +70,35 @@ class VetViewModel @Inject constructor(
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val filteredInventory: StateFlow<List<Product>> =
+        combine(inventory, _productSearchQuery) { products, query ->
+            if (query.isBlank()) products else products.filter {
+                it.name.contains(query, ignoreCase = true)
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val filteredSales: StateFlow<List<SaleWithProducts>> =
+        combine(_sales, _selectedSaleDateFilter) { sales, date ->
+            if (date == null) {
+                sales
+            } else {
+                val startOfDay = LocalDate.ofInstant(Instant.ofEpochMilli(date), ZoneId.systemDefault()).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val endOfDay = startOfDay + 24 * 60 * 60 * 1000 - 1
+                sales.filter { it.sale.date in startOfDay..endOfDay }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+
     // --- CALENDARIO Y CITAS ---
     private val _selectedCalendarDate = MutableStateFlow(LocalDate.now())
     val selectedCalendarDate: StateFlow<LocalDate> = _selectedCalendarDate.asStateFlow()
 
+    // 👇 CORRECCIÓN: Se vuelve a añadir la lógica para las citas de la fecha seleccionada
     val appointmentsOnSelectedDate: StateFlow<List<AppointmentWithDetails>> =
         _selectedCalendarDate.flatMapLatest { date ->
             repository.getAppointmentsForDate(date)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
 
     // --- REPORTES ---
     val topSellingProducts: StateFlow<List<TopSellingProduct>> = repository.getTopSellingProducts(10)
@@ -116,7 +139,15 @@ class VetViewModel @Inject constructor(
     // --- MANEJO DE EVENTOS DE LA UI ---
     fun onInventoryFilterChanged(newFilter: String) { _inventoryFilter.value = newFilter }
     fun onPetSearchQueryChange(query: String) { _petSearchQuery.value = query }
+    fun clearPetSearchQuery() { _petSearchQuery.value = "" }
     fun onCalendarDateSelected(date: LocalDate) { _selectedCalendarDate.value = date }
+    fun onClientSearchQueryChange(query: String) { _clientSearchQuery.value = query }
+    fun clearClientSearchQuery() { _clientSearchQuery.value = "" }
+    fun onProductSearchQueryChange(query: String) { _productSearchQuery.value = query }
+    fun clearProductSearchQuery() { _productSearchQuery.value = "" }
+    fun onSaleDateFilterSelected(date: Long?) { _selectedSaleDateFilter.value = date }
+    fun clearSaleDateFilter() { _selectedSaleDateFilter.value = null }
+
 
     // --- GESTIÓN DE DIÁLOGOS ---
     fun onShowAddProductDialog() { _showAddProductDialog.value = true }
@@ -152,15 +183,13 @@ class VetViewModel @Inject constructor(
 
     fun loadTreatmentsForPet(petId: String) = viewModelScope.launch { repository.getTreatmentsForPet(petId).collect { _treatmentHistory.value = it } }
 
+    fun loadPaymentsForClient(clientId: String) = viewModelScope.launch {
+        repository.getPaymentsForClient(clientId).collect { _paymentHistory.value = it }
+    }
+
     fun addTreatment(pet: Pet, description: String, nextDate: Long?) = executeWithLoading { repository.insertTreatment(Treatment(petIdFk = pet.petId, description = description, nextTreatmentDate = nextDate)) }
 
     fun markTreatmentAsCompleted(treatment: Treatment) = executeWithLoading { repository.markTreatmentAsCompleted(treatment.treatmentId) }
-
-    fun addAppointment(appointment: Appointment) = executeWithLoading { repository.insertAppointment(appointment) }
-
-    fun updateAppointment(appointment: Appointment) = executeWithLoading { repository.updateAppointment(appointment) }
-
-    fun deleteAppointment(appointment: Appointment) = executeWithLoading { repository.deleteAppointment(appointment) }
 
     fun makePayment(amount: Double) = executeWithLoading {
         _clientForPayment.value?.let {
@@ -168,6 +197,10 @@ class VetViewModel @Inject constructor(
             onDismissPaymentDialog()
         }
     }
+
+    fun addAppointment(appointment: Appointment) = executeWithLoading { repository.insertAppointment(appointment) }
+    fun updateAppointment(appointment: Appointment) = executeWithLoading { repository.updateAppointment(appointment) }
+    fun deleteAppointment(appointment: Appointment) = executeWithLoading { repository.deleteAppointment(appointment) }
 
     // --- LÓGICA DEL CARRITO Y VENTAS ---
     fun addToCart(product: Product) {

@@ -1,8 +1,15 @@
 package com.example.vetfinance.data
 
-import androidx.room.*
-import kotlinx.coroutines.flow.Flow
 import androidx.paging.PagingSource
+import androidx.room.Dao
+import androidx.room.Delete
+import androidx.room.Embedded
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Relation
+import androidx.room.Update
+import kotlinx.coroutines.flow.Flow
 
 // --- CLASES DE RELACIÓN (NUEVAS Y CORREGIDAS) ---
 
@@ -41,7 +48,7 @@ interface TransactionDao {
     suspend fun insertAll(transactions: List<Transaction>)
 
     @Query("SELECT * FROM transactions ORDER BY date DESC LIMIT :limit OFFSET :offset")
-    fun getTransactionsPaged(limit: Int, offset: Int): List<Transaction>
+    suspend fun getTransactionsPaged(limit: Int, offset: Int): List<Transaction>
 }
 
 @Dao
@@ -76,7 +83,7 @@ interface SaleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllSaleProductCrossRefs(crossRefs: List<SaleProductCrossRef>)
 
-    @Transaction
+    @androidx.room.Transaction // <-- CORREGIDO
     @Query("SELECT * FROM sales ORDER BY date DESC")
     fun getAllSalesWithProducts(): Flow<List<SaleWithProducts>>
 
@@ -147,7 +154,7 @@ interface PetDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(pets: List<Pet>)
 
-    @Transaction
+    @androidx.room.Transaction // <-- CORREGIDO
     @Query("SELECT * FROM pets ORDER BY name ASC")
     fun getAllPetsWithOwners(): Flow<List<PetWithOwner>>
 
@@ -187,7 +194,7 @@ interface AppointmentDao {
     @Delete
     suspend fun delete(appointment: Appointment)
 
-    @Transaction
+    @androidx.room.Transaction // <-- CORREGIDO
     @Query("SELECT * FROM appointments WHERE appointmentDate >= :startDate AND appointmentDate < :endDate ORDER BY appointmentDate ASC")
     fun getAppointmentsForDateRange(startDate: Long, endDate: Long): Flow<List<AppointmentWithDetails>>
 
@@ -200,4 +207,3 @@ interface AppointmentDao {
     @Query("SELECT * FROM appointments ORDER BY appointmentDate DESC LIMIT :limit OFFSET :offset")
     suspend fun getAppointmentsPaged(limit: Int, offset: Int): List<Appointment>
 }
-

@@ -50,6 +50,7 @@ androidx-paging-compose = { group = "androidx.paging", name = "paging-compose", 
 ycharts = { group = "co.yml", name = "ycharts", version.ref = "ycharts" }
 # --- SOLUCIÓN: Se simplifica el alias para evitar errores de resolución ---
 calendar-compose = { group = "com.kizitonwose.calendar", name = "compose", version.ref = "kizitonwoseCalendar" }
+room-paging = { group = "androidx.room", name = "room-paging", version.ref = "room" }
 
 
 [plugins]

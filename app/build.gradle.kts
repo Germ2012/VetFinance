@@ -35,6 +35,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
     kotlinOptions {
         jvmTarget = "17"
@@ -90,6 +91,7 @@ dependencies {
     implementation(libs.room.runtime)
     kapt(libs.room.compiler)
     implementation(libs.room.ktx)
+    implementation(libs.room.paging)
 
     // ---- Paging (Paginación de datos) ----
     implementation(libs.androidx.paging.runtime)
@@ -102,8 +104,10 @@ dependencies {
     implementation(libs.calendar.compose)
 
     //---CSV---//
-    implementation("org.apache.commons.csv:commons-csv:1.11.0")
+    implementation("org.apache.commons:commons-csv:1.11.0")
 
+    //----Desugaring---//
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
     // ---- Testing ----
     testImplementation("junit:junit:4.13.2")

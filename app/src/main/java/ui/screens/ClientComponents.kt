@@ -5,19 +5,18 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.data.Client
 
-// Componente para mostrar un solo cliente en la lista
+/**
+ * Componente que muestra la información de un cliente en una tarjeta.
+ */
 @Composable
-fun ClientItem(
-    client: Client,
-    onPayClick: () -> Unit,
-    onItemClick: () -> Unit
-) {
+fun ClientItem(client: Client, onPayClick: () -> Unit, onItemClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -25,46 +24,43 @@ fun ClientItem(
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(client.name, fontWeight = FontWeight.Bold)
-                val formattedDebt = String.format("₲ %,.0f", client.debtAmount).replace(",", ".")
-                Text("Deuda: $formattedDebt")
+                Text(
+                    text = "Deuda: Gs ${String.format("%,.0f", client.debtAmount).replace(",", ".")}",
+                    color = MaterialTheme.colorScheme.error
+                )
             }
             Button(onClick = onPayClick) {
-                Text("Pagar")
+                Text("Abonar")
             }
         }
     }
 }
 
-
-// Diálogo para registrar un pago
+/**
+ * Diálogo para registrar un pago para un cliente específico.
+ */
 @Composable
-fun PaymentDialog(
-    client: Client,
-    onDismiss: () -> Unit,
-    onConfirm: (Double) -> Unit
-) {
+fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
     var amount by remember { mutableStateOf("") }
-    val debtFormatted = String.format("%,.0f", client.debtAmount).replace(",", ".")
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Realizar Pago") },
+        title = { Text("Abonar Deuda de ${client.name}") },
         text = {
-            Column {
-                Text("Cliente: ${client.name}")
-                Text("Deuda actual: ₲$debtFormatted")
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = amount,
-                    onValueChange = { amount = it.filter { char -> char.isDigit() } },
-                    label = { Text("Monto a pagar") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            OutlinedTextField(
+                value = amount,
+                onValueChange = { amount = it.filter { char -> char.isDigit() } },
+                label = { Text("Monto a abonar") },
+                prefix = { Text("Gs ") },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number
                 )
-            }
+            )
         },
         confirmButton = {
             Button(
@@ -73,9 +69,10 @@ fun PaymentDialog(
                     if (paymentAmount > 0) {
                         onConfirm(paymentAmount)
                     }
-                }
+                },
+                enabled = amount.isNotBlank()
             ) {
-                Text("Confirmar")
+                Text("Confirmar Pago")
             }
         },
         dismissButton = {
@@ -85,14 +82,14 @@ fun PaymentDialog(
         }
     )
 }
+
+/**
+ * Diálogo para añadir un nuevo dueño (cliente).
+ */
 @Composable
-fun AddOwnerDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String, String) -> Unit
-) {
+fun AddOwnerDialog(onDismiss: () -> Unit, onConfirm: (String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
-    var nameError by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -101,33 +98,21 @@ fun AddOwnerDialog(
             Column {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it; nameError = false },
-                    label = { Text("Nombre del dueño") },
-                    isError = nameError,
-                    singleLine = true
+                    onValueChange = { name = it },
+                    label = { Text("Nombre del dueño") }
                 )
-                if (nameError) {
-                    Text("El nombre no puede estar vacío", color = MaterialTheme.colorScheme.error)
-                }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = phone,
-                    onValueChange = { phone = it.filter { char -> char.isDigit() } },
-                    label = { Text("Teléfono (Opcional)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    singleLine = true
+                    onValueChange = { phone = it },
+                    label = { Text("Teléfono (Opcional)") }
                 )
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    if (name.isNotBlank()) {
-                        onConfirm(name, phone)
-                    } else {
-                        nameError = true
-                    }
-                }
+                onClick = { onConfirm(name, phone) },
+                enabled = name.isNotBlank()
             ) {
                 Text("Guardar")
             }

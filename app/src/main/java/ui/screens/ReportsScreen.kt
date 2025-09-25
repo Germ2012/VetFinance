@@ -147,7 +147,6 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
         Spacer(modifier = Modifier.height(24.dp))
 
         if (topProducts.isNotEmpty()) {
-            val maxRange = topProducts.maxOfOrNull { it.totalSold }?.toFloat() ?: 1f
             val barChartData = BarChartData(
                 chartData = topProducts.mapIndexed { index, product ->
                     BarData(
@@ -168,8 +167,8 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
                     .labelAndAxisLinePadding(20.dp)
                     .labelData { value -> "%.0f".format(value) }
                     .build(),
-                barStyle = BarStyle(barWidth = 35.dp),
-                maxHeight = (maxRange * 1.2f).dp // Usar un valor dp calculado
+                barStyle = BarStyle(barWidth = 35.dp)
+                // 👇 CORRECCIÓN: Se elimina el parámetro `maxHeight` que no existe.
             )
             BarChart(modifier = Modifier.height(450.dp), barChartData = barChartData)
         } else {

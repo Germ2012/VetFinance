@@ -68,9 +68,9 @@ fun CalendarScreen(viewModel: VetViewModel) {
                     Day(
                         day = day,
                         isSelected = selectedDate == day.date,
-                        hasAppointment = appointments.any {
+                        hasAppointment = appointments.any { appointmentDetails -> // <-- CORREGIDO
                             // Comprueba si la fecha de la cita coincide con el día del calendario
-                            val appointmentDate = java.time.Instant.ofEpochMilli(it.appointment.appointmentDate)
+                            val appointmentDate = java.time.Instant.ofEpochMilli(appointmentDetails.appointment.appointmentDate)
                                 .atZone(java.time.ZoneId.systemDefault())
                                 .toLocalDate()
                             appointmentDate == day.date
@@ -189,4 +189,3 @@ fun AppointmentItem(details: AppointmentWithDetails) {
         }
     }
 }
-

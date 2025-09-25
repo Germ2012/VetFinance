@@ -2,6 +2,7 @@ package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -12,8 +13,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.paging.LoadState
-import androidx.paging.compose.collectAsLazyPagingItems
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.viewmodel.VetViewModel
 
@@ -22,13 +21,22 @@ import com.example.vetfinance.viewmodel.VetViewModel
 fun InventoryScreen(viewModel: VetViewModel) {
     val showDialog by viewModel.showAddProductDialog.collectAsState()
     val filter by viewModel.inventoryFilter.collectAsState()
-    val products = viewModel.productsPaginated.collectAsLazyPagingItems()
+    // 👇 CORRECCIÓN: Se usa la lista completa del inventario, no la paginada
+    val inventory by viewModel.inventory.collectAsState()
+
+    // 👇 CORRECCIÓN: La lógica de filtrado ahora se hace en el Composable
+    val filteredProducts = remember(inventory, filter) {
+        when (filter) {
+            "Productos" -> inventory.filter { !it.isService }
+            "Servicios" -> inventory.filter { it.isService }
+            else -> inventory // "Todos"
+        }
+    }
 
     if (showDialog) {
         AddProductDialog(
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { name, price, stock, isService ->
-                // La lógica de añadir se delega al ViewModel.
                 viewModel.addProduct(name, price, stock, isService)
             }
         )
@@ -47,25 +55,21 @@ fun InventoryScreen(viewModel: VetViewModel) {
             InventoryFilter(selectedFilter = filter, onFilterSelected = { viewModel.onInventoryFilterChanged(it) })
             Spacer(modifier = Modifier.height(16.dp))
 
+            // 👇 CORRECCIÓN: Se usa un LazyColumn simple con la lista filtrada
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(count = products.itemCount) { index ->
-                    products[index]?.let { product ->
-                        InventoryItem(product)
-                    }
+                items(filteredProducts) { product ->
+                    InventoryItem(product)
                 }
 
-                // Manejo de estados de carga de Paging para una mejor UX
-                when (products.loadState.append) {
-                    is LoadState.Loading -> { item { CircularProgressIndicator(modifier = Modifier.padding(16.dp)) } }
-                    is LoadState.Error -> { item { Text("Error al cargar más productos.") } }
-                    else -> {}
-                }
-                when (products.loadState.refresh) {
-                    is LoadState.Loading -> { item { Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() } } }
-                    is LoadState.Error -> { item { Text("Error al actualizar la lista.") } }
-                    else -> {
-                        if (products.itemCount == 0) {
-                            item { Box(modifier = Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) { Text("No hay productos que coincidan con el filtro.") } }
+                if (filteredProducts.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillParentMaxSize()
+                                .padding(top = 100.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No hay productos que coincidan con el filtro.")
                         }
                     }
                 }

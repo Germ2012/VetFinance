@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.data.Client
+import com.example.vetfinance.data.Pet
 import com.example.vetfinance.viewmodel.VetViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -29,7 +30,7 @@ fun AddPetScreen(
 
     // --- DIÁLOGO PARA AÑADIR DUEÑO ---
     if (showAddOwnerDialog) {
-        // Usamos el diálogo que ya creaste en ClientComponents.kt
+        // Ahora se usa la versión centralizada de AddOwnerDialog
         AddOwnerDialog(
             onDismiss = { showAddOwnerDialog = false },
             onConfirm = { name, phone ->
@@ -102,8 +103,9 @@ fun AddPetScreen(
             // Botón para guardar la mascota
             Button(
                 onClick = {
-                    if (petName.isNotBlank() && selectedOwner != null) {
-                        viewModel.addPet(petName, selectedOwner!!)
+                    selectedOwner?.let {
+                        val newPet = Pet(name = petName, ownerIdFk = it.clientId)
+                        viewModel.addPet(newPet)
                         navController.popBackStack() // Regresa a la pantalla anterior
                     }
                 },
@@ -115,3 +117,5 @@ fun AddPetScreen(
         }
     }
 }
+
+// La función AddOwnerDialog ha sido eliminada de aquí y movida a ClientComponents.kt

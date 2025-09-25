@@ -28,15 +28,14 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     val cart by viewModel.shoppingCart.collectAsState()
     val total by viewModel.saleTotal.collectAsState()
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
-    val filteredInventory by viewModel.filteredInventory.collectAsState()
-
-    // 👇 CORRECCIÓN: Se usa el nombre correcto de la variable de búsqueda de productos
+    // 👇 CORRECCIÓN: Se usa la lista de inventario filtrada directamente desde el ViewModel
+    val inventory by viewModel.filteredInventory.collectAsState()
     val searchQuery by viewModel.productSearchQuery.collectAsState()
 
-    // 👇 CORRECCIÓN: Se llama a la función correcta para limpiar la búsqueda de productos
     DisposableEffect(Unit) {
         onDispose {
             viewModel.clearCart()
+            // 👇 CORRECCIÓN: Se llama a la función correcta para limpiar la búsqueda
             viewModel.clearProductSearchQuery()
         }
     }
@@ -82,8 +81,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                     )
                     Button(
                         onClick = {
-                            viewModel.finalizeSale()
-                            navController.popBackStack()
+                            // 👇 CORRECCIÓN: Se pasa la navegación como un lambda a onFinished
+                            viewModel.finalizeSale { navController.popBackStack() }
                         },
                         enabled = cart.isNotEmpty()
                     ) {
@@ -96,9 +95,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         Column(modifier = Modifier.padding(paddingValues)) {
 
             OutlinedTextField(
-                // 👇 CORRECCIÓN: Se usa la variable correcta
                 value = searchQuery,
-                // 👇 CORRECCIÓN: Se llama a la función correcta
+                // 👇 CORRECCIÓN: Se llama a la función de búsqueda correcta
                 onValueChange = { viewModel.onProductSearchQueryChange(it) },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -106,9 +104,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 label = { Text("Buscar producto o servicio...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar") },
                 trailingIcon = {
-                    // 👇 CORRECCIÓN: Se usa la variable correcta
                     if (searchQuery.isNotEmpty()) {
-                        // 👇 CORRECCIÓN: Se llama a la función correcta
+                        // 👇 CORRECCIÓN: Se llama a la función de limpieza correcta
                         IconButton(onClick = { viewModel.clearProductSearchQuery() }) {
                             Icon(Icons.Default.Clear, contentDescription = "Limpiar búsqueda")
                         }
@@ -121,7 +118,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(filteredInventory) { product ->
+                // 👇 CORRECCIÓN: Se itera sobre la lista correcta (ya filtrada por el ViewModel)
+                items(inventory) { product ->
                     ProductSelectionItem(
                         product = product,
                         quantity = cart[product] ?: 0,
