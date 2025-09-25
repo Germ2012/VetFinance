@@ -160,7 +160,7 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
                 yAxisData = AxisData.Builder()
                     .steps(5)
                     .labelAndAxisLinePadding(20.dp)
-                    .labelData { value -> "%.0f".format(value) }
+                    .labelData { value -> value.toInt().toString() }
                     .build(),
                 barStyle = BarStyle(barWidth = 35.dp)
             )
