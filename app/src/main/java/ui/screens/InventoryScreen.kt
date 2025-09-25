@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
@@ -12,11 +11,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.viewmodel.VetViewModel
-import ui.utils.ThousandsSeparatorTransformation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,7 +23,6 @@ fun InventoryScreen(viewModel: VetViewModel) {
     val inventory by viewModel.inventory.collectAsState()
     var productToEdit by remember { mutableStateOf<Product?>(null) }
 
-
     val filteredProducts = remember(inventory, filter) {
         when (filter) {
             "Productos" -> inventory.filter { !it.isService }
@@ -35,21 +31,29 @@ fun InventoryScreen(viewModel: VetViewModel) {
         }
     }
 
+    // --- DIÁLOGOS ---
+    // Diálogo para AÑADIR un nuevo producto
     if (showDialog) {
-        AddProductDialog(
+        ProductDialog(
+            product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
-            onConfirm = { name, price, stock, cost, isService ->
-                viewModel.addProduct(name, price, stock, cost, isService)
+            onConfirm = { newProduct ->
+                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
             }
         )
     }
 
-    if (productToEdit != null) {
-        EditProductDialog(
-            product = productToEdit!!,
+    // Diálogo para EDITAR un producto existente
+    productToEdit?.let { product ->
+        ProductDialog(
+            product = product,
             onDismiss = { productToEdit = null },
-            onConfirm = {
-                viewModel.updateProduct(it)
+            onConfirm = { updatedProduct ->
+                viewModel.updateProduct(updatedProduct)
+                productToEdit = null
+            },
+            onDelete = { productToDelete ->
+                viewModel.deleteProduct(productToDelete) // Asumiendo que tienes una función deleteProduct en tu ViewModel
                 productToEdit = null
             }
         )
@@ -72,13 +76,10 @@ fun InventoryScreen(viewModel: VetViewModel) {
                 items(filteredProducts) { product ->
                     InventoryItem(product, onEdit = { productToEdit = it })
                 }
-
                 if (filteredProducts.isEmpty()) {
                     item {
                         Box(
-                            modifier = Modifier
-                                .fillParentMaxSize()
-                                .padding(top = 100.dp),
+                            modifier = Modifier.fillParentMaxSize().padding(top = 100.dp),
                             contentAlignment = Alignment.Center
                         ) {
                             Text("No hay productos que coincidan con el filtro.")
@@ -89,6 +90,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
         }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -139,158 +141,4 @@ fun InventoryItem(product: Product, onEdit: (Product) -> Unit) {
             }
         }
     }
-}
-
-@Composable
-fun AddProductDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (name: String, price: Double, stock: Int, cost: Double, isService: Boolean) -> Unit
-) {
-    var name by remember { mutableStateOf("") }
-    var price by remember { mutableStateOf("") }
-    var stock by remember { mutableStateOf("") }
-    var cost by remember { mutableStateOf("") } // Nuevo estado para el costo
-    var isService by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Añadir Producto/Servicio") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Nombre") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = price,
-                    onValueChange = { if (it.all { char -> char.isDigit() }) price = it },
-                    label = { Text("Precio") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    visualTransformation = ThousandsSeparatorTransformation(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = cost,
-                    onValueChange = { if (it.all { char -> char.isDigit() }) cost = it },
-                    label = { Text("Costo") }, // Nuevo campo de texto
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    visualTransformation = ThousandsSeparatorTransformation(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = stock,
-                    onValueChange = { if (it.all { char -> char.isDigit() }) stock = it },
-                    label = { Text("Stock") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    enabled = !isService, // Deshabilitado si es un servicio
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = isService, onCheckedChange = { isService = it })
-                    Text("Es un servicio")
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    onConfirm(
-                        name,
-                        price.replace(".", "").toDoubleOrNull() ?: 0.0,
-                        if (isService) 9999 else stock.toIntOrNull() ?: 0,
-                        cost.replace(".", "").toDoubleOrNull() ?: 0.0, // Pasar el nuevo valor
-                        isService
-                    )
-                },
-                enabled = name.isNotBlank() && price.isNotBlank() && cost.isNotBlank()
-            ) {
-                Text("Guardar")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
-        }
-    )
-}
-
-@Composable
-fun EditProductDialog(
-    product: Product,
-    onDismiss: () -> Unit,
-    onConfirm: (Product) -> Unit
-) {
-    var name by remember { mutableStateOf(product.name) }
-    var price by remember { mutableStateOf(product.price.toLong().toString()) }
-    var stock by remember { mutableStateOf(product.stock.toString()) }
-    var cost by remember { mutableStateOf(product.cost.toLong().toString()) }
-    var isService by remember { mutableStateOf(product.isService) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Editar Producto/Servicio") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Nombre") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = price,
-                    onValueChange = { if (it.all { char -> char.isDigit() }) price = it },
-                    label = { Text("Precio") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    visualTransformation = ThousandsSeparatorTransformation(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = cost,
-                    onValueChange = { if (it.all { char -> char.isDigit() }) cost = it },
-                    label = { Text("Costo") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    visualTransformation = ThousandsSeparatorTransformation(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-                OutlinedTextField(
-                    value = stock,
-                    onValueChange = { if (it.all { char -> char.isDigit() }) stock = it },
-                    label = { Text("Stock") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    enabled = !isService,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = isService, onCheckedChange = { isService = it })
-                    Text("Es un servicio")
-                }
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val updatedProduct = product.copy(
-                        name = name,
-                        price = price.replace(".", "").toDoubleOrNull() ?: 0.0,
-                        stock = if (isService) 9999 else stock.toIntOrNull() ?: 0,
-                        cost = cost.replace(".", "").toDoubleOrNull() ?: 0.0,
-                        isService = isService
-                    )
-                    onConfirm(updatedProduct)
-                },
-                enabled = name.isNotBlank() && price.isNotBlank() && cost.isNotBlank()
-            ) {
-                Text("Actualizar")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancelar")
-            }
-        }
-    )
 }

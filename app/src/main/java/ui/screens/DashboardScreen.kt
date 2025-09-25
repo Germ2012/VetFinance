@@ -1,5 +1,3 @@
-// ruta: app/src/main/java/com/example/vetfinance/ui/screens/DashboardScreen.kt
-
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.Image
@@ -25,7 +23,6 @@ import java.util.concurrent.TimeUnit
 
 @Composable
 fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
-    // --- Recopila los estados desde el ViewModel ---
     val salesToday = viewModel.getSalesSummary(Period.DAY)
     val upcomingTreatments by viewModel.upcomingTreatments.collectAsState()
     val petsWithOwners by viewModel.petsWithOwners.collectAsState()
@@ -39,9 +36,8 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     var showManagementDialog by remember { mutableStateOf(false) }
     val lowStockProducts by viewModel.lowStockProducts.collectAsState()
 
-    // --- Diálogos ---
+    // --- DIÁLOGOS ---
     if (treatmentForNextDialog != null && petForDialog != null) {
-        // CORRECCIÓN: Se actualiza la llamada a AddTreatmentDialog y viewModel.addTreatment
         AddTreatmentDialog(
             services = services,
             onDismiss = { treatmentForNextDialog = null },
@@ -66,11 +62,11 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     }
 
     if (showAddProductDialog) {
-        // CORRECCIÓN: Se actualiza la llamada a AddProductDialog para incluir el costo
-        AddProductDialog(
+        ProductDialog(
+            product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
-            onConfirm = { name, price, stock, cost, isService ->
-                viewModel.addProduct(name, price, stock, cost, isService)
+            onConfirm = { newProduct ->
+                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
             }
         )
     }
@@ -122,9 +118,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         )
 
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -152,8 +146,8 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                         treatment = treatment,
                         petName = petIdToNameMap[treatment.petIdFk] ?: "Mascota desconocida",
                         onMarkAsCompleted = {
-                            viewModel.markTreatmentAsCompleted(it)
-                            treatmentForNextDialog = it
+                            viewModel.markTreatmentAsCompleted(treatment)
+                            treatmentForNextDialog = treatment
                         }
                     )
                 }
@@ -164,63 +158,10 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
 
 @Composable
 fun ReportSummaryCard(title: String, value: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(value, style = MaterialTheme.typography.displaySmall)
-        }
-    }
-}
-
-@Composable
-fun TreatmentReminderItem(
-    treatment: Treatment,
-    petName: String,
-    onMarkAsCompleted: (Treatment) -> Unit
-) {
-    val daysText = treatment.nextTreatmentDate?.let { nextDate ->
-        val remainingMillis = nextDate - System.currentTimeMillis()
-        val remainingDays = TimeUnit.MILLISECONDS.toDays(remainingMillis)
-
-        when {
-            remainingDays < 0 -> "Fecha pasada"
-            remainingDays == 0L -> "Hoy"
-            remainingDays == 1L -> "Mañana"
-            else -> "En $remainingDays días"
-        }
-    } ?: "Sin fecha programada"
-
     Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(petName, fontWeight = FontWeight.Bold)
-                Text(treatment.description)
-                if (treatment.nextTreatmentDate != null) {
-                    Text(
-                        text = daysText,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Checkbox(
-                    checked = false,
-                    onCheckedChange = { onMarkAsCompleted(treatment) }
-                )
-                Text("Recibido", style = MaterialTheme.typography.bodySmall)
-            }
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            Text(text = value, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -229,7 +170,6 @@ fun TreatmentReminderItem(
 fun LowStockAlert(lowStockProducts: List<Product>) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -240,20 +180,39 @@ fun LowStockAlert(lowStockProducts: List<Product>) {
             )
             Spacer(modifier = Modifier.height(8.dp))
             lowStockProducts.forEach { product ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = product.name,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Quedan: ${product.stock}",
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                }
+                Text(
+                    text = "- ${product.name} (Stock: ${product.stock})",
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TreatmentReminderItem(
+    treatment: Treatment,
+    petName: String,
+    onMarkAsCompleted: () -> Unit
+) {
+    val daysUntilNext = treatment.nextTreatmentDate?.let { TimeUnit.MILLISECONDS.toDays(it - System.currentTimeMillis()) }
+    val cardColor = when {
+        daysUntilNext == null -> MaterialTheme.colorScheme.surfaceVariant
+        daysUntilNext < 1 -> MaterialTheme.colorScheme.errorContainer
+        daysUntilNext < 3 -> MaterialTheme.colorScheme.tertiaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = "Mascota: $petName", fontWeight = FontWeight.Bold)
+            Text(text = "Tratamiento: ${treatment.description}")
+            if (daysUntilNext != null) {
+                Text(text = "Próxima cita en: $daysUntilNext días")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onMarkAsCompleted) {
+                Text("Registrar Nueva Visita")
             }
         }
     }

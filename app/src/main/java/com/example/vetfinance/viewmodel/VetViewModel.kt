@@ -47,6 +47,13 @@ class VetViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    //---Borrados
+    fun deleteProduct(product: Product) {
+        viewModelScope.launch {
+            repository.deleteProduct(product)
+        }
+    }
+
     // --- ESTADOS DE FILTROS Y BÚSQUEDA ---
     /** Filtro actual para la lista de inventario ("Todos", "Productos", "Servicios"). */
     private val _inventoryFilter = MutableStateFlow("Todos")

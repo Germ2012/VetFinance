@@ -16,7 +16,6 @@ import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.viewmodel.VetViewModel
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -58,10 +57,11 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     }
 
     if (showAddProductDialog) {
-        AddProductDialog(
+        ProductDialog(
+            product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
-            onConfirm = { name, price, stock, cost, isService ->
-                viewModel.addProduct(name, price, stock, cost, isService)
+            onConfirm = { newProduct ->
+                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
             }
         )
     }
@@ -99,86 +99,27 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     }
 }
 
-/**
- * Muestra una tarjeta con la información detallada de una entrada clínica (tratamiento).
- */
 @Composable
 fun TreatmentHistoryItem(treatment: Treatment) {
-    val sdf = SimpleDateFormat("dd 'de' MMMM, yyyy", Locale.Builder().setLanguage("es").setRegion("PY").build())
-    val treatmentDate = Date(treatment.treatmentDate)
-
-    val daysText = treatment.nextTreatmentDate?.let {
-        if (!treatment.isNextTreatmentCompleted) {
-            val remainingMillis = it - System.currentTimeMillis()
-            val remainingDays = TimeUnit.MILLISECONDS.toDays(remainingMillis)
-            when {
-                remainingDays < 0 -> "Próximo: Vencido"
-                remainingDays == 0L -> "Próximo: Hoy"
-                remainingDays == 1L -> "Próximo: Mañana"
-                else -> "Próximo: En $remainingDays días"
-            }
-        } else null
-    }
+    val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+    val nextDateString = treatment.nextTreatmentDate?.let {
+        "Próxima cita: ${dateFormat.format(Date(it))}"
+    } ?: "Tratamiento finalizado"
 
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = sdf.format(treatmentDate),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = treatment.description,
-                style = MaterialTheme.typography.titleLarge,
+                text = "Fecha: ${dateFormat.format(Date(treatment.treatmentDate))}",
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold
             )
-
-            if (treatment.symptoms?.isNotBlank() == true) {
-                ClinicalDetailItem("Síntomas", treatment.symptoms)
-            }
-            if (treatment.diagnosis?.isNotBlank() == true) {
-                ClinicalDetailItem("Diagnóstico", treatment.diagnosis)
-            }
-            if (treatment.treatmentPlan?.isNotBlank() == true) {
-                ClinicalDetailItem("Plan de Tratamiento", treatment.treatmentPlan)
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                if (treatment.weight != null) {
-                    ClinicalDetailItem("Peso", "${treatment.weight} kg")
-                }
-                if (treatment.temperature != null) {
-                    ClinicalDetailItem("Temperatura", "${treatment.temperature}°C")
-                }
-            }
-
-            daysText?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
+            Text(text = "Descripción: ${treatment.description}")
+            treatment.symptoms?.takeIf { it.isNotBlank() }?.let { Text(text = "Síntomas: $it") }
+            treatment.diagnosis?.takeIf { it.isNotBlank() }?.let { Text(text = "Diagnóstico: $it") }
+            treatment.treatmentPlan?.takeIf { it.isNotBlank() }?.let { Text(text = "Plan: $it") }
+            treatment.weight?.let { Text(text = "Peso: $it kg") }
+            treatment.temperature?.let { Text(text = "Temp: $it°C") }
+            Text(text = nextDateString, style = MaterialTheme.typography.bodySmall)
         }
-    }
-}
-
-/**
- * Pequeño Composable para mostrar un par de título y valor para los detalles clínicos.
- */
-@Composable
-private fun ClinicalDetailItem(label: String, value: String) {
-    Column {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge
-        )
     }
 }

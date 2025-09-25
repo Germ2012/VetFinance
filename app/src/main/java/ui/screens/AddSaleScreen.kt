@@ -1,5 +1,3 @@
-// ruta: app/src/main/java/com/example/vetfinance/ui/screens/AddSaleScreen.kt
-
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -24,7 +22,6 @@ import com.example.vetfinance.viewmodel.VetViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
-    // --- Estados observados desde el ViewModel ---
     val cart by viewModel.shoppingCart.collectAsState()
     val total by viewModel.saleTotal.collectAsState()
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
@@ -39,10 +36,12 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     }
 
     if (showAddProductDialog) {
-        AddProductDialog(
+        // Usamos el diálogo unificado
+        ProductDialog(
+            product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
-            onConfirm = { name, price, stock, cost, isService ->
-                viewModel.addProduct(name, price, stock, cost, isService)
+            onConfirm = { newProduct ->
+                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
             }
         )
     }
@@ -66,9 +65,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         bottomBar = {
             BottomAppBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -90,13 +87,10 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         }
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
-
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.onProductSearchQueryChange(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 label = { Text("Buscar producto o servicio...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar") },
                 trailingIcon = {
@@ -120,52 +114,6 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                         onAdd = { viewModel.addToCart(product) },
                         onRemove = { viewModel.removeFromCart(product) }
                     )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun ProductSelectionItem(
-    product: Product,
-    quantity: Int,
-    onAdd: () -> Unit,
-    onRemove: () -> Unit
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(product.name, fontWeight = FontWeight.Bold)
-                Text(String.format("Gs %,.0f", product.price).replace(",", "."))
-            }
-
-            if (quantity == 0) {
-                Button(onClick = onAdd) { Text("Añadir") }
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    OutlinedButton(
-                        modifier = Modifier.size(40.dp),
-                        contentPadding = PaddingValues(0.dp),
-                        onClick = onRemove
-                    ) { Text("-", fontSize = 20.sp) }
-
-                    Text("$quantity", fontSize = 18.sp, modifier = Modifier.padding(horizontal = 8.dp))
-
-                    Button(
-                        modifier = Modifier.size(40.dp),
-                        contentPadding = PaddingValues(0.dp),
-                        onClick = onAdd
-                    ) { Text("+", fontSize = 20.sp) }
                 }
             }
         }

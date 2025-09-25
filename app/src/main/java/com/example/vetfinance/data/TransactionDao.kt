@@ -81,6 +81,11 @@ interface ProductDao {
     /** Calcula el valor total del inventario sumando (precio * stock) para todos los productos físicos. */
     @Query("SELECT SUM(price * stock) FROM products WHERE isService = 0")
     fun getTotalInventoryValue(): Flow<Double?>
+
+    //**Funcion de borrar producto
+    @Delete
+    suspend fun delete(product: Product)
+
 }
 
 /**

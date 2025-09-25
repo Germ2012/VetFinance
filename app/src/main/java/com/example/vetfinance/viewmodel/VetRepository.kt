@@ -68,6 +68,11 @@ class VetRepository @Inject constructor(
     /** Tamaño del lote para operaciones de exportación para no sobrecargar la memoria. */
     private val BATCH_SIZE = 500
 
+    //** Funciones de borrado
+    suspend fun deleteProduct(product: Product) {
+        productDao.delete(product)
+    }
+
     // --- OPERACIONES DE PAGINACIÓN ---
 
     /** Obtiene un flujo paginado de productos, opcionalmente filtrado por tipo. */
