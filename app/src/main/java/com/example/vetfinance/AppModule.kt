@@ -2,6 +2,8 @@ package com.example.vetfinance
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.vetfinance.data.AppDatabase
 import com.example.vetfinance.data.ClientDao
 import com.example.vetfinance.data.PaymentDao
@@ -19,6 +21,14 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
 
+// Definición de la migración de la versión 10 a la 11
+val MIGRATION_10_11 = object : Migration(10, 11) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Añade la columna 'cost' a la tabla 'products' con un valor por defecto de 0.0
+        database.execSQL("ALTER TABLE products ADD COLUMN cost REAL NOT NULL DEFAULT 0.0")
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
@@ -30,7 +40,9 @@ object AppModule {
             context.applicationContext,
             AppDatabase::class.java,
             "vet_finance_db"
-        ).fallbackToDestructiveMigration().build()
+        )
+        .addMigrations(MIGRATION_10_11) // Se añade la migración
+        .build()
     }
 
     @Provides

@@ -37,16 +37,25 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val services = remember(inventory) { inventory.filter { it.isService } }
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     var showManagementDialog by remember { mutableStateOf(false) }
-    // 👇 CORRECCIÓN 1: Se recopila el nuevo estado de productos con bajo stock
     val lowStockProducts by viewModel.lowStockProducts.collectAsState()
 
     // --- Diálogos ---
     if (treatmentForNextDialog != null && petForDialog != null) {
+        // CORRECCIÓN: Se actualiza la llamada a AddTreatmentDialog y viewModel.addTreatment
         AddTreatmentDialog(
             services = services,
             onDismiss = { treatmentForNextDialog = null },
-            onConfirm = { description, nextDateMillis ->
-                viewModel.addTreatment(petForDialog.pet, description, nextDateMillis)
+            onConfirm = { description, weight, temperature, symptoms, diagnosis, treatmentPlan, nextDateMillis ->
+                viewModel.addTreatment(
+                    pet = petForDialog.pet,
+                    description = description,
+                    weight = weight,
+                    temperature = temperature,
+                    symptoms = symptoms,
+                    diagnosis = diagnosis,
+                    treatmentPlan = treatmentPlan,
+                    nextDate = nextDateMillis
+                )
                 treatmentForNextDialog = null
             },
             onAddNewServiceClick = {
@@ -57,10 +66,11 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     }
 
     if (showAddProductDialog) {
+        // CORRECCIÓN: Se actualiza la llamada a AddProductDialog para incluir el costo
         AddProductDialog(
             onDismiss = { viewModel.onDismissAddProductDialog() },
-            onConfirm = { name, price, stock, isService ->
-                viewModel.addProduct(name, price, stock, isService)
+            onConfirm = { name, price, stock, cost, isService ->
+                viewModel.addProduct(name, price, stock, cost, isService)
             }
         )
     }
@@ -126,7 +136,6 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                 ReportSummaryCard("Ventas de Hoy", formattedSales)
             }
 
-            // 👇 CORRECCIÓN 2: Se añade el bloque para mostrar la alerta de stock bajo
             if (lowStockProducts.isNotEmpty()) {
                 item {
                     LowStockAlert(lowStockProducts = lowStockProducts)
@@ -216,7 +225,6 @@ fun TreatmentReminderItem(
     }
 }
 
-// 👇 NUEVO COMPOSABLE AÑADIDO
 @Composable
 fun LowStockAlert(lowStockProducts: List<Product>) {
     Card(

@@ -7,7 +7,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Treatment
-import com.example.vetfinance.data.VetRepository
+import com.example.vetfinance.viewmodel.VetRepository
 import kotlinx.coroutines.flow.first
 import java.time.Instant
 import java.time.ZoneId

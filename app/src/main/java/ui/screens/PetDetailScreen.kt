@@ -34,7 +34,6 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
 
     if (showTreatmentDialog && petWithOwner != null) {
-        // 👇 CORRECCIÓN: Se actualiza la llamada al diálogo para pasar los nuevos datos
         AddTreatmentDialog(
             services = services,
             onDismiss = { showTreatmentDialog = false },
@@ -61,8 +60,8 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     if (showAddProductDialog) {
         AddProductDialog(
             onDismiss = { viewModel.onDismissAddProductDialog() },
-            onConfirm = { name, price, stock, isService ->
-                viewModel.addProduct(name, price, stock, isService)
+            onConfirm = { name, price, stock, cost, isService ->
+                viewModel.addProduct(name, price, stock, cost, isService)
             }
         )
     }
@@ -93,7 +92,6 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
             Spacer(modifier = Modifier.height(16.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(history) { treatment ->
-                    // 👇 CORRECCIÓN: Se usa el nuevo Composable para el historial
                     TreatmentHistoryItem(treatment)
                 }
             }
@@ -135,7 +133,6 @@ fun TreatmentHistoryItem(treatment: Treatment) {
                 fontWeight = FontWeight.Bold
             )
 
-            // Muestra los detalles clínicos solo si existen
             if (treatment.symptoms?.isNotBlank() == true) {
                 ClinicalDetailItem("Síntomas", treatment.symptoms!!)
             }
@@ -146,7 +143,6 @@ fun TreatmentHistoryItem(treatment: Treatment) {
                 ClinicalDetailItem("Plan de Tratamiento", treatment.treatmentPlan!!)
             }
 
-            // Muestra peso y temperatura si existen
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (treatment.weight != null) {
                     ClinicalDetailItem("Peso", "${treatment.weight} kg")
@@ -156,7 +152,6 @@ fun TreatmentHistoryItem(treatment: Treatment) {
                 }
             }
 
-            // Muestra la fecha del próximo tratamiento si existe
             daysText?.let {
                 Text(
                     text = it,
