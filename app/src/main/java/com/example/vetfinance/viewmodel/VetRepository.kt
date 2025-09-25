@@ -202,9 +202,9 @@ class VetRepository @Inject constructor(
 
         // Se exporta cada tabla a su respectivo archivo CSV.
         exportBatch(clientDao::getClientsPaged, "clients.csv", arrayOf("clientId", "name", "phone", "debtAmount")) { it, p -> p.printRecord(it.clientId, it.name, it.phone ?: "", it.debtAmount) }
-        exportBatch(productDao::getProductsPaged, "products.csv", arrayOf("id", "name", "price", "stock", "isService")) { it, p -> p.printRecord(it.id, it.name, it.price, it.stock, it.isService) }
+        exportBatch(productDao::getProductsPaged, "products.csv", arrayOf("id", "name", "price", "stock", "cost", "isService")) { it, p -> p.printRecord(it.id, it.name, it.price, it.stock, it.cost, it.isService) }
         exportBatch(petDao::getPetsPaged, "pets.csv", arrayOf("petId", "name", "ownerIdFk", "birthDate", "breed", "allergies")) { it, p -> p.printRecord(it.petId, it.name, it.ownerIdFk, it.birthDate ?: "", it.breed ?: "", it.allergies ?: "") }
-        exportBatch(treatmentDao::getTreatmentsPaged, "treatments.csv", arrayOf("treatmentId", "petIdFk", "treatmentDate", "description", "nextTreatmentDate", "isNextTreatmentCompleted")) { it, p -> p.printRecord(it.treatmentId, it.petIdFk, it.treatmentDate, it.description, it.nextTreatmentDate ?: "", it.isNextTreatmentCompleted) }
+        exportBatch(treatmentDao::getTreatmentsPaged, "treatments.csv", arrayOf("treatmentId", "petIdFk", "treatmentDate", "description", "weight", "temperature", "symptoms", "diagnosis", "treatmentPlan", "nextTreatmentDate", "isNextTreatmentCompleted")) { it, p -> p.printRecord(it.treatmentId, it.petIdFk, it.treatmentDate, it.description, it.weight ?: "", it.temperature ?: "", it.symptoms ?: "", it.diagnosis ?: "", it.treatmentPlan ?: "", it.nextTreatmentDate ?: "", it.isNextTreatmentCompleted) }
         exportBatch(saleDao::getSalesPaged, "sales.csv", arrayOf("saleId", "clientIdFk", "date", "totalAmount")) { it, p -> p.printRecord(it.saleId, it.clientIdFk, it.date, it.totalAmount) }
         exportBatch(transactionDao::getTransactionsPaged, "transactions.csv", arrayOf("transactionId", "saleIdFk", "date", "type", "amount", "description")) { it, p -> p.printRecord(it.transactionId, it.saleIdFk ?: "", it.date, it.type, it.amount, it.description ?: "") }
         exportBatch(paymentDao::getPaymentsPaged, "payments.csv", arrayOf("paymentId", "clientIdFk", "paymentDate", "amountPaid")) { it, p -> p.printRecord(it.paymentId, it.clientIdFk, it.paymentDate, it.amountPaid) }
@@ -313,9 +313,9 @@ class VetRepository @Inject constructor(
 
     // --- Funciones de Parseo de CSV ---
     private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r["phone"].ifEmpty { null }, r["debtAmount"].toDouble())
-    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["id"], r["name"], r["price"].toDouble(), r["stock"].toInt(), r["isService"].toBoolean())
+    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["id"], r["name"], r["price"].toDouble(), r["stock"].toInt(), r["cost"].toDouble(), r["isService"].toBoolean())
     private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r["birthDate"].toLongOrNull(), r["breed"].ifEmpty { null }, r["allergies"].ifEmpty { null })
-    private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r["description"], r["treatmentDate"].toLong(), r["nextTreatmentDate"].toLongOrNull(), r["isNextTreatmentCompleted"].toBoolean())
+    private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r["description"], r["treatmentDate"].toLong(), r["weight"].toDoubleOrNull(), r["temperature"].toDoubleOrNull(), r["symptoms"].ifEmpty { null }, r["diagnosis"].ifEmpty { null }, r["treatmentPlan"].ifEmpty { null }, r["nextTreatmentDate"].toLongOrNull(), r["isNextTreatmentCompleted"].toBoolean())
     private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["clientIdFk"], r["totalAmount"].toDouble(), r["date"].toLong())
     private fun parseTransaction(r: org.apache.commons.csv.CSVRecord) = Transaction(r["transactionId"], r["saleIdFk"].ifEmpty { null }, r["date"].toLong(), r["type"], r["amount"].toDouble(), r["description"].ifEmpty { null })
     private fun parsePayment(r: org.apache.commons.csv.CSVRecord) = Payment(r["paymentId"], r["clientIdFk"], r["amountPaid"].toDouble(), r["paymentDate"].toLong())
