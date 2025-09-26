@@ -42,7 +42,6 @@ val MIGRATION_11_12 = object : Migration(11, 12) {
     }
 }
 
-// --- NUEVA MIGRACIÓN ---
 // Corrige el tipo de la columna `stock` de INTEGER a REAL
 val MIGRATION_12_13 = object : Migration(12, 13) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -70,6 +69,28 @@ val MIGRATION_12_13 = object : Migration(12, 13) {
     }
 }
 
+// --- NUEVA MIGRACIÓN ---
+// Corrige el tipo de la columna `quantity` en la tabla `sales_products_cross_ref`
+val MIGRATION_13_14 = object : Migration(13, 14) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("""
+            CREATE TABLE sales_products_cross_ref_new (
+                saleId TEXT NOT NULL,
+                productId TEXT NOT NULL,
+                quantity REAL NOT NULL,
+                priceAtTimeOfSale REAL NOT NULL,
+                PRIMARY KEY(saleId, productId)
+            )
+        """.trimIndent())
+        db.execSQL("""
+            INSERT INTO sales_products_cross_ref_new (saleId, productId, quantity, priceAtTimeOfSale)
+            SELECT saleId, productId, quantity, priceAtTimeOfSale FROM sales_products_cross_ref
+        """.trimIndent())
+        db.execSQL("DROP TABLE sales_products_cross_ref")
+        db.execSQL("ALTER TABLE sales_products_cross_ref_new RENAME TO sales_products_cross_ref")
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
@@ -82,8 +103,8 @@ object AppModule {
             AppDatabase::class.java,
             "vet_finance_db"
         )
-        .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13) // Se añade la nueva migración
-        .build()
+            .addMigrations(MIGRATION_10_11, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14) // Se añade la nueva migración
+            .build()
     }
 
     @Provides
