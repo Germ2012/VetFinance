@@ -41,9 +41,9 @@ class VetViewModel @Inject constructor(
     private val repository: VetRepository
 ) : ViewModel() {
 
-    // --- ESTADO DE CARGA GLOBAL ---
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+    // Agrega estas dos líneas al inicio de tu clase VetViewModel
+    private val _isLoading = MutableStateFlow(true) // Estado mutable, empieza en 'cargando'
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow() // Estado inmutable para la UI
 
     //---Borrados
     fun deleteProduct(product: Product) = viewModelScope.launch { repository.deleteProduct(product) }
@@ -178,7 +178,21 @@ class VetViewModel @Inject constructor(
     private val _saleTotal = MutableStateFlow(0.0)
     val saleTotal: StateFlow<Double> = _saleTotal.asStateFlow()
 
+    // Dentro de la clase VetViewModel
     init {
+        // Este bloque se asegura de que el indicador de carga se apague
+        // una vez que los datos de mascotas y tratamientos estén listos.
+        viewModelScope.launch {
+            // 'combine' espera a que ambos flujos de datos emitan su primer valor.
+            combine(petsWithOwners, upcomingTreatments) { _, _ ->
+                // No necesitamos los valores, solo saber que llegaron.
+            }.first() // Usamos .first() para que el flujo termine después de la primera emisión.
+
+            // Una vez que los datos iniciales han llegado, actualizamos el estado.
+            _isLoading.value = false
+        }
+
+        // Aquí puedes dejar el resto de tu lógica del 'init' si la tienes.
         viewModelScope.launch { repository.getAllSales().collect { _sales.value = it } }
         viewModelScope.launch { if (repository.getAllClients().firstOrNull()?.none { it.clientId == GENERAL_CLIENT_ID } == true) addSampleData() }
     }

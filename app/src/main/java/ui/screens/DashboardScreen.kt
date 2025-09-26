@@ -36,7 +36,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val lowStockProducts by viewModel.lowStockProducts.collectAsState()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
 
-    val isLoading = upcomingTreatments.isEmpty() && petsWithOwners.isEmpty()
+    val isLoading by viewModel.isLoading.collectAsState()
 
     // --- DIÁLOGOS ---
     if (treatmentForNextDialog != null && petForDialog != null) {
