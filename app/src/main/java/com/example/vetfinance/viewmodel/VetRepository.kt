@@ -66,14 +66,15 @@ class VetRepository @Inject constructor(
 ) {
 
     /** Tamaño del lote para operaciones de exportación para no sobrecargar la memoria. */
-    private val BATCH_SIZE = 500
+    private val batchSize = 500
 
     //** Funciones de borrado
     suspend fun deleteProduct(product: Product) {
         productDao.delete(product)
     }
 
-    suspend fun deleteSale(sale: Sale) {
+    suspend fun deleteSale(saleWithProducts: SaleWithProducts) {
+        val sale = saleWithProducts.sale
         db.withTransaction {
             val saleDetails = saleDao.getSaleDetailsBySaleId(sale.saleId)
             for (detail in saleDetails) {
@@ -138,7 +139,6 @@ class VetRepository @Inject constructor(
     fun getUpcomingTreatments(): Flow<List<Treatment>> = treatmentDao.getUpcomingTreatments()
     suspend fun getSaleDetailsBySaleId(saleId: String): List<SaleProductCrossRef> = saleDao.getSaleDetailsBySaleId(saleId)
     suspend fun getProductById(productId: String): Product? = productDao.getProductById(productId)
-
 
     // --- OPERACIONES DE ESCRITURA (SUSPEND) ---
 
@@ -216,9 +216,9 @@ class VetRepository @Inject constructor(
                 var offset = 0
                 var batch: List<T>
                 do {
-                    batch = daoMethod(BATCH_SIZE, offset)
+                    batch = daoMethod(batchSize, offset)
                     batch.forEach { recordMapper(it, printer) }
-                    offset += BATCH_SIZE
+                    offset += batchSize
                 } while (batch.isNotEmpty())
             }
             csvMap[fileName] = sw.toString()

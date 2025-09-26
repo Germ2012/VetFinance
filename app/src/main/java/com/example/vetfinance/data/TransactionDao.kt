@@ -86,6 +86,8 @@ interface ProductDao {
     @Delete
     suspend fun delete(product: Product)
 
+    @Query("SELECT * FROM products ORDER BY name ASC LIMIT :limit OFFSET :offset")
+    suspend fun getProductsPaged(limit: Int, offset: Int): List<Product>
 }
 
 /**

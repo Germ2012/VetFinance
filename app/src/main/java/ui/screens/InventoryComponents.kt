@@ -1,6 +1,11 @@
 package com.example.vetfinance.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -9,9 +14,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.vetfinance.data.Product
 import ui.utils.ThousandsSeparatorTransformation
 
@@ -24,7 +31,9 @@ fun ProductDialog(
     product: Product?,
     onDismiss: () -> Unit,
     onConfirm: (Product) -> Unit,
-    onDelete: ((Product) -> Unit)? = null
+    onDelete: ((Product) -> Unit)? = null,
+    productNameSuggestions: List<Product>,
+    onProductNameChange: (String) -> Unit
 ) {
     val isEditing = product != null
     var name by remember { mutableStateOf(product?.name ?: "") }
@@ -33,6 +42,14 @@ fun ProductDialog(
     var cost by remember { mutableStateOf(product?.cost?.toLong()?.toString() ?: "") }
     var isService by remember { mutableStateOf(product?.isService ?: false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+
+    // When the dialog is opened for editing, we don't want to show suggestions for its own name.
+    // So we trigger the search only when the dialog is for a new product.
+    LaunchedEffect(Unit) {
+        if (!isEditing) {
+            onProductNameChange(name)
+        }
+    }
 
     if (showDeleteConfirmation && product != null) {
         AlertDialog(
@@ -63,7 +80,38 @@ fun ProductDialog(
         title = { Text(if (isEditing) "Editar Producto/Servicio" else "Añadir Producto/Servicio") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Nombre") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        onProductNameChange(it)
+                    },
+                    label = { Text("Nombre") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                AnimatedVisibility(visible = productNameSuggestions.isNotEmpty() && name.isNotBlank()) {
+                    Column(modifier = Modifier.padding(top = 4.dp)) {
+                        Text("Coincidencias existentes:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 100.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                .padding(8.dp)
+                        ) {
+                            items(productNameSuggestions) { suggestion ->
+                                Text(
+                                    text = suggestion.name,
+                                    modifier = Modifier.padding(vertical = 4.dp),
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+                }
+
                 OutlinedTextField(value = price, onValueChange = { if (it.all { char -> char.isDigit() }) price = it }, label = { Text("Precio") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), visualTransformation = ThousandsSeparatorTransformation(), modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = cost, onValueChange = { if (it.all { char -> char.isDigit() }) cost = it }, label = { Text("Costo") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), visualTransformation = ThousandsSeparatorTransformation(), modifier = Modifier.fillMaxWidth())
                 OutlinedTextField(value = stock, onValueChange = { if (it.all { char -> char.isDigit() }) stock = it }, label = { Text("Stock") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), enabled = !isService, modifier = Modifier.fillMaxWidth())

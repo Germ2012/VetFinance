@@ -47,7 +47,7 @@ class VetViewModel @Inject constructor(
 
     //---Borrados
     fun deleteProduct(product: Product) = viewModelScope.launch { repository.deleteProduct(product) }
-    fun deleteSale(sale: Sale) = viewModelScope.launch { repository.deleteSale(sale) }
+    fun deleteSale(sale: SaleWithProducts) = viewModelScope.launch { repository.deleteSale(sale) }
 
     // --- ESTADOS DE FILTROS Y BÚSQUEDA ---
     private val _inventoryFilter = MutableStateFlow("Todos")
@@ -64,6 +64,10 @@ class VetViewModel @Inject constructor(
 
     private val _selectedSaleDateFilter = MutableStateFlow<Long?>(null)
     val selectedSaleDateFilter: StateFlow<Long?> = _selectedSaleDateFilter.asStateFlow()
+
+    // --- BÚSQUEDA DE PRODUCTOS EN DIÁLOGO ---
+    private val _productNameSuggestions = MutableStateFlow<List<Product>>(emptyList())
+    val productNameSuggestions: StateFlow<List<Product>> = _productNameSuggestions.asStateFlow()
 
     // --- ESTADOS DE DATOS CRUDOS ---
     val clients: StateFlow<List<Client>> = repository.getAllClients().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -181,6 +185,20 @@ class VetViewModel @Inject constructor(
     fun onSaleDateFilterSelected(date: Long?) { _selectedSaleDateFilter.value = date }
     fun clearSaleDateFilter() { _selectedSaleDateFilter.value = null }
 
+    fun onProductNameChange(name: String) {
+        if (name.isBlank()) {
+            _productNameSuggestions.value = emptyList()
+            return
+        }
+        _productNameSuggestions.value = inventory.value.filter {
+            it.name.contains(name, ignoreCase = true)
+        }
+    }
+
+    fun clearProductNameSuggestions() {
+        _productNameSuggestions.value = emptyList()
+    }
+
     // --- MANEJO DE EVENTOS PARA TOP PRODUCTS ---
     fun onTopProductsPeriodSelected(period: TopProductsPeriod) {
         _topProductsPeriod.value = period
@@ -191,7 +209,10 @@ class VetViewModel @Inject constructor(
 
     // --- GESTIÓN DE DIÁLOGOS ---
     fun onShowAddProductDialog() { _showAddProductDialog.value = true }
-    fun onDismissAddProductDialog() { _showAddProductDialog.value = false }
+    fun onDismissAddProductDialog() {
+        _showAddProductDialog.value = false
+        clearProductNameSuggestions()
+    }
     fun onShowAddClientDialog() { _showAddClientDialog.value = true }
     fun onDismissAddClientDialog() { _showAddClientDialog.value = false }
     fun onShowPaymentDialog(client: Client) { _clientForPayment.value = client; _showPaymentDialog.value = true }

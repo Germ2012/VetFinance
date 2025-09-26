@@ -35,6 +35,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     var showManagementDialog by remember { mutableStateOf(false) }
     val lowStockProducts by viewModel.lowStockProducts.collectAsState()
+    val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
 
     // --- DIÁLOGOS ---
     if (treatmentForNextDialog != null && petForDialog != null) {
@@ -67,7 +68,9 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
-            }
+            },
+            productNameSuggestions = productNameSuggestions,
+            onProductNameChange = { viewModel.onProductNameChange(it) }
         )
     }
 

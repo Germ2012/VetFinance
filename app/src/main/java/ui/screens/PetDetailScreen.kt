@@ -31,6 +31,7 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     val inventory by viewModel.inventory.collectAsState()
     val services = remember(inventory) { inventory.filter { it.isService } }
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
+    val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
 
     if (showTreatmentDialog && petWithOwner != null) {
         AddTreatmentDialog(
@@ -62,7 +63,9 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
-            }
+            },
+            productNameSuggestions = productNameSuggestions,
+            onProductNameChange = { viewModel.onProductNameChange(it) }
         )
     }
 

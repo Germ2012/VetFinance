@@ -22,6 +22,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
     val filter by viewModel.inventoryFilter.collectAsState()
     val inventory by viewModel.inventory.collectAsState()
     var productToEdit by remember { mutableStateOf<Product?>(null) }
+    val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
 
     val filteredProducts = remember(inventory, filter) {
         when (filter) {
@@ -39,7 +40,9 @@ fun InventoryScreen(viewModel: VetViewModel) {
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
-            }
+            },
+            productNameSuggestions = productNameSuggestions,
+            onProductNameChange = { viewModel.onProductNameChange(it) }
         )
     }
 
@@ -47,15 +50,20 @@ fun InventoryScreen(viewModel: VetViewModel) {
     productToEdit?.let { product ->
         ProductDialog(
             product = product,
-            onDismiss = { productToEdit = null },
+            onDismiss = {
+                productToEdit = null
+                viewModel.clearProductNameSuggestions()
+            },
             onConfirm = { updatedProduct ->
                 viewModel.updateProduct(updatedProduct)
                 productToEdit = null
             },
             onDelete = { productToDelete ->
-                viewModel.deleteProduct(productToDelete) // Asumiendo que tienes una función deleteProduct en tu ViewModel
+                viewModel.deleteProduct(productToDelete)
                 productToEdit = null
-            }
+            },
+            productNameSuggestions = productNameSuggestions,
+            onProductNameChange = { viewModel.onProductNameChange(it) }
         )
     }
 
@@ -73,8 +81,8 @@ fun InventoryScreen(viewModel: VetViewModel) {
             Spacer(modifier = Modifier.height(16.dp))
 
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(filteredProducts) { product ->
-                    InventoryItem(product, onEdit = { productToEdit = it })
+                items(filteredProducts) {
+                    InventoryItem(it, onEdit = { productToEdit = it })
                 }
                 if (filteredProducts.isEmpty()) {
                     item {

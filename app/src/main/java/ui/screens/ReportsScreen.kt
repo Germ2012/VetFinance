@@ -4,6 +4,7 @@ package com.example.vetfinance.ui.screens
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,6 +17,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -199,11 +201,7 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
                     BarData(
                         point = Point(index.toFloat(), product.totalSold.toFloat()),
                         label = "", // Sin etiqueta en el eje X
-                        color = chartColors[index % chartColors.size],
-                        barStyle = BarStyle(
-                            barWidth = 35.dp,
-                            selectionAlpha = if (isSelected) 1f else 0.4f
-                        )
+                        color = chartColors[index % chartColors.size].copy(alpha = if (isSelected) 1f else 0.4f)
                     )
                 },
                 xAxisData = AxisData.Builder().labelData { "" }.build(), // Ocultar etiquetas del eje X

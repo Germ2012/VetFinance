@@ -27,6 +27,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     val inventory by viewModel.filteredInventory.collectAsState()
     val searchQuery by viewModel.productSearchQuery.collectAsState()
+    val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
+
 
     DisposableEffect(Unit) {
         onDispose {
@@ -42,7 +44,9 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
-            }
+            },
+            productNameSuggestions = productNameSuggestions,
+            onProductNameChange = { viewModel.onProductNameChange(it) }
         )
     }
 
