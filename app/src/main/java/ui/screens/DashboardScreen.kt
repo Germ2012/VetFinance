@@ -37,6 +37,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
 
     val isLoading by viewModel.isLoading.collectAsState()
+    val petIdToNameMap = petsWithOwners.associate { it.pet.petId to it.pet.name }
 
     // --- DIÁLOGOS ---
     if (treatmentForNextDialog != null && petForDialog != null) {
@@ -110,8 +111,6 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         )
     }
 
-    val petIdToNameMap = petsWithOwners.associate { it.pet.petId to it.pet.name }
-
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(id = R.drawable.vet_background_logo),
@@ -121,42 +120,52 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             alpha = 0.5f
         )
 
-        if (isLoading) {
-            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                item {
-                    Text("Resumen del Día", style = MaterialTheme.typography.headlineMedium)
-                }
-                item {
-                    val formattedSales = String.format("₲ %,.0f", salesToday).replace(",", ".")
-                    ReportSummaryCard("Ventas de Hoy", formattedSales)
-                }
+        Column(
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            // --- Static "Resumen del Día" Section ---
+            Text("Resumen del Día", style = MaterialTheme.typography.headlineMedium)
+            Spacer(modifier = Modifier.height(16.dp))
+            val formattedSales = String.format("₲ %,.0f", salesToday).replace(",", ".")
+            ReportSummaryCard("Ventas de Hoy", formattedSales)
+            Spacer(modifier = Modifier.height(16.dp)) // Space after summary, before dynamic content
 
-                if (lowStockProducts.isNotEmpty()) {
-                    item {
-                        LowStockAlert(lowStockProducts = lowStockProducts)
-                    }
+            // --- Dynamic Content Section (Loading or List) ---
+            if (isLoading) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
                 }
-
-                if (upcomingTreatments.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("Próximos Tratamientos", style = MaterialTheme.typography.headlineSmall)
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    if (lowStockProducts.isNotEmpty()) {
+                        item {
+                            LowStockAlert(lowStockProducts = lowStockProducts)
+                        }
                     }
-                    items(upcomingTreatments) { treatment ->
-                        TreatmentReminderItem(
-                            treatment = treatment,
-                            petName = petIdToNameMap[treatment.petIdFk] ?: "Mascota desconocida",
-                            onMarkAsCompleted = {
-                                viewModel.markTreatmentAsCompleted(treatment)
-                                treatmentForNextDialog = treatment
-                            }
-                        )
+
+                    if (upcomingTreatments.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Próximos Tratamientos", style = MaterialTheme.typography.headlineSmall)
+                        }
+                        items(upcomingTreatments) { treatment ->
+                            TreatmentReminderItem(
+                                treatment = treatment,
+                                petName = petIdToNameMap[treatment.petIdFk] ?: "Mascota desconocida",
+                                onMarkAsCompleted = {
+                                    viewModel.markTreatmentAsCompleted(treatment)
+                                    treatmentForNextDialog = treatment
+                                }
+                            )
+                        }
                     }
                 }
             }
