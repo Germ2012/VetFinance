@@ -22,6 +22,7 @@ import androidx.navigation.NavHostController
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SellingMethod
 import com.example.vetfinance.viewmodel.VetViewModel
+import com.example.vetfinance.ui.screens.ProductSelectionItem // Added import
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -262,42 +263,4 @@ fun FractionalSaleDialog(
         }
     }
 }
-
-@Composable
-fun ProductSelectionItem(
-    product: Product,
-    quantity: Double, 
-    onAdd: () -> Unit,
-    onRemove: () -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .padding(8.dp)
-                .fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(product.name, fontWeight = FontWeight.Bold)
-                Text("Precio: Gs ${product.price}", fontSize = 14.sp)
-                if (product.selling_method != SellingMethod.DOSE_ONLY && !product.isService) {
-                     Text("Stock: ${product.stock}", fontSize = 12.sp) // product.stock is Double
-                }
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onRemove, enabled = quantity > 0) {
-                    Icon(Icons.Default.Clear, contentDescription = "Quitar") 
-                }
-                Text(
-                    text = if (quantity > 0) "%.2f".format(Locale.US, quantity) else "0", // Displays Double quantity
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                )
-                IconButton(onClick = onAdd) {
-                    Icon(Icons.Default.Add, contentDescription = "Añadir")
-                }
-            }
-        }
-    }
-}
+// ProductSelectionItem function removed

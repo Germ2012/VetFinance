@@ -42,3 +42,15 @@ class ThousandsSeparatorTransformation : VisualTransformation {
         )
     }
 }
+
+/**
+ * Función de utilidad para formatear un número Double a una cadena de moneda en guaraníes.
+ * ¡CORREGIDO! Ahora está fuera de la clase.
+ */
+fun formatCurrency(value: Double): String {
+    return try {
+        String.format("%,.0f", value).replace(",", ".")
+    } catch (e: Exception) {
+        "0"
+    }
+}
