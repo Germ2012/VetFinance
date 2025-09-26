@@ -17,13 +17,12 @@ import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.navigation.Screen
-import com.example.vetfinance.viewmodel.Period
 import com.example.vetfinance.viewmodel.VetViewModel
 import java.util.concurrent.TimeUnit
 
 @Composable
 fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
-    val salesToday = viewModel.getSalesSummary(Period.DAY)
+    val salesToday by viewModel.salesSummaryToday.collectAsState()
     val upcomingTreatments by viewModel.upcomingTreatments.collectAsState()
     val petsWithOwners by viewModel.petsWithOwners.collectAsState()
     var treatmentForNextDialog by remember { mutableStateOf<Treatment?>(null) }
@@ -36,6 +35,8 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     var showManagementDialog by remember { mutableStateOf(false) }
     val lowStockProducts by viewModel.lowStockProducts.collectAsState()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
+
+    val isLoading = upcomingTreatments.isEmpty() && petsWithOwners.isEmpty()
 
     // --- DIÁLOGOS ---
     if (treatmentForNextDialog != null && petForDialog != null) {
@@ -120,39 +121,43 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             alpha = 0.5f
         )
 
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                Text("Resumen del Día", style = MaterialTheme.typography.headlineMedium)
-            }
-            item {
-                val formattedSales = String.format("₲ %,.0f", salesToday).replace(",", ".")
-                ReportSummaryCard("Ventas de Hoy", formattedSales)
-            }
-
-            if (lowStockProducts.isNotEmpty()) {
+        if (isLoading) {
+            CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 item {
-                    LowStockAlert(lowStockProducts = lowStockProducts)
+                    Text("Resumen del Día", style = MaterialTheme.typography.headlineMedium)
                 }
-            }
-
-            if (upcomingTreatments.isNotEmpty()) {
                 item {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Próximos Tratamientos", style = MaterialTheme.typography.headlineSmall)
+                    val formattedSales = String.format("₲ %,.0f", salesToday).replace(",", ".")
+                    ReportSummaryCard("Ventas de Hoy", formattedSales)
                 }
-                items(upcomingTreatments) { treatment ->
-                    TreatmentReminderItem(
-                        treatment = treatment,
-                        petName = petIdToNameMap[treatment.petIdFk] ?: "Mascota desconocida",
-                        onMarkAsCompleted = {
-                            viewModel.markTreatmentAsCompleted(treatment)
-                            treatmentForNextDialog = treatment
-                        }
-                    )
+
+                if (lowStockProducts.isNotEmpty()) {
+                    item {
+                        LowStockAlert(lowStockProducts = lowStockProducts)
+                    }
+                }
+
+                if (upcomingTreatments.isNotEmpty()) {
+                    item {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text("Próximos Tratamientos", style = MaterialTheme.typography.headlineSmall)
+                    }
+                    items(upcomingTreatments) { treatment ->
+                        TreatmentReminderItem(
+                            treatment = treatment,
+                            petName = petIdToNameMap[treatment.petIdFk] ?: "Mascota desconocida",
+                            onMarkAsCompleted = {
+                                viewModel.markTreatmentAsCompleted(treatment)
+                                treatmentForNextDialog = treatment
+                            }
+                        )
+                    }
                 }
             }
         }

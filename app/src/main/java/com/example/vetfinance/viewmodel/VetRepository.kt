@@ -73,6 +73,10 @@ class VetRepository @Inject constructor(
         productDao.delete(product)
     }
 
+    suspend fun deleteClient(client: Client) {
+        clientDao.delete(client)
+    }
+
     suspend fun deleteSale(saleWithProducts: SaleWithProducts) {
         val sale = saleWithProducts.sale
         db.withTransaction {

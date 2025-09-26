@@ -2,14 +2,13 @@
 
 package com.example.vetfinance.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,15 +30,13 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
-    // Se obtienen los datos filtrados y la fecha seleccionada desde el ViewModel
     val filteredSales by viewModel.filteredSales.collectAsState()
     val selectedDate by viewModel.selectedSaleDateFilter.collectAsState()
+    val isLoading = filteredSales.isEmpty()
 
-    // Estados para manejar la visibilidad y el estado del diálogo del selector de fecha
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
     var saleToDelete by remember { mutableStateOf<SaleWithProducts?>(null) }
-
 
     if (saleToDelete != null) {
         AlertDialog(
@@ -65,7 +62,6 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
         )
     }
 
-    // Muestra el DatePickerDialog cuando showDatePicker es true
     if (showDatePicker) {
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
@@ -102,7 +98,6 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
             ) {
                 Text("Historial de Ventas", style = MaterialTheme.typography.headlineMedium)
 
-                // Chip que muestra la fecha seleccionada y abre el selector de fecha
                 FilterChip(
                     selected = selectedDate != null,
                     onClick = { showDatePicker = true },
@@ -115,7 +110,6 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                         }
                         Text(labelText)
                     },
-                    // Icono para limpiar el filtro de fecha
                     trailingIcon = {
                         if (selectedDate != null) {
                             IconButton(onClick = { viewModel.clearSaleDateFilter() }) {
@@ -127,24 +121,28 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
             }
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Muestra un mensaje si la lista está vacía, adaptado al filtro actual
-            if (filteredSales.isEmpty()) {
+            if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    val message = if (selectedDate != null) {
-                        "No se encontraron ventas para esta fecha."
-                    } else {
-                        "No se han registrado ventas."
-                    }
-                    Text(message)
+                    CircularProgressIndicator()
                 }
             } else {
-                // Muestra la lista de ventas
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(filteredSales) { saleWithProducts ->
-                        SaleItem(
-                            saleWithProducts = saleWithProducts,
-                            onDeleteClick = { saleToDelete = saleWithProducts }
-                        )
+                if (filteredSales.isEmpty()) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        val message = if (selectedDate != null) {
+                            "No se encontraron ventas para esta fecha."
+                        } else {
+                            "No se han registrado ventas."
+                        }
+                        Text(message)
+                    }
+                } else {
+                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(filteredSales) { saleWithProducts ->
+                            SaleItem(
+                                saleWithProducts = saleWithProducts,
+                                onDeleteClick = { saleToDelete = saleWithProducts }
+                            )
+                        }
                     }
                 }
             }
@@ -152,12 +150,10 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
     }
 }
 
-/**
- * Un elemento visual que representa una venta en una tarjeta,
- * mostrando sus detalles y productos.
- */
 @Composable
 fun SaleItem(saleWithProducts: SaleWithProducts, onDeleteClick: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             val saleDateTime = LocalDateTime.ofInstant(
@@ -172,12 +168,26 @@ fun SaleItem(saleWithProducts: SaleWithProducts, onDeleteClick: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Venta #${saleWithProducts.sale.saleId.take(8)}...", // Acortar ID para la UI
+                    text = "Venta #${saleWithProducts.sale.saleId.take(8)}...",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = onDeleteClick) {
-                    Icon(Icons.Default.Delete, contentDescription = "Eliminar Venta")
+                Box {
+                    IconButton(onClick = { expanded = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Más opciones")
+                    }
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Eliminar") },
+                            onClick = {
+                                onDeleteClick()
+                                expanded = false
+                            }
+                        )
+                    }
                 }
             }
             Text(

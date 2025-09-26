@@ -1,11 +1,11 @@
 package com.example.vetfinance.ui.screens
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,7 +22,10 @@ fun InventoryScreen(viewModel: VetViewModel) {
     val filter by viewModel.inventoryFilter.collectAsState()
     val inventory by viewModel.inventory.collectAsState()
     var productToEdit by remember { mutableStateOf<Product?>(null) }
+    var productToDelete by remember { mutableStateOf<Product?>(null) }
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
+
+    val isLoading = inventory.isEmpty()
 
     val filteredProducts = remember(inventory, filter) {
         when (filter) {
@@ -33,7 +36,6 @@ fun InventoryScreen(viewModel: VetViewModel) {
     }
 
     // --- DIÁLOGOS ---
-    // Diálogo para AÑADIR un nuevo producto
     if (showDialog) {
         ProductDialog(
             product = null,
@@ -46,7 +48,6 @@ fun InventoryScreen(viewModel: VetViewModel) {
         )
     }
 
-    // Diálogo para EDITAR un producto existente
     productToEdit?.let { product ->
         ProductDialog(
             product = product,
@@ -58,12 +59,32 @@ fun InventoryScreen(viewModel: VetViewModel) {
                 viewModel.updateProduct(updatedProduct)
                 productToEdit = null
             },
-            onDelete = { productToDelete ->
-                viewModel.deleteProduct(productToDelete)
-                productToEdit = null
-            },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) }
+        )
+    }
+
+    productToDelete?.let { product ->
+        AlertDialog(
+            onDismissRequest = { productToDelete = null },
+            title = { Text("Confirmar Eliminación") },
+            text = { Text("¿Estás seguro de que quieres eliminar '${product.name}'? Esta acción no se puede deshacer.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteProduct(product)
+                        productToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Eliminar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { productToDelete = null }) {
+                    Text("Cancelar")
+                }
+            }
         )
     }
 
@@ -80,17 +101,27 @@ fun InventoryScreen(viewModel: VetViewModel) {
             InventoryFilter(selectedFilter = filter, onFilterSelected = { viewModel.onInventoryFilterChanged(it) })
             Spacer(modifier = Modifier.height(16.dp))
 
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(filteredProducts) {
-                    InventoryItem(it, onEdit = { productToEdit = it })
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
                 }
-                if (filteredProducts.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier.fillParentMaxSize().padding(top = 100.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text("No hay productos que coincidan con el filtro.")
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(filteredProducts) { product ->
+                        InventoryItem(
+                            product = product,
+                            onEdit = { productToEdit = it },
+                            onDelete = { productToDelete = it }
+                        )
+                    }
+                    if (filteredProducts.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier.fillParentMaxSize().padding(top = 100.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("No hay productos que coincidan con el filtro.")
+                            }
                         }
                     }
                 }
@@ -118,12 +149,16 @@ fun InventoryFilter(selectedFilter: String, onFilterSelected: (String) -> Unit) 
 }
 
 @Composable
-fun InventoryItem(product: Product, onEdit: (Product) -> Unit) {
-    Card(modifier = Modifier
-        .fillMaxWidth()
-        .clickable { onEdit(product) }) {
+fun InventoryItem(
+    product: Product,
+    onEdit: (Product) -> Unit,
+    onDelete: (Product) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Card(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 16.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -134,7 +169,7 @@ fun InventoryItem(product: Product, onEdit: (Product) -> Unit) {
                     style = MaterialTheme.typography.bodySmall
                 )
             }
-            Column(horizontalAlignment = Alignment.End) {
+            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 8.dp)) {
                 val formattedPrice = String.format("₲ %,.0f", product.price).replace(",", ".")
                 Text(
                     text = formattedPrice,
@@ -144,6 +179,30 @@ fun InventoryItem(product: Product, onEdit: (Product) -> Unit) {
                     Text(
                         text = "Stock: ${product.stock}",
                         style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+            Box {
+                IconButton(onClick = { expanded = true }) {
+                    Icon(Icons.Default.MoreVert, contentDescription = "Más opciones")
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Editar") },
+                        onClick = {
+                            onEdit(product)
+                            expanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Eliminar") },
+                        onClick = {
+                            onDelete(product)
+                            expanded = false
+                        }
                     )
                 }
             }

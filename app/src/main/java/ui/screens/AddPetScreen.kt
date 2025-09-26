@@ -19,28 +19,25 @@ fun AddPetScreen(
     viewModel: VetViewModel,
     navController: NavController
 ) {
-    // Estados para los campos del formulario
     var petName by remember { mutableStateOf("") }
     var ownerMenuExpanded by remember { mutableStateOf(false) }
     var selectedOwner by remember { mutableStateOf<Client?>(null) }
     var showAddOwnerDialog by remember { mutableStateOf(false) }
 
-    // Observa la lista de clientes del ViewModel
     val clients by viewModel.clients.collectAsState()
 
-    // --- DIÁLOGO PARA AÑADIR DUEÑO ---
+    // --- DIÁLOGO PARA AÑADIR DUEÑO (CLIENTE) ---
     if (showAddOwnerDialog) {
-        // Ahora se usa la versión centralizada de AddOwnerDialog
-        AddOwnerDialog(
+        AddOrEditClientDialog(
             onDismiss = { showAddOwnerDialog = false },
-            onConfirm = { name, phone ->
-                viewModel.addClient(name, phone, 0.0) // Deuda inicial 0
+            onConfirm = { name, phone, _ -> // La deuda se ignora aquí
+                viewModel.addClient(name, phone, 0.0)
                 showAddOwnerDialog = false
-            }
+            },
+            showDebtField = false // No se muestra el campo de deuda al añadir un dueño desde aquí
         )
     }
 
-    // --- UI DE LA PANTALLA ---
     Scaffold(
         topBar = { TopAppBar(title = { Text("Añadir Nueva Mascota") }) }
     ) { paddingValues ->
@@ -50,7 +47,6 @@ fun AddPetScreen(
                 .padding(16.dp)
                 .fillMaxSize()
         ) {
-            // Campo para el nombre de la mascota
             OutlinedTextField(
                 value = petName,
                 onValueChange = { petName = it },
@@ -59,12 +55,10 @@ fun AddPetScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // --- Selector de Dueño con Botón de Añadir ---
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Menú desplegable para seleccionar un dueño
                 ExposedDropdownMenuBox(
                     expanded = ownerMenuExpanded,
                     onExpandedChange = { ownerMenuExpanded = !ownerMenuExpanded },
@@ -93,20 +87,18 @@ fun AddPetScreen(
                     }
                 }
 
-                // Botón para abrir el diálogo de nuevo dueño
                 IconButton(onClick = { showAddOwnerDialog = true }) {
                     Icon(Icons.Default.Add, contentDescription = "Añadir Nuevo Dueño")
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Botón para guardar la mascota
             Button(
                 onClick = {
                     selectedOwner?.let {
                         val newPet = Pet(name = petName, ownerIdFk = it.clientId)
                         viewModel.addPet(newPet)
-                        navController.popBackStack() // Regresa a la pantalla anterior
+                        navController.popBackStack()
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -117,5 +109,3 @@ fun AddPetScreen(
         }
     }
 }
-
-// La función AddOwnerDialog ha sido eliminada de aquí y movida a ClientComponents.kt

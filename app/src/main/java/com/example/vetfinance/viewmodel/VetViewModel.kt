@@ -48,6 +48,7 @@ class VetViewModel @Inject constructor(
     //---Borrados
     fun deleteProduct(product: Product) = viewModelScope.launch { repository.deleteProduct(product) }
     fun deleteSale(sale: SaleWithProducts) = viewModelScope.launch { repository.deleteSale(sale) }
+    fun deleteClient(client: Client) = viewModelScope.launch { repository.deleteClient(client) }
 
     // --- ESTADOS DE FILTROS Y BÚSQUEDA ---
     private val _inventoryFilter = MutableStateFlow("Todos")
@@ -113,6 +114,15 @@ class VetViewModel @Inject constructor(
     // --- REPORTES ---
     val totalDebt: StateFlow<Double?> = repository.getTotalDebt().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val totalInventoryValue: StateFlow<Double?> = repository.getTotalInventoryValue().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val salesSummaryToday: StateFlow<Double> = _sales.map { sales ->
+        val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        sales.filter { it.sale.date >= startOfDay }.sumOf { it.sale.totalAmount }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = 0.0
+    )
 
     // --- REPORTES: TOP PRODUCTS (NUEVA LÓGICA) ---
     private val _topProductsPeriod = MutableStateFlow(TopProductsPeriod.MONTH)
@@ -270,6 +280,7 @@ class VetViewModel @Inject constructor(
         val startEpoch = startOfPeriod.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         return _sales.value.filter { it.sale.date >= startEpoch }.sumOf { it.sale.totalAmount }
     }
+
     fun getGrossProfitSummary(period: Period): Double {
         val now = LocalDate.now()
         val startOfPeriod = when (period) {
