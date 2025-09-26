@@ -22,14 +22,16 @@ import androidx.navigation.NavHostController
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SellingMethod
 import com.example.vetfinance.viewmodel.VetViewModel
-import com.example.vetfinance.ui.screens.ProductSelectionItem // Added import
+// Asegúrate de que esta importación esté presente si los archivos están en diferentes paquetes.
+// Si están en el mismo, es opcional.
+import com.example.vetfinance.ui.screens.ProductSelectionItem
 import java.text.NumberFormat
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
-    val cart by viewModel.shoppingCart.collectAsState() 
+    val cart by viewModel.shoppingCart.collectAsState()
     val total by viewModel.saleTotal.collectAsState()
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     val inventory by viewModel.filteredInventory.collectAsState()
@@ -143,14 +145,14 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                             if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) {
                                 viewModel.openFractionalSaleDialog(product)
                             } else {
-                                viewModel.addToCart(product) // Changed to use addToCart
+                                viewModel.addToCart(product)
                             }
                         },
                         onRemove = {
                             if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) {
-                                viewModel.addOrUpdateProductInCart(product, 0.0) // Remove from cart by setting quantity to 0
+                                viewModel.addOrUpdateProductInCart(product, 0.0)
                             } else {
-                                viewModel.removeFromCart(product) // Changed to use removeFromCart
+                                viewModel.removeFromCart(product)
                             }
                         }
                     )
@@ -166,16 +168,15 @@ fun FractionalSaleDialog(
     onDismiss: () -> Unit,
     onConfirm: (product: Product, quantity: Double) -> Unit
 ) {
-    var inputMode by remember { mutableStateOf("amount") } // "amount" or "quantity"
+    var inputMode by remember { mutableStateOf("amount") }
     var amountString by remember { mutableStateOf("") }
     var quantityString by remember { mutableStateOf("") }
-    var calculatedValue by remember { mutableStateOf("") } // To display the auto-calculated Gs or Kg
+    var calculatedValue by remember { mutableStateOf("") }
 
     val numberFormat = NumberFormat.getNumberInstance(Locale.GERMAN).apply {
         maximumFractionDigits = 2
         minimumFractionDigits = 0
     }
-
 
     Dialog(onDismissRequest = onDismiss) {
         Card {
@@ -220,7 +221,7 @@ fun FractionalSaleDialog(
                         singleLine = true
                     )
                     Text("Equivale a: $calculatedValue", style = MaterialTheme.typography.bodySmall)
-                } else { // inputMode == "quantity"
+                } else {
                     OutlinedTextField(
                         value = quantityString,
                         onValueChange = {
@@ -263,4 +264,7 @@ fun FractionalSaleDialog(
         }
     }
 }
-// ProductSelectionItem function removed
+
+// ¡IMPORTANTE!
+// La función @Composable fun ProductSelectionItem(...) ha sido eliminada de este archivo.
+// Ahora solo existe en `InventoryComponents.kt`, lo que resuelve el error de compilación.
