@@ -14,9 +14,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.vetfinance.R
 import com.example.vetfinance.data.PetWithOwner
 import com.example.vetfinance.viewmodel.VetViewModel
 
@@ -41,7 +43,7 @@ fun PetsScreen(
             FloatingActionButton(
                 onClick = { navController.navigate("add_pet_screen") }
             ) {
-                Icon(Icons.Default.Add, contentDescription = "Añadir Mascota")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_pet_content_description))
             }
         }
     ) { paddingValues ->
@@ -52,7 +54,7 @@ fun PetsScreen(
                 .padding(horizontal = 16.dp)
         ) {
             Text(
-                text = "Mascotas Registradas",
+                text = stringResource(R.string.pets_screen_title),
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.padding(vertical = 16.dp)
             )
@@ -62,12 +64,12 @@ fun PetsScreen(
                 value = searchQuery,
                 onValueChange = { viewModel.onPetSearchQueryChange(it) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Buscar por mascota o dueño...") },
+                label = { Text(stringResource(R.string.search_pet_placeholder)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.clearPetSearchQuery() }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Limpiar")
+                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.clear_search_content_description))
                         }
                     }
                 },
@@ -81,7 +83,7 @@ fun PetsScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Ninguna mascota coincide con la búsqueda.")
+                    Text(stringResource(R.string.no_pets_found))
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -114,7 +116,7 @@ fun PetItem(petWithOwner: PetWithOwner, onItemClick: () -> Unit) {
                 text = petWithOwner.pet.name,
                 fontWeight = FontWeight.Bold
             )
-            Text(text = "Dueño: ${petWithOwner.owner.name}")
+            Text(text = stringResource(R.string.owner_label, petWithOwner.owner.name))
         }
     }
 }

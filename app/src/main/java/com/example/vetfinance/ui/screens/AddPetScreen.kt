@@ -7,8 +7,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.data.Pet
 import com.example.vetfinance.viewmodel.VetViewModel
@@ -39,7 +41,7 @@ fun AddPetScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Añadir Nueva Mascota") }) }
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.add_new_pet_title)) }) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -50,7 +52,7 @@ fun AddPetScreen(
             OutlinedTextField(
                 value = petName,
                 onValueChange = { petName = it },
-                label = { Text("Nombre de la mascota") },
+                label = { Text(stringResource(R.string.pet_name_label)) },
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(modifier = Modifier.height(16.dp))
@@ -65,7 +67,7 @@ fun AddPetScreen(
                     modifier = Modifier.weight(1f)
                 ) {
                     OutlinedTextField(
-                        value = selectedOwner?.name ?: "Seleccionar Dueño",
+                        value = selectedOwner?.name ?: stringResource(R.string.select_owner_placeholder),
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = ownerMenuExpanded) },
@@ -88,7 +90,7 @@ fun AddPetScreen(
                 }
 
                 IconButton(onClick = { showAddOwnerDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Añadir Nuevo Dueño")
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add_new_owner_content_description))
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -104,7 +106,7 @@ fun AddPetScreen(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = petName.isNotBlank() && selectedOwner != null
             ) {
-                Text("Guardar Mascota")
+                Text(stringResource(R.string.save_pet_button))
             }
         }
     }

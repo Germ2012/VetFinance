@@ -13,9 +13,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.vetfinance.R
 import com.example.vetfinance.data.SaleWithProducts
 import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.VetViewModel
@@ -42,8 +44,8 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
     if (saleToDelete != null) {
         AlertDialog(
             onDismissRequest = { saleToDelete = null },
-            title = { Text("Confirmar Eliminación") },
-            text = { Text("¿Estás seguro de que deseas eliminar esta venta? Esta acción no se puede deshacer y el stock de los productos será restaurado.") },
+            title = { Text(stringResource(R.string.confirm_deletion_title)) },
+            text = { Text(stringResource(R.string.confirm_deletion_sale_message)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -52,12 +54,12 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Eliminar")
+                    Text(stringResource(R.string.delete_button))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { saleToDelete = null }) {
-                    Text("Cancelar")
+                    Text(stringResource(R.string.cancel_button))
                 }
             }
         )
@@ -72,10 +74,10 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                         viewModel.onSaleDateFilterSelected(datePickerState.selectedDateMillis)
                         showDatePicker = false
                     }
-                ) { Text("Aceptar") }
+                ) { Text(stringResource(R.string.accept_button)) }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Cancelar") }
+                TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.cancel_button)) }
             }
         ) {
             DatePicker(state = datePickerState)
@@ -87,7 +89,7 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
             FloatingActionButton(onClick = {
                 navController.navigate(Screen.AddSale.route)
             }) {
-                Icon(Icons.Default.Add, contentDescription = "Registrar Venta")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.register_sale_fab))
             }
         }
     ) { paddingValues ->
@@ -97,7 +99,7 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("Historial de Ventas", style = MaterialTheme.typography.headlineMedium)
+                Text(stringResource(R.string.sales_history_title), style = MaterialTheme.typography.headlineMedium)
 
                 FilterChip(
                     selected = selectedDate != null,
@@ -105,16 +107,16 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                     label = {
                         val labelText = if (selectedDate != null) {
                             val sdf = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
-                            "Fecha: ${sdf.format(Date(selectedDate!!))}"
+                            stringResource(R.string.date_filter_label, sdf.format(Date(selectedDate!!)))
                         } else {
-                            "Filtrar por Fecha"
+                            stringResource(R.string.filter_by_date_chip)
                         }
                         Text(labelText)
                     },
                     trailingIcon = {
                         if (selectedDate != null) {
                             IconButton(onClick = { viewModel.clearSaleDateFilter() }) {
-                                Icon(Icons.Default.Close, contentDescription = "Limpiar filtro")
+                                Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_filter_content_description))
                             }
                         }
                     }
@@ -130,9 +132,9 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                 if (filteredSales.isEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         val message = if (selectedDate != null) {
-                            "No se encontraron ventas para esta fecha."
+                            stringResource(R.string.no_sales_for_date)
                         } else {
-                            "No se han registrado ventas."
+                            stringResource(R.string.no_sales_recorded)
                         }
                         Text(message)
                     }
@@ -169,20 +171,20 @@ fun SaleItem(saleWithProducts: SaleWithProducts, onDeleteClick: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Venta #${saleWithProducts.sale.saleId.take(8)}...",
+                    text = stringResource(R.string.sale_item_title, saleWithProducts.sale.saleId.take(8)),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
                 Box {
                     IconButton(onClick = { expanded = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Más opciones")
+                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options_content_description))
                     }
                     DropdownMenu(
                         expanded = expanded,
                         onDismissRequest = { expanded = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("Eliminar") },
+                            text = { Text(stringResource(R.string.delete_button)) },
                             onClick = {
                                 onDeleteClick()
                                 expanded = false
@@ -201,16 +203,16 @@ fun SaleItem(saleWithProducts: SaleWithProducts, onDeleteClick: () -> Unit) {
             if (saleWithProducts.crossRefs.isNotEmpty()) {
                 saleWithProducts.crossRefs.forEach { crossRef ->
                     val product = saleWithProducts.products.find { it.id == crossRef.productId }
-                    Text("• ${formatCurrency(crossRef.quantity)}x ${product?.name ?: "Producto desconocido"} (Gs. ${formatCurrency(crossRef.priceAtTimeOfSale)})")
+                    Text(stringResource(R.string.sale_item_product_detail, formatCurrency(crossRef.quantity), product?.name ?: stringResource(R.string.unknown_product), formatCurrency(crossRef.priceAtTimeOfSale)))
                 }
             } else {
-                Text("Venta manual o sin productos detallados.", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.manual_sale_no_details), style = MaterialTheme.typography.bodySmall)
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Total: Gs. ${formatCurrency(saleWithProducts.sale.totalAmount)}", // Usar formatCurrency y prefijo Gs.
+                text = stringResource(R.string.total_amount_label, formatCurrency(saleWithProducts.sale.totalAmount)),
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.End)
             )

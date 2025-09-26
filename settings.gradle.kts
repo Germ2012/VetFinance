@@ -19,7 +19,7 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        // 👇 CORRECCIÓN DEFINITIVA: Repositorio JitPack para la librería del calendario
+        
         maven { url = uri("https://jitpack.io") }
     }
 }
