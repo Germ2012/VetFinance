@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SellingMethod // Added import
 import com.example.vetfinance.viewmodel.VetViewModel
+import ui.utils.formatCurrency // Importar formatCurrency
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -173,20 +174,13 @@ fun InventoryItem(
                 )
             }
             Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 8.dp)) {
-                val formattedPrice = String.format("%,.0f", product.price).replace(",", ".")
                 Text(
-                    text = "Gs $formattedPrice",
+                    text = "Gs. ${formatCurrency(product.price)}", // Usar formatCurrency y prefijo Gs.
                     style = MaterialTheme.typography.bodyLarge
                 )
                 if (!product.isService && product.selling_method != SellingMethod.DOSE_ONLY) {
-                    // Format stock to show decimals only if necessary
-                    val stockText = if (product.stock % 1.0 == 0.0) {
-                        "%.0f".format(product.stock)
-                    } else {
-                        "%.2f".format(product.stock)
-                    }
                     Text(
-                        text = "Stock: $stockText",
+                        text = "Stock: ${formatCurrency(product.stock)}", // Usar formatCurrency
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

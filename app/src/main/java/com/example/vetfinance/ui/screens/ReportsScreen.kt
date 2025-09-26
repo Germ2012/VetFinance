@@ -44,6 +44,7 @@ import java.time.format.DateTimeFormatter
 import java.util.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
+import ui.utils.formatCurrency // Importar formatCurrency
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -127,8 +128,8 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Top)
     ) {
         SegmentedControl(selected = selectedPeriod, onPeriodSelected = { newPeriod -> selectedPeriod = newPeriod })
-        val formattedSales = String.format("₲ %,.0f", salesSummary).replace(",", ".")
-        val formattedProfit = String.format("₲ %,.0f", grossProfit).replace(",", ".")
+        val formattedSales = "Gs. ${formatCurrency(salesSummary)}"
+        val formattedProfit = "Gs. ${formatCurrency(grossProfit)}"
 
         SummaryCard(title = "Total Ventas (${selectedPeriod.displayName})", value = formattedSales)
         SummaryCard(title = "Beneficio Bruto (${selectedPeriod.displayName})", value = formattedProfit)
@@ -283,7 +284,7 @@ fun TopProductsFilterControls(
         Spacer(modifier = Modifier.height(8.dp))
         Button(onClick = onDateSelectorClick, modifier = Modifier.fillMaxWidth()) {
             val formatter = when (selectedPeriod) {
-                TopProductsPeriod.WEEK -> DateTimeFormatter.ofPattern("'Semana del' dd 'de' MMMM, yyyy", Locale("es", "ES"))
+                TopProductsPeriod.WEEK -> DateTimeFormatter.ofPattern("w 'de' YYYY", Locale("es", "ES"))
                 TopProductsPeriod.MONTH -> DateTimeFormatter.ofPattern("MMMM 'de' yyyy", Locale("es", "ES"))
                 TopProductsPeriod.YEAR -> DateTimeFormatter.ofPattern("yyyy", Locale("es", "ES"))
             }
@@ -319,7 +320,7 @@ fun LegendItem(
 @Composable
 fun DebtsReportTab(viewModel: VetViewModel) {
     val totalDebt by viewModel.totalDebt.collectAsState()
-    val formattedDebt = String.format("₲ %,.0f", totalDebt ?: 0.0).replace(",", ".")
+    val formattedDebt = "Gs. ${formatCurrency(totalDebt ?: 0.0)}"
     val clients by viewModel.clients.collectAsState()
     val clientsWithDebt = remember(clients) { clients.filter { it.debtAmount > 0 } }
 
@@ -339,7 +340,7 @@ fun DebtsReportTab(viewModel: VetViewModel) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(text = client.name)
-                    Text(text = String.format("₲ %,.0f", client.debtAmount).replace(",", "."))
+                    Text(text = "Gs. ${formatCurrency(client.debtAmount)}")
                 }
             }
         }
@@ -350,7 +351,7 @@ fun DebtsReportTab(viewModel: VetViewModel) {
 @Composable
 fun InventoryReportTab(viewModel: VetViewModel) {
     val totalValue by viewModel.totalInventoryValue.collectAsState()
-    val formattedValue = String.format("₲ %,.0f", totalValue ?: 0.0).replace(",", ".")
+    val formattedValue = "Gs. ${formatCurrency(totalValue ?: 0.0)}"
     val inventory by viewModel.inventory.collectAsState()
     val productsOnly = remember(inventory) { inventory.filter { !it.isService } }
 
@@ -370,7 +371,7 @@ fun InventoryReportTab(viewModel: VetViewModel) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(text = product.name)
-                    Text(text = "Stock: ${product.stock}")
+                    Text(text = "Stock: ${formatCurrency(product.stock.toDouble())}") // Asumiendo que stock puede ser Double
                 }
             }
         }

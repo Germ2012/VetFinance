@@ -12,6 +12,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.data.Client
 import ui.utils.ThousandsSeparatorTransformation
+import ui.utils.formatCurrency // Importar formatCurrency
 
 /**
  * Componente que muestra la informaciÃ³n de un cliente en una tarjeta.
@@ -31,7 +32,7 @@ fun ClientItem(client: Client, onPayClick: () -> Unit, onItemClick: () -> Unit) 
             Column(modifier = Modifier.weight(1f)) {
                 Text(client.name, fontWeight = FontWeight.Bold)
                 Text(
-                    text = "Deuda: Gs ${String.format("%,.0f", client.debtAmount).replace(",", ".")}",
+                    text = "Deuda: Gs. ${formatCurrency(client.debtAmount)}", // Usar formatCurrency y prefijo Gs.
                     color = MaterialTheme.colorScheme.error
                 )
             }
@@ -57,7 +58,7 @@ fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> 
                 value = amount,
                 onValueChange = { amount = it.filter { char -> char.isDigit() } },
                 label = { Text("Monto a abonar") },
-                prefix = { Text("Gs ") },
+                prefix = { Text("Gs. ") }, // Prefijo Gs.
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number
                 ),

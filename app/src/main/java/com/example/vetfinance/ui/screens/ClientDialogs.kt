@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import ui.utils.ThousandsSeparatorTransformation
+import ui.utils.formatCurrency // Importar formatCurrency
 
 @Composable
 fun AddOrEditClientDialog(
@@ -49,7 +50,7 @@ fun AddOrEditClientDialog(
                         value = debt,
                         onValueChange = { debt = it.filter { char -> char.isDigit() } },
                         label = { Text("Deuda Inicial (Opcional)") },
-                        prefix = { Text("₲") },
+                        prefix = { Text("Gs. ") }, // Prefijo Gs.
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         visualTransformation = ThousandsSeparatorTransformation(),
                         modifier = Modifier.fillMaxWidth()

@@ -19,6 +19,7 @@ import androidx.navigation.NavController
 import com.example.vetfinance.data.SaleWithProducts
 import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.VetViewModel
+import ui.utils.formatCurrency // Importar formatCurrency
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.LocalDateTime
@@ -32,7 +33,7 @@ import java.util.Locale
 fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
     val filteredSales by viewModel.filteredSales.collectAsState()
     val selectedDate by viewModel.selectedSaleDateFilter.collectAsState()
-    val isLoading = filteredSales.isEmpty()
+    val isLoading = filteredSales.isEmpty() && selectedDate == null // Consider loading only if no filter and no sales
 
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
@@ -197,19 +198,19 @@ fun SaleItem(saleWithProducts: SaleWithProducts, onDeleteClick: () -> Unit) {
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (saleWithProducts.products.isNotEmpty()) {
+            if (saleWithProducts.crossRefs.isNotEmpty()) {
                 saleWithProducts.crossRefs.forEach { crossRef ->
                     val product = saleWithProducts.products.find { it.id == crossRef.productId }
-                    Text("• ${crossRef.quantity}x ${product?.name ?: "Producto desconocido"}")
+                    Text("• ${formatCurrency(crossRef.quantity)}x ${product?.name ?: "Producto desconocido"} (Gs. ${formatCurrency(crossRef.priceAtTimeOfSale)})")
                 }
             } else {
-                Text("Venta manual.", style = MaterialTheme.typography.bodySmall)
+                Text("Venta manual o sin productos detallados.", style = MaterialTheme.typography.bodySmall)
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = String.format("Total: Gs %,.0f", saleWithProducts.sale.totalAmount).replace(",", "."),
+                text = "Total: Gs. ${formatCurrency(saleWithProducts.sale.totalAmount)}", // Usar formatCurrency y prefijo Gs.
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.End)
             )

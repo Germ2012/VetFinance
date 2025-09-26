@@ -19,6 +19,7 @@ import com.example.vetfinance.data.SellingMethod // Import SellingMethod
 import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.VetViewModel
+import ui.utils.formatCurrency // Importar formatCurrency
 import java.util.concurrent.TimeUnit
 
 @Composable
@@ -128,7 +129,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             // --- Static "Resumen del Día" Section ---
             Text("Resumen del Día", style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
-            val formattedSales = String.format("₲ %,.0f", salesToday).replace(",", ".")
+            val formattedSales = "Gs. ${formatCurrency(salesToday)}"
             ReportSummaryCard("Ventas de Hoy", formattedSales)
             Spacer(modifier = Modifier.height(16.dp)) // Space after summary, before dynamic content
 
@@ -199,7 +200,7 @@ fun LowStockAlert(lowStockProducts: List<Product>) {
             Spacer(modifier = Modifier.height(8.dp))
             lowStockProducts.forEach { product ->
                 Text(
-                    text = "- ${product.name} (Stock: ${product.stock})", // product.stock is Double, will format as such
+                    text = "- ${product.name} (Stock: ${formatCurrency(product.stock)})".replace(",00", ""), // Usar formatCurrency para el stock también y quitar decimales si son cero
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
@@ -215,19 +216,25 @@ fun TreatmentReminderItem(
 ) {
     val daysUntilNext = treatment.nextTreatmentDate?.let { TimeUnit.MILLISECONDS.toDays(it - System.currentTimeMillis()) }
     val cardColor = when {
-        daysUntilNext == null -> MaterialTheme.colorScheme.surfaceVariant
-        daysUntilNext < 1 -> MaterialTheme.colorScheme.errorContainer
-        daysUntilNext < 3 -> MaterialTheme.colorScheme.tertiaryContainer
-        else -> MaterialTheme.colorScheme.surfaceVariant
+        daysUntilNext == null -> MaterialTheme.colorScheme.surfaceVariant // Tratamiento sin próxima fecha (posiblemente finalizado)
+        daysUntilNext < 0 -> MaterialTheme.colorScheme.errorContainer // Vencido
+        daysUntilNext == 0L -> MaterialTheme.colorScheme.tertiaryContainer // Hoy
+        daysUntilNext < 3 -> MaterialTheme.colorScheme.secondaryContainer // Próximamente (menos de 3 días)
+        else -> MaterialTheme.colorScheme.surfaceVariant // Futuro (3 días o más)
     }
+    val nextDateText = when {
+        daysUntilNext == null -> "Próxima cita no definida"
+        daysUntilNext < 0 -> "Vencido hace ${-daysUntilNext} día(s)"
+        daysUntilNext == 0L -> "Hoy"
+        else -> "En $daysUntilNext día(s)"
+    }
+
 
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = "Mascota: $petName", fontWeight = FontWeight.Bold)
             Text(text = "Tratamiento: ${treatment.description}")
-            if (daysUntilNext != null) {
-                Text(text = "Próxima cita en: $daysUntilNext días")
-            }
+            Text(text = "Próxima cita: $nextDateText")
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = onMarkAsCompleted) {
                 Text("Registrar Nueva Visita")

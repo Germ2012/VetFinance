@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SellingMethod
 import ui.utils.ThousandsSeparatorTransformation
+import ui.utils.formatCurrency // Importar formatCurrency
 import java.util.Locale // Added import
 
 @Composable
@@ -36,11 +37,14 @@ fun ProductDialog(
     val isEditing = product != null
     var name by remember { mutableStateOf(product?.name ?: "") }
     var price by remember { mutableStateOf(product?.price?.toLong()?.toString() ?: "") }
-    var stock by remember { mutableStateOf(product?.stock?.toString() ?: "") }
+    // Asegurarse que el stock se inicializa correctamente como String
+    var stock by remember { mutableStateOf(product?.stock?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() } ?: "") }
     var cost by remember { mutableStateOf(product?.cost?.toLong()?.toString() ?: "") }
     var isService by remember { mutableStateOf(product?.isService ?: false) }
+    var selectedSellingMethod by remember { mutableStateOf(product?.selling_method ?: SellingMethod.BY_UNIT) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
+    // Actualizar el nombre para sugerencias cuando se abre el diálogo
     LaunchedEffect(Unit) {
         if (!isEditing) {
             onProductNameChange(name)
@@ -80,10 +84,11 @@ fun ProductDialog(
                     value = name,
                     onValueChange = {
                         name = it
-                        onProductNameChange(it)
+                        onProductNameChange(it) // Actualizar para sugerencias en tiempo real
                     },
                     label = { Text("Nombre") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = name.isBlank() // Marcar error si el nombre está vacío
                 )
 
                 AnimatedVisibility(visible = productNameSuggestions.isNotEmpty() && name.isNotBlank()) {
@@ -108,30 +113,69 @@ fun ProductDialog(
                     }
                 }
 
-                OutlinedTextField(value = price, onValueChange = { if (it.all { char -> char.isDigit() }) price = it }, label = { Text("Precio") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), visualTransformation = ThousandsSeparatorTransformation(), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = cost, onValueChange = { if (it.all { char -> char.isDigit() }) cost = it }, label = { Text("Costo") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), visualTransformation = ThousandsSeparatorTransformation(), modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = stock, onValueChange = { if (it.all { char -> char.isDigit() || char == '.' }) stock = it }, label = { Text("Stock") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), enabled = !isService, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    value = price,
+                    onValueChange = { if (it.all { char -> char.isDigit() }) price = it },
+                    label = { Text("Precio") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = ThousandsSeparatorTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    prefix = { Text("Gs. ") },
+                    isError = price.isBlank() // Marcar error si el precio está vacío
+                )
+                OutlinedTextField(
+                    value = cost,
+                    onValueChange = { if (it.all { char -> char.isDigit() }) cost = it },
+                    label = { Text("Costo") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = ThousandsSeparatorTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    prefix = { Text("Gs. ") },
+                    isError = cost.isBlank() // Marcar error si el costo está vacío
+                )
+                OutlinedTextField(
+                    value = stock,
+                    onValueChange = {
+                        // Permitir un solo punto decimal y solo números
+                        val filtered = it.filter { char -> char.isDigit() || char == '.' }
+                        if (filtered.count { char -> char == '.' } <= 1) {
+                            stock = filtered
+                        }
+                    },
+                    label = { Text("Stock") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    enabled = !isService,
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = stock.isBlank() && !isService && selectedSellingMethod != SellingMethod.DOSE_ONLY // Marcar error si stock está vacío y es relevante
+                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = isService, onCheckedChange = { isService = it })
                     Text("Es un servicio")
+                }
+                if (!isService) {
+                    SellingMethodDropdown(
+                        selectedMethod = selectedSellingMethod,
+                        onMethodSelected = { selectedSellingMethod = it }
+                    )
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val currentProductData = product ?: Product(name = "", price = 0.0, stock = 0.0, cost = 0.0)
+                    val currentProductData = product ?: Product(name = "", price = 0.0, stock = 0.0, cost = 0.0, selling_method = SellingMethod.BY_UNIT)
 
                     val newOrUpdatedProduct = currentProductData.copy(
                         name = name,
                         price = price.replace(".", "").toDoubleOrNull() ?: 0.0,
-                        stock = if (isService) 9999.0 else stock.toDoubleOrNull() ?: 0.0,
+                        stock = if (isService || selectedSellingMethod == SellingMethod.DOSE_ONLY) 9999.0 else stock.toDoubleOrNull() ?: 0.0,
                         cost = cost.replace(".", "").toDoubleOrNull() ?: 0.0,
-                        isService = isService
+                        isService = isService,
+                        selling_method = if (isService) SellingMethod.DOSE_ONLY else selectedSellingMethod
                     )
                     onConfirm(newOrUpdatedProduct)
                 },
-                enabled = name.isNotBlank() && price.isNotBlank() && cost.isNotBlank()
+                enabled = name.isNotBlank() && price.isNotBlank() && cost.isNotBlank() && (isService || selectedSellingMethod == SellingMethod.DOSE_ONLY || stock.isNotBlank())
             ) {
                 Text(if (isEditing) "Actualizar" else "Guardar")
             }
@@ -157,10 +201,47 @@ fun ProductDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SellingMethodDropdown(selectedMethod: SellingMethod, onMethodSelected: (SellingMethod) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val methods = SellingMethod.values()
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+    ) {
+        OutlinedTextField(
+            value = selectedMethod.displayName,
+            onValueChange = {}, // No editable directamente
+            readOnly = true,
+            label = { Text("Forma de Venta") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth()
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            methods.forEach { method ->
+                DropdownMenuItem(
+                    text = { Text(method.displayName) },
+                    onClick = {
+                        onMethodSelected(method)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+
 @Composable
 fun ProductSelectionItem(
     product: Product,
-    quantity: Double,
+    quantity: Double, // Permitir Double para cantidades fraccionadas
     onAdd: () -> Unit,
     onRemove: () -> Unit
 ) {
@@ -172,9 +253,9 @@ fun ProductSelectionItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(product.name, fontWeight = FontWeight.Bold)
-                Text("Precio: Gs ${ui.utils.formatCurrency(product.price)}", fontSize = 14.sp)
+                Text("Precio: Gs. ${formatCurrency(product.price)}", fontSize = 14.sp) // Usar formatCurrency y prefijo Gs.
                 if (product.selling_method != SellingMethod.DOSE_ONLY && !product.isService) {
-                     Text("Stock: ${product.stock}", fontSize = 12.sp)
+                     Text("Stock: ${formatCurrency(product.stock)}", fontSize = 12.sp) // Usar formatCurrency
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -182,7 +263,7 @@ fun ProductSelectionItem(
                     Icon(Icons.Default.Remove, contentDescription = "Quitar")
                 }
                 Text(
-                    text = if (quantity > 0) "%.2f".format(Locale.US, quantity) else "0",
+                    text = if (quantity > 0) formatCurrency(quantity) else "0", // Usar formatCurrency
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
                 IconButton(onClick = onAdd) {

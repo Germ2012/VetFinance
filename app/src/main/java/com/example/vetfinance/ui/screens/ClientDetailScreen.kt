@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.data.Payment
 import com.example.vetfinance.viewmodel.VetViewModel
+import ui.utils.formatCurrency // Importar formatCurrency
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -59,7 +60,7 @@ fun ClientDetailScreen(
             client?.let {
                 Text(it.name, style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    String.format("Deuda Actual: Gs %,.0f", it.debtAmount).replace(",", "."),
+                    "Deuda Actual: Gs. ${formatCurrency(it.debtAmount)}", // Usar formatCurrency y prefijo Gs.
                     style = MaterialTheme.typography.titleMedium,
                     color = if (it.debtAmount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -98,7 +99,7 @@ fun PaymentItem(payment: Payment) {
         ) {
             Text(sdf.format(date), style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = String.format("Gs %,.0f", payment.amountPaid).replace(",", "."),
+                text = "Gs. ${formatCurrency(payment.amountPaid)}", // Usar formatCurrency y prefijo Gs.
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary

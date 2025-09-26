@@ -1,4 +1,4 @@
-package ui.screens
+package com.example.vetfinance.ui.screens // Modificado el paquete
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -20,7 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.vetfinance.data.AppointmentWithDetails
-import com.example.vetfinance.ui.screens.AddAppointmentDialog
+// No es necesario importar AddAppointmentDialog si está en el mismo paquete
 import com.example.vetfinance.viewmodel.VetViewModel
 import com.kizitonwose.calendar.compose.HorizontalCalendar
 import com.kizitonwose.calendar.compose.rememberCalendarState
@@ -98,7 +98,6 @@ fun CalendarScreen(viewModel: VetViewModel) {
                 },
                 monthHeader = { month ->
                     val daysOfWeek = month.weekDays.first().map { it.date.dayOfWeek }
-                    // 👇 CORRECCIÓN: Se usa el constructor moderno de Locale
                     val monthName = month.yearMonth.month.getDisplayName(TextStyle.FULL, Locale.forLanguageTag("es-ES")).replaceFirstChar { it.uppercase() }
                     val year = month.yearMonth.year
                     MonthHeader(daysOfWeek = daysOfWeek, monthName = "$monthName $year")
@@ -126,7 +125,6 @@ fun MonthHeader(daysOfWeek: List<DayOfWeek>, monthName: String) {
                 Text(
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
-                    // 👇 CORRECCIÓN: Se usa el constructor moderno de Locale
                     text = dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("es-ES")),
                     fontWeight = FontWeight.Bold
                 )

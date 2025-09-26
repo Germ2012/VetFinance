@@ -1,21 +1,25 @@
 package com.example.vetfinance.viewmodel
 
 import android.content.Context
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Treatment
-import com.example.vetfinance.viewmodel.VetRepository
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
-class ReminderWorker(
-    private val appContext: Context,
-    workerParams: WorkerParameters,
+@HiltWorker
+class ReminderWorker @AssistedInject constructor(
+    @Assisted private val appContext: Context,
+    @Assisted workerParams: WorkerParameters,
     private val repository: VetRepository
 ) : CoroutineWorker(appContext, workerParams) {
 
@@ -36,6 +40,7 @@ class ReminderWorker(
 
             Result.success()
         } catch (e: Exception) {
+            Log.e("ReminderWorker", "Error en doWork", e)
             Result.failure()
         }
     }

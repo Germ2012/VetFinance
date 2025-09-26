@@ -22,10 +22,10 @@ import androidx.navigation.NavHostController
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SellingMethod
 import com.example.vetfinance.viewmodel.VetViewModel
+import ui.utils.formatCurrency // Importar formatCurrency
 // Asegúrate de que esta importación esté presente si los archivos están en diferentes paquetes.
 // Si están en el mismo, es opcional.
 import com.example.vetfinance.ui.screens.ProductSelectionItem
-import java.text.NumberFormat
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -98,7 +98,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = String.format(Locale.GERMAN, "Total: Gs %,.0f", total),
+                        text = "Total: Gs. ${formatCurrency(total)}", // Usar formatCurrency y prefijo Gs.
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -142,15 +142,16 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                         product = product,
                         quantity = cart[product] ?: 0.0,
                         onAdd = {
-                            if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) {
+                            if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT || product.selling_method == SellingMethod.BY_FRACTION) { // Modificado para incluir BY_FRACTION
                                 viewModel.openFractionalSaleDialog(product)
                             } else {
                                 viewModel.addToCart(product)
                             }
                         },
                         onRemove = {
-                            if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) {
-                                viewModel.addOrUpdateProductInCart(product, 0.0)
+                             if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT || product.selling_method == SellingMethod.BY_FRACTION) { // Modificado para incluir BY_FRACTION
+                                // Para remover fraccionales, simplemente los quitamos o ponemos en 0 si es necesario un diálogo futuro
+                                viewModel.addOrUpdateProductInCart(product, 0.0) // Esto quita el producto
                             } else {
                                 viewModel.removeFromCart(product)
                             }
@@ -168,15 +169,11 @@ fun FractionalSaleDialog(
     onDismiss: () -> Unit,
     onConfirm: (product: Product, quantity: Double) -> Unit
 ) {
-    var inputMode by remember { mutableStateOf("amount") }
+    var inputMode by remember { mutableStateOf(if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) "amount" else "quantity") } // Default a cantidad para BY_FRACTION
     var amountString by remember { mutableStateOf("") }
     var quantityString by remember { mutableStateOf("") }
     var calculatedValue by remember { mutableStateOf("") }
 
-    val numberFormat = NumberFormat.getNumberInstance(Locale.GERMAN).apply {
-        maximumFractionDigits = 2
-        minimumFractionDigits = 0
-    }
 
     Dialog(onDismissRequest = onDismiss) {
         Card {
@@ -185,53 +182,60 @@ fun FractionalSaleDialog(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text("Vender: ${product.name}", style = MaterialTheme.typography.titleLarge)
-                Text("Precio: Gs ${numberFormat.format(product.price)} / ${if(product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) "kg/unidad" else "unidad"}")
+                Text("Precio: Gs. ${formatCurrency(product.price)} / ${product.selling_method.unitName}", style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioButton(
-                        selected = inputMode == "amount",
-                        onClick = { inputMode = "amount" }
-                    )
-                    Text("Por Monto (Gs)")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    RadioButton(
-                        selected = inputMode == "quantity",
-                        onClick = { inputMode = "quantity" }
-                    )
-                    Text("Por Cantidad")
+                if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        RadioButton(
+                            selected = inputMode == "amount",
+                            onClick = { inputMode = "amount"; quantityString = ""; amountString = ""; calculatedValue = "" }
+                        )
+                        Text("Por Monto (Gs.)")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        RadioButton(
+                            selected = inputMode == "quantity",
+                            onClick = { inputMode = "quantity"; quantityString = ""; amountString = ""; calculatedValue = "" }
+                        )
+                        Text("Por Cantidad (${product.selling_method.unitName})")
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
                 }
-                Spacer(modifier = Modifier.height(8.dp))
 
-                if (inputMode == "amount") {
+                if (inputMode == "amount" && product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) {
                     OutlinedTextField(
                         value = amountString,
                         onValueChange = {
-                            amountString = it
-                            val amount = it.toDoubleOrNull() ?: 0.0
+                            val filtered = it.filter { char -> char.isDigit() }
+                            amountString = filtered
+                            val amount = filtered.toDoubleOrNull() ?: 0.0
                             if (product.price > 0) {
                                 val qty = amount / product.price
-                                calculatedValue = "${numberFormat.format(qty)} ${if(product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) "kg/unidad" else "unidad"}"
+                                calculatedValue = "${formatCurrency(qty)} ${product.selling_method.unitName}"
                             } else {
                                 calculatedValue = "Precio de producto no válido"
                             }
                         },
-                        label = { Text("Monto en Gs") },
+                        label = { Text("Monto en Gs.") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true
+                        singleLine = true,
+                        prefix = { Text("Gs. ") }
                     )
                     Text("Equivale a: $calculatedValue", style = MaterialTheme.typography.bodySmall)
-                } else {
+                } else { // Aplica a inputMode == "quantity" para BY_WEIGHT_OR_AMOUNT y siempre para BY_FRACTION
                     OutlinedTextField(
                         value = quantityString,
                         onValueChange = {
-                            quantityString = it
-                            val qty = it.toDoubleOrNull() ?: 0.0
-                            val totalAmount = qty * product.price
-                            calculatedValue = "Gs ${numberFormat.format(totalAmount)}"
+                            val filtered = it.filter { char -> char.isDigit() || char == '.' }
+                            if (filtered.count { char -> char == '.' } <= 1) {
+                                quantityString = filtered
+                                val qty = filtered.toDoubleOrNull() ?: 0.0
+                                val totalAmount = qty * product.price
+                                calculatedValue = "Gs. ${formatCurrency(totalAmount)}"
+                            }
                         },
-                        label = { Text("Cantidad (${if(product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) "kg/unidad" else "unidades"})") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        label = { Text("Cantidad (${product.selling_method.unitName})") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true
                     )
                     Text("Total: $calculatedValue", style = MaterialTheme.typography.bodySmall)
@@ -247,7 +251,7 @@ fun FractionalSaleDialog(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(onClick = {
-                        val finalQuantity = if (inputMode == "amount") {
+                        val finalQuantity = if (inputMode == "amount" && product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) {
                             val amount = amountString.toDoubleOrNull() ?: 0.0
                             if (product.price > 0) amount / product.price else 0.0
                         } else {

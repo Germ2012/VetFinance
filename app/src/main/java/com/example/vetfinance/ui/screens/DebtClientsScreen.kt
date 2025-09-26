@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.viewmodel.VetViewModel
+import ui.utils.formatCurrency // Importar formatCurrency
 
 @Composable
 fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
@@ -27,7 +28,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
 
     var showOnlyWithDebt by remember { mutableStateOf(false) }
     var clientToDelete by remember { mutableStateOf<Client?>(null) }
-    val isLoading = allClients.isEmpty() && searchQuery.isBlank()
+    val isLoading = allClients.isEmpty() && searchQuery.isBlank() && !showOnlyWithDebt
 
     DisposableEffect(Unit) {
         onDispose {
@@ -134,11 +135,11 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(filteredClients) { client ->
+                    items(filteredClients, key = { it.clientId }) { client -> // Key added for better performance
                         ClientItem(
                             client = client,
-                            onPayClick = { viewModel.onShowPaymentDialog(client) },
                             onDetailClick = { navController.navigate("client_detail/${client.clientId}") },
+                            onPayClick = { viewModel.onShowPaymentDialog(client) },
                             onDeleteClick = { clientToDelete = client }
                         )
                     }
@@ -152,9 +153,9 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                                 contentAlignment = Alignment.Center
                             ) {
                                 val message = when {
-                                    searchQuery.isNotBlank() -> "No se encontraron clientes."
+                                    searchQuery.isNotBlank() -> "No se encontraron clientes que coincidan con la búsqueda."
                                     showOnlyWithDebt -> "No hay clientes con deudas."
-                                    else -> "No hay clientes registrados."
+                                    else -> "No hay clientes registrados. \nAñade uno con el botón '+'"
                                 }
                                 Text(message)
                             }
@@ -182,7 +183,7 @@ fun ClientItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(client.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                val formattedDebt = String.format("₲ %,.0f", client.debtAmount).replace(",", ".")
+                val formattedDebt = "Gs. ${formatCurrency(client.debtAmount)}" // Usar formatCurrency y prefijo Gs.
                 Text("Deuda: $formattedDebt", style = MaterialTheme.typography.bodyMedium)
             }
             if (client.debtAmount > 0) {
