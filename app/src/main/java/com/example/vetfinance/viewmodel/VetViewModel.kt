@@ -41,9 +41,8 @@ class VetViewModel @Inject constructor(
     private val repository: VetRepository
 ) : ViewModel() {
 
-    // Agrega estas dos líneas al inicio de tu clase VetViewModel
-    private val _isLoading = MutableStateFlow(true) // Estado mutable, empieza en 'cargando'
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow() // Estado inmutable para la UI
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     //---Borrados
     fun deleteProduct(product: Product) = viewModelScope.launch { repository.deleteProduct(product) }
@@ -53,16 +52,12 @@ class VetViewModel @Inject constructor(
     // --- ESTADOS DE FILTROS Y BÚSQUEDA ---
     private val _inventoryFilter = MutableStateFlow("Todos")
     val inventoryFilter: StateFlow<String> = _inventoryFilter.asStateFlow()
-
     private val _petSearchQuery = MutableStateFlow("")
     val petSearchQuery: StateFlow<String> = _petSearchQuery.asStateFlow()
-
     private val _clientSearchQuery = MutableStateFlow("")
     val clientSearchQuery: StateFlow<String> = _clientSearchQuery.asStateFlow()
-
     private val _productSearchQuery = MutableStateFlow("")
     val productSearchQuery: StateFlow<String> = _productSearchQuery.asStateFlow()
-
     private val _selectedSaleDateFilter = MutableStateFlow<Long?>(null)
     val selectedSaleDateFilter: StateFlow<Long?> = _selectedSaleDateFilter.asStateFlow()
 
@@ -100,7 +95,7 @@ class VetViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val lowStockProducts: StateFlow<List<Product>> = inventory.map { products ->
-        products.filter { !it.isService && it.stock < 4 }
+        products.filter { !it.isService && it.selling_method != SellingMethod.DOSE_ONLY && it.stock < 4 }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // --- CALENDARIO Y CITAS ---
@@ -124,13 +119,10 @@ class VetViewModel @Inject constructor(
         initialValue = 0.0
     )
 
-    // --- REPORTES: TOP PRODUCTS (NUEVA LÓGICA) ---
     private val _topProductsPeriod = MutableStateFlow(TopProductsPeriod.MONTH)
     val topProductsPeriod: StateFlow<TopProductsPeriod> = _topProductsPeriod.asStateFlow()
-
     private val _topProductsDate = MutableStateFlow(LocalDate.now())
     val topProductsDate: StateFlow<LocalDate> = _topProductsDate.asStateFlow()
-
     private val _selectedTopProduct = MutableStateFlow<TopSellingProduct?>(null)
     val selectedTopProduct: StateFlow<TopSellingProduct?> = _selectedTopProduct.asStateFlow()
 
@@ -172,27 +164,24 @@ class VetViewModel @Inject constructor(
     private val _clientForPayment = MutableStateFlow<Client?>(null)
     val clientForPayment: StateFlow<Client?> = _clientForPayment.asStateFlow()
 
+    // --- Fractional Sale Dialog States ---
+    private val _showFractionalSaleDialog = MutableStateFlow(false)
+    val showFractionalSaleDialog: StateFlow<Boolean> = _showFractionalSaleDialog.asStateFlow()
+    private val _productForFractionalSale = MutableStateFlow<Product?>(null)
+    val productForFractionalSale: StateFlow<Product?> = _productForFractionalSale.asStateFlow()
+
     // --- LÓGICA DEL CARRITO DE COMPRAS ---
-    private val _shoppingCart = MutableStateFlow<Map<Product, Int>>(emptyMap())
-    val shoppingCart: StateFlow<Map<Product, Int>> = _shoppingCart.asStateFlow()
+    private val _shoppingCart = MutableStateFlow<Map<Product, Double>>(emptyMap())
+    val shoppingCart: StateFlow<Map<Product, Double>> = _shoppingCart.asStateFlow()
     private val _saleTotal = MutableStateFlow(0.0)
     val saleTotal: StateFlow<Double> = _saleTotal.asStateFlow()
 
-    // Dentro de la clase VetViewModel
     init {
-        // Este bloque se asegura de que el indicador de carga se apague
-        // una vez que los datos de mascotas y tratamientos estén listos.
         viewModelScope.launch {
-            // 'combine' espera a que ambos flujos de datos emitan su primer valor.
-            combine(petsWithOwners, upcomingTreatments) { _, _ ->
-                // No necesitamos los valores, solo saber que llegaron.
-            }.first() // Usamos .first() para que el flujo termine después de la primera emisión.
-
-            // Una vez que los datos iniciales han llegado, actualizamos el estado.
+            combine(petsWithOwners, upcomingTreatments, inventory) { _, _, _ -> Unit }
+                .first()
             _isLoading.value = false
         }
-
-        // Aquí puedes dejar el resto de tu lógica del 'init' si la tienes.
         viewModelScope.launch { repository.getAllSales().collect { _sales.value = it } }
         viewModelScope.launch { if (repository.getAllClients().firstOrNull()?.none { it.clientId == GENERAL_CLIENT_ID } == true) addSampleData() }
     }
@@ -218,25 +207,16 @@ class VetViewModel @Inject constructor(
             it.name.contains(name, ignoreCase = true)
         }
     }
-
-    fun clearProductNameSuggestions() {
-        _productNameSuggestions.value = emptyList()
-    }
+    fun clearProductNameSuggestions() { _productNameSuggestions.value = emptyList() }
 
     // --- MANEJO DE EVENTOS PARA TOP PRODUCTS ---
-    fun onTopProductsPeriodSelected(period: TopProductsPeriod) {
-        _topProductsPeriod.value = period
-        _topProductsDate.value = LocalDate.now() // Reset date on period change
-    }
+    fun onTopProductsPeriodSelected(period: TopProductsPeriod) { _topProductsPeriod.value = period; _topProductsDate.value = LocalDate.now() }
     fun onTopProductsDateSelected(dateMillis: Long) { _topProductsDate.value = Instant.ofEpochMilli(dateMillis).atZone(ZoneId.systemDefault()).toLocalDate() }
     fun onTopProductSelected(product: TopSellingProduct?) { _selectedTopProduct.value = if (_selectedTopProduct.value == product) null else product }
 
     // --- GESTIÓN DE DIÁLOGOS ---
     fun onShowAddProductDialog() { _showAddProductDialog.value = true }
-    fun onDismissAddProductDialog() {
-        _showAddProductDialog.value = false
-        clearProductNameSuggestions()
-    }
+    fun onDismissAddProductDialog() { _showAddProductDialog.value = false; clearProductNameSuggestions() }
     fun onShowAddClientDialog() { _showAddClientDialog.value = true }
     fun onDismissAddClientDialog() { _showAddClientDialog.value = false }
     fun onShowPaymentDialog(client: Client) { _clientForPayment.value = client; _showPaymentDialog.value = true }
@@ -244,10 +224,23 @@ class VetViewModel @Inject constructor(
     fun onShowAddAppointmentDialog() { _showAddAppointmentDialog.value = true }
     fun onDismissAddAppointmentDialog() { _showAddAppointmentDialog.value = false }
 
+    fun openFractionalSaleDialog(product: Product) {
+        _productForFractionalSale.value = product
+        _showFractionalSaleDialog.value = true
+    }
+    fun dismissFractionalSaleDialog() {
+        _productForFractionalSale.value = null
+        _showFractionalSaleDialog.value = false
+    }
+
     // --- OPERACIONES CRUD ---
     private fun executeWithLoading(action: suspend () -> Unit) = viewModelScope.launch { _isLoading.value = true; try { action() } finally { _isLoading.value = false } }
-    fun addProduct(name: String, price: Double, stock: Int, cost: Double, isService: Boolean) = executeWithLoading { repository.insertProduct(Product(name = name, price = price, stock = stock, cost = cost, isService = isService)); onDismissAddProductDialog() }
-    fun updateProduct(product: Product) = executeWithLoading { repository.updateProduct(product) }
+    
+    fun addProduct(name: String, price: Double, stock: Double, cost: Double, isService: Boolean, sellingMethod: SellingMethod) = executeWithLoading {
+        repository.insertProduct(Product(name = name, price = price, stock = stock, cost = cost, isService = isService, selling_method = sellingMethod))
+        onDismissAddProductDialog()
+    }
+    fun updateProduct(product: Product) = executeWithLoading { repository.updateProduct(product) } // Ensure product passed has Double stock and SellingMethod
     fun addClient(name: String, phone: String, debt: Double) = executeWithLoading { repository.insertClient(Client(name = name, phone = phone.ifBlank { null }, debtAmount = debt)); onDismissAddClientDialog() }
     fun updateClient(client: Client) = executeWithLoading { repository.updateClient(client) }
     fun addPet(pet: Pet) = executeWithLoading { repository.insertPet(pet) }
@@ -265,26 +258,44 @@ class VetViewModel @Inject constructor(
     fun deleteAppointment(appointment: Appointment) = executeWithLoading { repository.deleteAppointment(appointment) }
 
     // --- LÓGICA DEL CARRITO DE COMPRAS ---
-    fun addToCart(product: Product) {
+    fun addOrUpdateProductInCart(product: Product, quantity: Double) {
         val currentCart = _shoppingCart.value.toMutableMap()
-        val currentQuantity = currentCart[product] ?: 0
-        if (!product.isService && currentQuantity >= product.stock) return
-        currentCart[product] = currentQuantity + 1
+        if (quantity <= 0.0) {
+            currentCart.remove(product)
+        } else {
+            // Stock check only if not a service and not DOSE_ONLY
+            if (!product.isService && product.selling_method != SellingMethod.DOSE_ONLY) {
+                if (quantity > product.stock) {
+                    // Optionally, provide user feedback about insufficient stock here (e.g., via a Toast or a SnackBar event)
+                    // For now, just cap at available stock. Or prevent adding if more granular control is needed.
+                    currentCart[product] = product.stock
+                } else {
+                    currentCart[product] = quantity
+                }
+            } else {
+                 currentCart[product] = quantity
+            }
+        }
         _shoppingCart.value = currentCart
         recalculateTotal()
     }
-    fun removeFromCart(product: Product) {
-        val currentCart = _shoppingCart.value.toMutableMap()
-        currentCart[product]?.let { quantity -> if (quantity > 1) currentCart[product] = quantity - 1 else currentCart.remove(product) }
-        _shoppingCart.value = currentCart
-        recalculateTotal()
-    }
+
     fun clearCart() { _shoppingCart.value = emptyMap(); _saleTotal.value = 0.0 }
     private fun recalculateTotal() { _saleTotal.value = _shoppingCart.value.entries.sumOf { (product, quantity) -> product.price * quantity } }
-    fun finalizeSale(onFinished: () -> Unit) = executeWithLoading { repository.insertSale(Sale(clientIdFk = GENERAL_CLIENT_ID, totalAmount = _saleTotal.value), _shoppingCart.value); clearCart(); onFinished() }
+    
+    fun finalizeSale(onFinished: () -> Unit) = executeWithLoading {
+        if (_shoppingCart.value.isNotEmpty()) {
+            repository.insertSale(
+                Sale(clientIdFk = GENERAL_CLIENT_ID, totalAmount = _saleTotal.value),
+                _shoppingCart.value // This is now Map<Product, Double>
+            )
+            clearCart()
+            onFinished()
+        }
+    }
 
     // --- CÁLCULO DE REPORTES ---
-    fun getSalesSummary(period: Period): Double {
+    fun getSalesSummary(period: Period): Double { // Remains the same as it sums totalAmount from Sale entity
         val now = LocalDate.now()
         val startOfPeriod = when (period) {
             Period.DAY -> now
@@ -295,7 +306,7 @@ class VetViewModel @Inject constructor(
         return _sales.value.filter { it.sale.date >= startEpoch }.sumOf { it.sale.totalAmount }
     }
 
-    fun getGrossProfitSummary(period: Period): Double {
+    fun getGrossProfitSummary(period: Period): Double { // Needs to use Double for quantity from crossRefs
         val now = LocalDate.now()
         val startOfPeriod = when (period) {
             Period.DAY -> now
@@ -305,6 +316,7 @@ class VetViewModel @Inject constructor(
         val startEpoch = startOfPeriod.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val relevantSales = _sales.value.filter { it.sale.date >= startEpoch }
         val totalRevenue = relevantSales.sumOf { it.sale.totalAmount }
+        // SaleProductCrossRef.quantity is now Double, so this should work correctly.
         val totalCost = relevantSales.sumOf { sale -> sale.crossRefs.sumOf { ref -> (sale.products.find { it.id == ref.productId }?.cost ?: 0.0) * ref.quantity } }
         return totalRevenue - totalCost
     }

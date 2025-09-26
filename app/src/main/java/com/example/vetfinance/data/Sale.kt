@@ -72,7 +72,7 @@ data class SaleWithProducts(
  *
  * @property saleId La clave foránea que apunta a la [Sale].
  * @property productId La clave foránea que apunta al [Product].
- * @property quantity La cantidad de este producto que se vendió en esta venta.
+ * @property quantity La cantidad de este producto que se vendió en esta venta. Can be fractional.
  * @property priceAtTimeOfSale El precio del producto en el momento exacto de la venta, para mantener un registro histórico preciso.
  */
 @Entity(
@@ -83,6 +83,6 @@ data class SaleWithProducts(
 data class SaleProductCrossRef(
     val saleId: String,
     val productId: String,
-    val quantity: Int,
+    val quantity: Double, // Changed from Int to Double
     val priceAtTimeOfSale: Double
 )

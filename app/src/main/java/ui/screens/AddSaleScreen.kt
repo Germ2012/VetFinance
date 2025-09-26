@@ -3,6 +3,7 @@ package com.example.vetfinance.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -13,40 +14,60 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavHostController
 import com.example.vetfinance.data.Product
+import com.example.vetfinance.data.SellingMethod
 import com.example.vetfinance.viewmodel.VetViewModel
+import java.text.NumberFormat
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
-    val cart by viewModel.shoppingCart.collectAsState()
+    val cart by viewModel.shoppingCart.collectAsState() // Will become Map<Product, Double>
     val total by viewModel.saleTotal.collectAsState()
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     val inventory by viewModel.filteredInventory.collectAsState()
     val searchQuery by viewModel.productSearchQuery.collectAsState()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
 
+    // States for the new FractionalSaleDialog
+    val showFractionalDialog by viewModel.showFractionalSaleDialog.collectAsState()
+    val productForFractionalSale by viewModel.productForFractionalSale.collectAsState()
 
     DisposableEffect(Unit) {
         onDispose {
             viewModel.clearCart()
             viewModel.clearProductSearchQuery()
+            viewModel.dismissFractionalSaleDialog() // Ensure dialog is dismissed
         }
     }
 
     if (showAddProductDialog) {
-        // Usamos el diálogo unificado
         ProductDialog(
             product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
+                // Assuming newProduct.stock is Double as per Product entity change
+                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.selling_method)
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) }
+        )
+    }
+
+    if (showFractionalDialog && productForFractionalSale != null) {
+        FractionalSaleDialog(
+            product = productForFractionalSale!!,
+            onDismiss = { viewModel.dismissFractionalSaleDialog() },
+            onConfirm = { product, quantity ->
+                viewModel.addOrUpdateProductInCart(product, quantity)
+                viewModel.dismissFractionalSaleDialog()
+            }
         )
     }
 
@@ -69,12 +90,14 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         bottomBar = {
             BottomAppBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = String.format("Total: Gs %,.0f", total).replace(",", "."),
+                        text = String.format(Locale.GERMAN, "Total: Gs %,.0f", total),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -94,7 +117,9 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.onProductSearchQueryChange(it) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 label = { Text("Buscar producto o servicio...") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar") },
                 trailingIcon = {
@@ -114,10 +139,184 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 items(inventory) { product ->
                     ProductSelectionItem(
                         product = product,
-                        quantity = cart[product] ?: 0,
-                        onAdd = { viewModel.addToCart(product) },
-                        onRemove = { viewModel.removeFromCart(product) }
+                        quantity = cart[product] ?: 0.0, // Assuming cart value is Double
+                        onAdd = {
+                            when (product.selling_method) {
+                                SellingMethod.BY_WEIGHT_OR_AMOUNT -> {
+                                    viewModel.openFractionalSaleDialog(product)
+                                }
+                                SellingMethod.BY_UNIT, SellingMethod.DOSE_ONLY -> {
+                                    // Add 1 unit, or current cart quantity + 1
+                                    val currentQuantity = cart[product] ?: 0.0
+                                    viewModel.addOrUpdateProductInCart(product, currentQuantity + 1.0)
+                                }
+                            }
+                        },
+                        onRemove = {
+                            // For BY_WEIGHT_OR_AMOUNT, removal might mean clearing or editing via dialog.
+                            // For simplicity, let's assume remove sets quantity to 0 or removes if 1.
+                            // This might need more nuanced handling based on full UI of ProductSelectionItem.
+                            val currentQuantity = cart[product] ?: 0.0
+                            if (currentQuantity > 0) {
+                                if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT || currentQuantity - 1.0 <= 0) {
+                                     viewModel.addOrUpdateProductInCart(product, 0.0) // Or a specific remove function
+                                } else {
+                                     viewModel.addOrUpdateProductInCart(product, currentQuantity - 1.0)
+                                }
+                            }
+                        }
+                        // Assuming ProductSelectionItem can handle Double for quantity display
+                        // and has its own +/- buttons if needed for BY_UNIT.
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FractionalSaleDialog(
+    product: Product,
+    onDismiss: () -> Unit,
+    onConfirm: (product: Product, quantity: Double) -> Unit
+) {
+    var inputMode by remember { mutableStateOf("amount") } // "amount" or "quantity"
+    var amountString by remember { mutableStateOf("") }
+    var quantityString by remember { mutableStateOf("") }
+    var calculatedValue by remember { mutableStateOf("") } // To display the auto-calculated Gs or Kg
+
+    val numberFormat = NumberFormat.getNumberInstance(Locale.GERMAN).apply {
+        maximumFractionDigits = 2
+        minimumFractionDigits = 0
+    }
+
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text("Vender: ${product.name}", style = MaterialTheme.typography.titleLarge)
+                Text("Precio: Gs ${numberFormat.format(product.price)} / ${if(product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) "kg/unidad" else "unidad"}")
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(
+                        selected = inputMode == "amount",
+                        onClick = { inputMode = "amount" }
+                    )
+                    Text("Por Monto (Gs)")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    RadioButton(
+                        selected = inputMode == "quantity",
+                        onClick = { inputMode = "quantity" }
+                    )
+                    Text("Por Cantidad")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (inputMode == "amount") {
+                    OutlinedTextField(
+                        value = amountString,
+                        onValueChange = {
+                            amountString = it
+                            val amount = it.toDoubleOrNull() ?: 0.0
+                            if (product.price > 0) {
+                                val qty = amount / product.price
+                                calculatedValue = "${numberFormat.format(qty)} ${if(product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) "kg/unidad" else "unidad"}"
+                            } else {
+                                calculatedValue = "Precio de producto no válido"
+                            }
+                        },
+                        label = { Text("Monto en Gs") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                    Text("Equivale a: $calculatedValue", style = MaterialTheme.typography.bodySmall)
+                } else { // inputMode == "quantity"
+                    OutlinedTextField(
+                        value = quantityString,
+                        onValueChange = {
+                            quantityString = it
+                            val qty = it.toDoubleOrNull() ?: 0.0
+                            val totalAmount = qty * product.price
+                            calculatedValue = "Gs ${numberFormat.format(totalAmount)}"
+                        },
+                        label = { Text("Cantidad (${if(product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) "kg/unidad" else "unidades"})") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true
+                    )
+                    Text("Total: $calculatedValue", style = MaterialTheme.typography.bodySmall)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text("Cancelar")
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        val finalQuantity = if (inputMode == "amount") {
+                            val amount = amountString.toDoubleOrNull() ?: 0.0
+                            if (product.price > 0) amount / product.price else 0.0
+                        } else {
+                            quantityString.toDoubleOrNull() ?: 0.0
+                        }
+                        if (finalQuantity > 0) {
+                            onConfirm(product, finalQuantity)
+                        }
+                    }) {
+                        Text("Confirmar")
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Placeholder for ProductSelectionItem if it's not defined elsewhere or needs adaptation
+// This is a guess based on typical list item patterns.
+@Composable
+fun ProductSelectionItem(
+    product: Product,
+    quantity: Double, // Changed to Double
+    onAdd: () -> Unit,
+    onRemove: () -> Unit,
+    // Add other relevant parameters like onQuantityChange if there are +/- buttons within the item
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .padding(8.dp)
+                .fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(product.name, fontWeight = FontWeight.Bold)
+                Text("Precio: Gs ${product.price}", fontSize = 14.sp)
+                if (product.selling_method != SellingMethod.DOSE_ONLY && !product.isService) {
+                     Text("Stock: ${product.stock}", fontSize = 12.sp)
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // If ProductSelectionItem has its own +/- buttons, they would go here.
+                // For BY_WEIGHT_OR_AMOUNT, onAdd now opens a dialog.
+                // For BY_UNIT / DOSE_ONLY, onAdd increments. onRemove decrements.
+                IconButton(onClick = onRemove, enabled = quantity > 0) {
+                    Icon(Icons.Default.Clear, contentDescription = "Quitar") // Example, could be a minus
+                }
+                Text(
+                    text = if (quantity > 0) "%.2f".format(Locale.US, quantity) else "0",
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+                IconButton(onClick = onAdd) {
+                    Icon(Icons.Default.Add, contentDescription = "Añadir")
                 }
             }
         }
