@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -81,7 +82,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     if (showManagementDialog) {
         AlertDialog(
             onDismissRequest = { showManagementDialog = false },
-            title = { Text("Seleccionar Lista") },
+            title = { Text(stringResource(R.string.dashboard_select_list_dialog_title)) },
             text = {
                 Column {
                     TextButton(
@@ -91,7 +92,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Ver Lista de Clientes")
+                        Text(stringResource(R.string.dashboard_view_client_list_button))
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(
@@ -101,13 +102,13 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("Ver Lista de Mascotas")
+                        Text(stringResource(R.string.dashboard_view_pet_list_button))
                     }
                 }
             },
             confirmButton = {
                 TextButton(onClick = { showManagementDialog = false }) {
-                    Text("Cancelar")
+                    Text(stringResource(R.string.cancel_button))
                 }
             }
         )
@@ -116,7 +117,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     Box(modifier = Modifier.fillMaxSize()) {
         Image(
             painter = painterResource(id = R.drawable.vet_background_logo),
-            contentDescription = "Fondo del dashboard",
+            contentDescription = stringResource(R.string.dashboard_background_content_description),
             modifier = Modifier.fillMaxSize(),
             contentScale = ContentScale.Crop,
             alpha = 0.5f
@@ -126,14 +127,12 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             modifier = Modifier.fillMaxSize().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // --- Static "Resumen del Día" Section ---
-            Text("Resumen del Día", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.dashboard_summary_of_the_day), style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
-            val formattedSales = "Gs. ${formatCurrency(salesToday)}"
-            ReportSummaryCard("Ventas de Hoy", formattedSales)
-            Spacer(modifier = Modifier.height(16.dp)) // Space after summary, before dynamic content
+            val formattedSales = stringResource(R.string.text_prefix_gs) + formatCurrency(salesToday)
+            ReportSummaryCard(stringResource(R.string.dashboard_sales_today_title), formattedSales)
+            Spacer(modifier = Modifier.height(16.dp)) 
 
-            // --- Dynamic Content Section (Loading or List) ---
             if (isLoading) {
                 Box(
                     modifier = Modifier.fillMaxWidth().weight(1f),
@@ -156,12 +155,12 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                     if (upcomingTreatments.isNotEmpty()) {
                         item {
                             Spacer(modifier = Modifier.height(16.dp))
-                            Text("Próximos Tratamientos", style = MaterialTheme.typography.headlineSmall)
+                            Text(stringResource(R.string.dashboard_upcoming_treatments_title), style = MaterialTheme.typography.headlineSmall)
                         }
                         items(upcomingTreatments) { treatment ->
                             TreatmentReminderItem(
                                 treatment = treatment,
-                                petName = petIdToNameMap[treatment.petIdFk] ?: "Mascota desconocida",
+                                petName = petIdToNameMap[treatment.petIdFk] ?: stringResource(R.string.dashboard_unknown_pet),
                                 onMarkAsCompleted = {
                                     viewModel.markTreatmentAsCompleted(treatment)
                                     treatmentForNextDialog = treatment
@@ -193,14 +192,14 @@ fun LowStockAlert(lowStockProducts: List<Product>) {
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
-                text = "Alerta de Stock Bajo",
+                text = stringResource(R.string.dashboard_low_stock_alert_title),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
             Spacer(modifier = Modifier.height(8.dp))
             lowStockProducts.forEach { product ->
                 Text(
-                    text = "- ${product.name} (Stock: ${formatCurrency(product.stock)})".replace(",00", ""), // Usar formatCurrency para el stock también y quitar decimales si son cero
+                    text = stringResource(R.string.dashboard_low_stock_product_item, product.name, formatCurrency(product.stock).replace(",00", "")),
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
@@ -216,28 +215,28 @@ fun TreatmentReminderItem(
 ) {
     val daysUntilNext = treatment.nextTreatmentDate?.let { TimeUnit.MILLISECONDS.toDays(it - System.currentTimeMillis()) }
     val cardColor = when {
-        daysUntilNext == null -> MaterialTheme.colorScheme.surfaceVariant // Tratamiento sin próxima fecha (posiblemente finalizado)
-        daysUntilNext < 0 -> MaterialTheme.colorScheme.errorContainer // Vencido
-        daysUntilNext == 0L -> MaterialTheme.colorScheme.tertiaryContainer // Hoy
-        daysUntilNext < 3 -> MaterialTheme.colorScheme.secondaryContainer // Próximamente (menos de 3 días)
-        else -> MaterialTheme.colorScheme.surfaceVariant // Futuro (3 días o más)
+        daysUntilNext == null -> MaterialTheme.colorScheme.surfaceVariant 
+        daysUntilNext < 0 -> MaterialTheme.colorScheme.errorContainer 
+        daysUntilNext == 0L -> MaterialTheme.colorScheme.tertiaryContainer 
+        daysUntilNext < 3 -> MaterialTheme.colorScheme.secondaryContainer 
+        else -> MaterialTheme.colorScheme.surfaceVariant 
     }
     val nextDateText = when {
-        daysUntilNext == null -> "Próxima cita no definida"
-        daysUntilNext < 0 -> "Vencido hace ${-daysUntilNext} día(s)"
-        daysUntilNext == 0L -> "Hoy"
-        else -> "En $daysUntilNext día(s)"
+        daysUntilNext == null -> stringResource(R.string.dashboard_next_appointment_not_defined)
+        daysUntilNext < 0 -> stringResource(R.string.dashboard_appointment_overdue_days, -daysUntilNext)
+        daysUntilNext == 0L -> stringResource(R.string.dashboard_appointment_today)
+        else -> stringResource(R.string.dashboard_appointment_in_days, daysUntilNext)
     }
 
 
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "Mascota: $petName", fontWeight = FontWeight.Bold)
-            Text(text = "Tratamiento: ${treatment.description}")
-            Text(text = "Próxima cita: $nextDateText")
+            Text(text = stringResource(R.string.dashboard_pet_label, petName), fontWeight = FontWeight.Bold)
+            Text(text = stringResource(R.string.dashboard_treatment_label, treatment.description))
+            Text(text = stringResource(R.string.dashboard_next_appointment_label, nextDateText))
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = onMarkAsCompleted) {
-                Text("Registrar Nueva Visita")
+                Text(stringResource(R.string.dashboard_register_new_visit_button))
             }
         }
     }

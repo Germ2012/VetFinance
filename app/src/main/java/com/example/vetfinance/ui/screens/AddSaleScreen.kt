@@ -13,12 +13,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavHostController
+import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SellingMethod
 import com.example.vetfinance.viewmodel.VetViewModel
@@ -75,15 +77,15 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Registrar Nueva Venta") },
+                title = { Text(stringResource(R.string.add_sale_title)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.content_description_back))
                     }
                 },
                 actions = {
                     IconButton(onClick = { viewModel.onShowAddProductDialog() }) {
-                        Icon(Icons.Default.Add, contentDescription = "Añadir Nuevo Producto")
+                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.content_description_add_new_product))
                     }
                 }
             )
@@ -98,7 +100,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(
-                        text = "Total: Gs. ${formatCurrency(total)}", // Usar formatCurrency y prefijo Gs.
+                        text = stringResource(R.string.label_total_sale_amount, formatCurrency(total)),
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -108,7 +110,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                         },
                         enabled = cart.isNotEmpty()
                     ) {
-                        Text("Confirmar Venta")
+                        Text(stringResource(R.string.button_confirm_sale))
                     }
                 }
             }
@@ -121,12 +123,12 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                label = { Text("Buscar producto o servicio...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = "Buscar") },
+                label = { Text(stringResource(R.string.placeholder_search_product_service)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.content_description_search)) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.clearProductSearchQuery() }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Limpiar búsqueda")
+                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.content_description_clear_search))
                         }
                     }
                 },
@@ -173,6 +175,7 @@ fun FractionalSaleDialog(
     var amountString by remember { mutableStateOf("") }
     var quantityString by remember { mutableStateOf("") }
     var calculatedValue by remember { mutableStateOf("") }
+    val invalidPriceMsg = stringResource(R.string.error_invalid_product_price)
 
 
     Dialog(onDismissRequest = onDismiss) {
@@ -181,8 +184,8 @@ fun FractionalSaleDialog(
                 modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("Vender: ${product.name}", style = MaterialTheme.typography.titleLarge)
-                Text("Precio: Gs. ${formatCurrency(product.price)} / ${product.selling_method.unitName}", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.dialog_title_sell_product, product.name), style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.text_price_details, formatCurrency(product.price), product.selling_method.unitName), style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(16.dp))
 
                 if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) {
@@ -191,13 +194,13 @@ fun FractionalSaleDialog(
                             selected = inputMode == "amount",
                             onClick = { inputMode = "amount"; quantityString = ""; amountString = ""; calculatedValue = "" }
                         )
-                        Text("Por Monto (Gs.)")
+                        Text(stringResource(R.string.radio_button_by_amount))
                         Spacer(modifier = Modifier.width(8.dp))
                         RadioButton(
                             selected = inputMode == "quantity",
                             onClick = { inputMode = "quantity"; quantityString = ""; amountString = ""; calculatedValue = "" }
                         )
-                        Text("Por Cantidad (${product.selling_method.unitName})")
+                        Text(stringResource(R.string.radio_button_by_quantity, product.selling_method.unitName))
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -211,17 +214,17 @@ fun FractionalSaleDialog(
                             val amount = filtered.toDoubleOrNull() ?: 0.0
                             if (product.price > 0) {
                                 val qty = amount / product.price
-                                calculatedValue = "${formatCurrency(qty)} ${product.selling_method.unitName}"
+                                calculatedValue = "${'$'}{formatCurrency(qty)} ${'$'}{product.selling_method.unitName}"
                             } else {
-                                calculatedValue = "Precio de producto no válido"
+                                calculatedValue = invalidPriceMsg
                             }
                         },
-                        label = { Text("Monto en Gs.") },
+                        label = { Text(stringResource(R.string.label_amount_gs)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
-                        prefix = { Text("Gs. ") }
+                        prefix = { Text(stringResource(R.string.text_prefix_gs)) }
                     )
-                    Text("Equivale a: $calculatedValue", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.text_equivalent_to, calculatedValue), style = MaterialTheme.typography.bodySmall)
                 } else { // Aplica a inputMode == "quantity" para BY_WEIGHT_OR_AMOUNT y siempre para BY_FRACTION
                     OutlinedTextField(
                         value = quantityString,
@@ -231,14 +234,14 @@ fun FractionalSaleDialog(
                                 quantityString = filtered
                                 val qty = filtered.toDoubleOrNull() ?: 0.0
                                 val totalAmount = qty * product.price
-                                calculatedValue = "Gs. ${formatCurrency(totalAmount)}"
+                                calculatedValue = "Gs. ${'$'}{formatCurrency(totalAmount)}"
                             }
                         },
-                        label = { Text("Cantidad (${product.selling_method.unitName})") },
+                        label = { Text(stringResource(R.string.label_quantity_unit, product.selling_method.unitName)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true
                     )
-                    Text("Total: $calculatedValue", style = MaterialTheme.typography.bodySmall)
+                    Text(stringResource(R.string.text_total_calculated, calculatedValue), style = MaterialTheme.typography.bodySmall)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
@@ -247,7 +250,7 @@ fun FractionalSaleDialog(
                     horizontalArrangement = Arrangement.End
                 ) {
                     TextButton(onClick = onDismiss) {
-                        Text("Cancelar")
+                        Text(stringResource(R.string.cancel_button))
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(onClick = {
@@ -261,7 +264,7 @@ fun FractionalSaleDialog(
                             onConfirm(product, finalQuantity)
                         }
                     }) {
-                        Text("Confirmar")
+                        Text(stringResource(R.string.button_confirm))
                     }
                 }
             }

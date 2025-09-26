@@ -15,10 +15,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.vetfinance.R
 import com.example.vetfinance.data.AppointmentWithDetails
 // No es necesario importar AddAppointmentDialog si está en el mismo paquete
 import com.example.vetfinance.viewmodel.VetViewModel
@@ -71,7 +73,7 @@ fun CalendarScreen(viewModel: VetViewModel) {
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { viewModel.onShowAddAppointmentDialog() }) {
-                Icon(Icons.Default.Add, contentDescription = "Agendar Cita")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.content_description_schedule_appointment))
             }
         }
     ) { paddingValues ->
@@ -113,7 +115,7 @@ fun CalendarScreen(viewModel: VetViewModel) {
 fun MonthHeader(daysOfWeek: List<DayOfWeek>, monthName: String) {
     Column {
         Text(
-            text = monthName,
+            text = monthName, // Month name and year are dynamic and formatted, should be fine.
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier
                 .fillMaxWidth()
@@ -125,7 +127,7 @@ fun MonthHeader(daysOfWeek: List<DayOfWeek>, monthName: String) {
                 Text(
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
-                    text = dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("es-ES")),
+                    text = dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("es-ES")), // Day of week short name, locale specific.
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -176,7 +178,7 @@ fun AppointmentList(appointments: List<AppointmentWithDetails>) {
                 .padding(16.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("No hay citas para el día seleccionado.")
+            Text(stringResource(R.string.no_appointments_for_selected_day))
         }
     } else {
         LazyColumn(
@@ -195,7 +197,7 @@ fun AppointmentItem(details: AppointmentWithDetails) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(details.pet.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text("Dueño: ${details.client.name}", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.owner_label, details.client.name), style = MaterialTheme.typography.bodyMedium)
             Spacer(modifier = Modifier.height(4.dp))
             Text(details.appointment.description, style = MaterialTheme.typography.bodyLarge)
         }

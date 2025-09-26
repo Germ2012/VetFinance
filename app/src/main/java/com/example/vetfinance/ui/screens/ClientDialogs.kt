@@ -5,10 +5,12 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.vetfinance.R
 import ui.utils.ThousandsSeparatorTransformation
-import ui.utils.formatCurrency // Importar formatCurrency
+// Importar formatCurrency si se usa directamente aquí, aunque parece que no.
 
 @Composable
 fun AddOrEditClientDialog(
@@ -23,24 +25,28 @@ fun AddOrEditClientDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Añadir Nuevo Cliente") },
+        title = { Text(stringResource(R.string.add_new_client_title)) },
         text = {
             Column {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it; nameError = false },
-                    label = { Text("Nombre del cliente") },
+                    label = { Text(stringResource(R.string.client_name_label)) },
                     isError = nameError,
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (nameError) {
-                    Text("El nombre no puede estar vacío", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = stringResource(R.string.client_name_error),
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it.filter { char -> char.isDigit() } },
-                    label = { Text("Teléfono (Opcional)") },
+                    label = { Text(stringResource(R.string.client_phone_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -49,8 +55,8 @@ fun AddOrEditClientDialog(
                     OutlinedTextField(
                         value = debt,
                         onValueChange = { debt = it.filter { char -> char.isDigit() } },
-                        label = { Text("Deuda Inicial (Opcional)") },
-                        prefix = { Text("Gs. ") }, // Prefijo Gs.
+                        label = { Text(stringResource(R.string.client_initial_debt_label)) },
+                        prefix = { Text(stringResource(R.string.text_prefix_gs)) }, // Prefijo Gs.
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         visualTransformation = ThousandsSeparatorTransformation(),
                         modifier = Modifier.fillMaxWidth()
@@ -69,12 +75,12 @@ fun AddOrEditClientDialog(
                     }
                 }
             ) {
-                Text("Guardar")
+                Text(stringResource(R.string.save_button))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancelar")
+                Text(stringResource(R.string.cancel_button))
             }
         }
     )

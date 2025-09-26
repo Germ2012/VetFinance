@@ -9,8 +9,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.vetfinance.R
 import com.example.vetfinance.navigation.Screen
 
 @Composable
@@ -20,18 +22,18 @@ fun ClientsMenuScreen(navController: NavController) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
-            Text("Gestión", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.clients_menu_management_title), style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
         }
         item {
             MenuItem(
-                title = "Clientes con Deuda",
+                title = stringResource(R.string.clients_menu_debt_clients_item),
                 onClick = { navController.navigate(Screen.DebtClients.route) }
             )
         }
         item {
             MenuItem(
-                title = "Mascotas",
+                title = stringResource(R.string.clients_menu_pets_item),
                 onClick = { navController.navigate(Screen.Pets.route) }
             )
         }
@@ -47,7 +49,7 @@ fun MenuItem(title: String, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(text = title, style = MaterialTheme.typography.titleMedium)
-            Icon(Icons.Default.ChevronRight, contentDescription = null)
+            Icon(Icons.Default.ChevronRight, contentDescription = null) // Content description is null as per original code
         }
     }
 }

@@ -9,9 +9,11 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.vetfinance.R
 import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.data.SellingMethod // Added import
 import com.example.vetfinance.viewmodel.VetViewModel
@@ -73,17 +75,17 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(petWithOwner?.pet?.name ?: "Detalle de Mascota") },
+                title = { Text(petWithOwner?.pet?.name ?: stringResource(R.string.pet_detail_screen_title_default)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.content_description_back))
                     }
                 }
             )
         },
         floatingActionButton = {
             FloatingActionButton(onClick = { showTreatmentDialog = true }) {
-                Icon(Icons.Default.Add, contentDescription = "Añadir Tratamiento")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.content_description_add_treatment))
             }
         }
     ) { paddingValues ->
@@ -92,7 +94,7 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
-            Text("Historial Clínico", style = MaterialTheme.typography.headlineMedium)
+            Text(stringResource(R.string.pet_detail_clinical_history_title), style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(history) { treatment ->
@@ -107,22 +109,22 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
 fun TreatmentHistoryItem(treatment: Treatment) {
     val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     val nextDateString = treatment.nextTreatmentDate?.let {
-        "Próxima cita: ${dateFormat.format(Date(it))}"
-    } ?: "Tratamiento finalizado"
+        stringResource(R.string.treatment_item_next_appointment_prefix, dateFormat.format(Date(it)))
+    } ?: stringResource(R.string.treatment_item_finished)
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = "Fecha: ${dateFormat.format(Date(treatment.treatmentDate))}",
+                text = stringResource(R.string.treatment_item_date_prefix, dateFormat.format(Date(treatment.treatmentDate))),
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold
             )
-            Text(text = "Descripción: ${treatment.description}")
-            treatment.symptoms?.takeIf { it.isNotBlank() }?.let { Text(text = "Síntomas: $it") }
-            treatment.diagnosis?.takeIf { it.isNotBlank() }?.let { Text(text = "Diagnóstico: $it") }
-            treatment.treatmentPlan?.takeIf { it.isNotBlank() }?.let { Text(text = "Plan: $it") }
-            treatment.weight?.let { Text(text = "Peso: $it kg") }
-            treatment.temperature?.let { Text(text = "Temp: $it°C") }
+            Text(text = stringResource(R.string.treatment_item_description_prefix, treatment.description))
+            treatment.symptoms?.takeIf { it.isNotBlank() }?.let { Text(text = stringResource(R.string.treatment_item_symptoms_prefix, it)) }
+            treatment.diagnosis?.takeIf { it.isNotBlank() }?.let { Text(text = stringResource(R.string.treatment_item_diagnosis_prefix, it)) }
+            treatment.treatmentPlan?.takeIf { it.isNotBlank() }?.let { Text(text = stringResource(R.string.treatment_item_plan_prefix, it)) }
+            treatment.weight?.let { Text(text = stringResource(R.string.treatment_item_weight_prefix, it.toString())) }
+            treatment.temperature?.let { Text(text = stringResource(R.string.treatment_item_temperature_prefix, it.toString())) }
             Text(text = nextDateString, style = MaterialTheme.typography.bodySmall)
         }
     }
