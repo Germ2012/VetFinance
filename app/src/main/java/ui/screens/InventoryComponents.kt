@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SellingMethod
 import ui.utils.ThousandsSeparatorTransformation
+import java.util.Locale // Added import
 
 @Composable
 fun ProductDialog(
@@ -124,7 +125,7 @@ fun ProductDialog(
                     val newOrUpdatedProduct = currentProductData.copy(
                         name = name,
                         price = price.replace(".", "").toDoubleOrNull() ?: 0.0,
-                        stock = if (isService) 9999.0 else stock.toDoubleOrNull() ?: 0.0, // <-- ¡CORREGIDO!
+                        stock = if (isService) 9999.0 else stock.toDoubleOrNull() ?: 0.0,
                         cost = cost.replace(".", "").toDoubleOrNull() ?: 0.0,
                         isService = isService
                     )
@@ -163,36 +164,25 @@ fun ProductSelectionItem(
     onAdd: () -> Unit,
     onRemove: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Card(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(8.dp),
+            modifier = Modifier.padding(8.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = product.name, fontWeight = FontWeight.Bold)
-                // This call is now correct because we fixed NumberTransformation.kt
-                Text(text = "Precio: Gs ${ui.utils.formatCurrency(product.price)}")
-                if (!product.isService && product.selling_method != SellingMethod.DOSE_ONLY) {
-                    val stockText = if (product.stock % 1.0 == 0.0) {
-                        "%.0f".format(product.stock)
-                    } else {
-                        "%.2f".format(product.stock)
-                    }
-                    Text("Stock: $stockText")
+                Text(product.name, fontWeight = FontWeight.Bold)
+                Text("Precio: Gs ${ui.utils.formatCurrency(product.price)}", fontSize = 14.sp)
+                if (product.selling_method != SellingMethod.DOSE_ONLY && !product.isService) {
+                     Text("Stock: ${product.stock}", fontSize = 12.sp)
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // ¡CORRECCIÓN FINAL! Se compara con 0.0
                 IconButton(onClick = onRemove, enabled = quantity > 0.0) {
                     Icon(Icons.Default.Remove, contentDescription = "Quitar")
                 }
                 Text(
-                    text = if (quantity % 1.0 == 0.0) "%.0f".format(quantity) else "%.2f".format(quantity),
+                    text = if (quantity > 0) "%.2f".format(Locale.US, quantity) else "0",
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
                 IconButton(onClick = onAdd) {
