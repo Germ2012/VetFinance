@@ -171,8 +171,8 @@ class VetViewModel @Inject constructor(
     val productForFractionalSale: StateFlow<Product?> = _productForFractionalSale.asStateFlow()
 
     // --- LÓGICA DEL CARRITO DE COMPRAS ---
-    private val _shoppingCart = MutableStateFlow<Map<Product, Double>>(emptyMap())
-    val shoppingCart: StateFlow<Map<Product, Double>> = _shoppingCart.asStateFlow()
+    private val _shoppingCart = MutableStateFlow<Map<Product, Double>>(emptyMap()) // <-- CAMBIAR a Double (Already Double)
+    val shoppingCart: StateFlow<Map<Product, Double>> = _shoppingCart.asStateFlow() // <-- CAMBIAR a Double (Already Double)
     private val _saleTotal = MutableStateFlow(0.0)
     val saleTotal: StateFlow<Double> = _saleTotal.asStateFlow()
 
@@ -236,8 +236,8 @@ class VetViewModel @Inject constructor(
     // --- OPERACIONES CRUD ---
     private fun executeWithLoading(action: suspend () -> Unit) = viewModelScope.launch { _isLoading.value = true; try { action() } finally { _isLoading.value = false } }
     
-    fun addProduct(name: String, price: Double, stock: Double, cost: Double, isService: Boolean, sellingMethod: SellingMethod) = executeWithLoading {
-        repository.insertProduct(Product(name = name, price = price, stock = stock, cost = cost, isService = isService, selling_method = sellingMethod))
+    fun addProduct(name: String, price: Double, stock: Double, cost: Double, isService: Boolean, sellingMethod: SellingMethod) = executeWithLoading { // <-- CAMBIAR stock a Double y añadir sellingMethod (Already Double, sellingMethod already present)
+        repository.insertProduct(Product(name = name, price = price, stock = stock, cost = cost, isService = isService, selling_method = sellingMethod)) // <-- AÑADIR selling_method (Already present)
         onDismissAddProductDialog()
     }
     fun updateProduct(product: Product) = executeWithLoading { repository.updateProduct(product) } // Ensure product passed has Double stock and SellingMethod
@@ -257,7 +257,29 @@ class VetViewModel @Inject constructor(
     fun updateAppointment(appointment: Appointment) = executeWithLoading { repository.updateAppointment(appointment) }
     fun deleteAppointment(appointment: Appointment) = executeWithLoading { repository.deleteAppointment(appointment) }
 
-    // --- LÓGICA DEL CARRITO DE COMPRAS ---
+    // --- LÓGICA DEL CARRITO DE COMPRAS (Funciones) ---
+    fun addToCart(product: Product) {
+        val currentCart = _shoppingCart.value.toMutableMap()
+        val currentQuantity = currentCart[product] ?: 0.0
+        // Lógica para no exceder el stock
+        if (product.selling_method != SellingMethod.DOSE_ONLY && !product.isService && currentQuantity >= product.stock) return
+        currentCart[product] = currentQuantity + 1.0
+        _shoppingCart.value = currentCart
+        recalculateTotal()
+    }
+
+    fun removeFromCart(product: Product) {
+        val currentCart = _shoppingCart.value.toMutableMap()
+        val currentQuantity = currentCart[product] ?: 0.0
+        if (currentQuantity > 1.0) {
+            currentCart[product] = currentQuantity - 1.0
+        } else {
+            currentCart.remove(product)
+        }
+        _shoppingCart.value = currentCart
+        recalculateTotal()
+    }
+
     fun addOrUpdateProductInCart(product: Product, quantity: Double) {
         val currentCart = _shoppingCart.value.toMutableMap()
         if (quantity <= 0.0) {
@@ -287,7 +309,7 @@ class VetViewModel @Inject constructor(
         if (_shoppingCart.value.isNotEmpty()) {
             repository.insertSale(
                 Sale(clientIdFk = GENERAL_CLIENT_ID, totalAmount = _saleTotal.value),
-                _shoppingCart.value // This is now Map<Product, Double>
+                _shoppingCart.value // <-- El valor ya es Map<Product, Double>
             )
             clearCart()
             onFinished()

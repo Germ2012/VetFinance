@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.data.Treatment
+import com.example.vetfinance.data.SellingMethod // Added import
 import com.example.vetfinance.viewmodel.VetViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -62,7 +63,7 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
             product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
+                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.selling_method) // Added selling_method
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) }

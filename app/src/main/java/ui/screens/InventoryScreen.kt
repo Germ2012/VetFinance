@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.data.Product
+import com.example.vetfinance.data.SellingMethod // Added import
 import com.example.vetfinance.viewmodel.VetViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -25,7 +26,8 @@ fun InventoryScreen(viewModel: VetViewModel) {
     var productToDelete by remember { mutableStateOf<Product?>(null) }
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
 
-    val isLoading = inventory.isEmpty()
+    // Consider isLoading based on a specific flag from ViewModel if inventory can be legitimately empty
+    val isLoading by viewModel.isLoading.collectAsState() 
 
     val filteredProducts = remember(inventory, filter) {
         when (filter) {
@@ -41,7 +43,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
             product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
+                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.selling_method) // Added selling_method
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) }
@@ -56,7 +58,8 @@ fun InventoryScreen(viewModel: VetViewModel) {
                 viewModel.clearProductNameSuggestions()
             },
             onConfirm = { updatedProduct ->
-                viewModel.updateProduct(updatedProduct)
+                // Ensure updatedProduct includes selling_method from the dialog
+                viewModel.updateProduct(updatedProduct) 
                 productToEdit = null
             },
             productNameSuggestions = productNameSuggestions,
@@ -101,20 +104,20 @@ fun InventoryScreen(viewModel: VetViewModel) {
             InventoryFilter(selectedFilter = filter, onFilterSelected = { viewModel.onInventoryFilterChanged(it) })
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (isLoading) {
+            if (isLoading && inventory.isEmpty()) { // Show indicator if loading AND inventory is currently empty
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(filteredProducts) { product ->
+                    items(filteredProducts, key = { it.id }) { product ->
                         InventoryItem(
                             product = product,
                             onEdit = { productToEdit = it },
                             onDelete = { productToDelete = it }
                         )
                     }
-                    if (filteredProducts.isEmpty()) {
+                    if (filteredProducts.isEmpty() && !isLoading) {
                         item {
                             Box(
                                 modifier = Modifier.fillParentMaxSize().padding(top = 100.dp),
@@ -158,31 +161,37 @@ fun InventoryItem(
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 16.dp),
+            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 16.dp, end = 0.dp), // Adjust padding for IconButton
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(product.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    text = if (product.isService) "Servicio" else "Producto",
+                    text = if (product.isService) "Servicio" else "Producto (${product.selling_method.name})", // Display selling_method
                     style = MaterialTheme.typography.bodySmall
                 )
             }
             Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 8.dp)) {
-                val formattedPrice = String.format("₲ %,.0f", product.price).replace(",", ".")
+                val formattedPrice = String.format("%,.0f", product.price).replace(",", ".")
                 Text(
-                    text = formattedPrice,
+                    text = "Gs $formattedPrice",
                     style = MaterialTheme.typography.bodyLarge
                 )
-                if (!product.isService) {
+                if (!product.isService && product.selling_method != SellingMethod.DOSE_ONLY) {
+                    // Format stock to show decimals only if necessary
+                    val stockText = if (product.stock % 1.0 == 0.0) {
+                        "%.0f".format(product.stock)
+                    } else {
+                        "%.2f".format(product.stock)
+                    }
                     Text(
-                        text = "Stock: ${product.stock}",
+                        text = "Stock: $stockText",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
             }
-            Box {
+            Box(modifier = Modifier.align(Alignment.Top)) { // Align box to the top to keep menu consistent
                 IconButton(onClick = { expanded = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = "Más opciones")
                 }

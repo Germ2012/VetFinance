@@ -84,7 +84,7 @@ class VetRepository @Inject constructor(
             for (detail in saleDetails) {
                 val product = productDao.getProductById(detail.productId)
                 if (product != null && !product.isService) {
-                    val newStock = product.stock + detail.quantity
+                    val newStock = product.stock + detail.quantity // Esto ya debería funcionar al ser ambos Double
                     productDao.update(product.copy(stock = newStock))
                 }
             }
@@ -175,19 +175,19 @@ class VetRepository @Inject constructor(
      * Inserta una nueva venta y sus productos asociados en una única transacción.
      * También actualiza el stock de los productos vendidos.
      */
-    suspend fun insertSale(sale: Sale, items: Map<Product, Int>) {
+    suspend fun insertSale(sale: Sale, items: Map<Product, Double>) { // <-- CAMBIAR Map<Product, Int> a Map<Product, Double>
         db.withTransaction {
             saleDao.insertSale(sale)
             items.forEach { (product, quantity) ->
                 val crossRef = SaleProductCrossRef(
                     saleId = sale.saleId,
                     productId = product.id,
-                    quantity = quantity,
+                    quantity = quantity, // quantity is Double
                     priceAtTimeOfSale = product.price
                 )
                 saleDao.insertSaleProductCrossRef(crossRef)
-                // Solo se descuenta el stock si no es un servicio.
-                if (!product.isService) {
+                // Solo se descuenta el stock si no es un servicio y no es de tipo DOSE_ONLY.
+                if (product.selling_method != SellingMethod.DOSE_ONLY && !product.isService) { // <-- LÓGICA MEJORADA
                     val updatedStock = product.stock - quantity
                     updateProduct(product.copy(stock = updatedStock))
                 }
@@ -230,7 +230,7 @@ class VetRepository @Inject constructor(
 
         // Se exporta cada tabla a su respectivo archivo CSV.
         exportBatch(clientDao::getClientsPaged, "clients.csv", arrayOf("clientId", "name", "phone", "debtAmount")) { it, p -> p.printRecord(it.clientId, it.name, it.phone ?: "", it.debtAmount) }
-        exportBatch(productDao::getProductsPaged, "products.csv", arrayOf("id", "name", "price", "stock", "cost", "isService")) { it, p -> p.printRecord(it.id, it.name, it.price, it.stock, it.cost, it.isService) }
+        exportBatch(productDao::getProductsPaged, "products.csv", arrayOf("id", "name", "price", "stock", "cost", "isService", "selling_method")) { it, p -> p.printRecord(it.id, it.name, it.price, it.stock, it.cost, it.isService, it.selling_method.name) } // Added selling_method
         exportBatch(petDao::getPetsPaged, "pets.csv", arrayOf("petId", "name", "ownerIdFk", "birthDate", "breed", "allergies")) { it, p -> p.printRecord(it.petId, it.name, it.ownerIdFk, it.birthDate ?: "", it.breed ?: "", it.allergies ?: "") }
         exportBatch(treatmentDao::getTreatmentsPaged, "treatments.csv", arrayOf("treatmentId", "petIdFk", "treatmentDate", "description", "weight", "temperature", "symptoms", "diagnosis", "treatmentPlan", "nextTreatmentDate", "isNextTreatmentCompleted")) { it, p -> p.printRecord(it.treatmentId, it.petIdFk, it.treatmentDate, it.description, it.weight ?: "", it.temperature ?: "", it.symptoms ?: "", it.diagnosis ?: "", it.treatmentPlan ?: "", it.nextTreatmentDate ?: "", it.isNextTreatmentCompleted) }
         exportBatch(saleDao::getSalesPaged, "sales.csv", arrayOf("saleId", "clientIdFk", "date", "totalAmount")) { it, p -> p.printRecord(it.saleId, it.clientIdFk, it.date, it.totalAmount) }
@@ -341,12 +341,14 @@ class VetRepository @Inject constructor(
 
     // --- Funciones de Parseo de CSV ---
     private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r["phone"].ifEmpty { null }, r["debtAmount"].toDouble())
-    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["id"], r["name"], r["price"].toDouble(), r["stock"].toInt(), r["cost"].toDouble(), r["isService"].toBoolean())
+    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["id"], r["name"], r["price"].toDouble(), r["stock"].toDouble(), r["cost"].toDouble(), r["isService"].toBoolean(), SellingMethod.valueOf(r.get("selling_method") ?: "BY_UNIT"))
     private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r["birthDate"].toLongOrNull(), r["breed"].ifEmpty { null }, r["allergies"].ifEmpty { null })
     private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r["description"], r["treatmentDate"].toLong(), r["weight"].toDoubleOrNull(), r["temperature"].toDoubleOrNull(), r["symptoms"].ifEmpty { null }, r["diagnosis"].ifEmpty { null }, r["treatmentPlan"].ifEmpty { null }, r["nextTreatmentDate"].toLongOrNull(), r["isNextTreatmentCompleted"].toBoolean())
     private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["clientIdFk"], r["totalAmount"].toDouble(), r["date"].toLong())
     private fun parseTransaction(r: org.apache.commons.csv.CSVRecord) = Transaction(r["transactionId"], r["saleIdFk"].ifEmpty { null }, r["date"].toLong(), r["type"], r["amount"].toDouble(), r["description"].ifEmpty { null })
     private fun parsePayment(r: org.apache.commons.csv.CSVRecord) = Payment(r["paymentId"], r["clientIdFk"], r["amountPaid"].toDouble(), r["paymentDate"].toLong())
-    private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(r["saleId"], r["productId"], r["quantity"].toInt(), r["priceAtTimeOfSale"].toDouble())
+    private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(r["saleId"], r["productId"], r["quantity"].toDouble(), r["priceAtTimeOfSale"].toDouble())
     private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], r["appointmentDate"].toLong(), r["description"], r["isCompleted"].toBoolean())
 }
+
+class BackupValidationException(message: String) : Exception(message)

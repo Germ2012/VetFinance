@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
+import com.example.vetfinance.data.SellingMethod // Import SellingMethod
 import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.VetViewModel
@@ -69,7 +70,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService)
+                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.selling_method) // Added selling_method
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) }
@@ -198,7 +199,7 @@ fun LowStockAlert(lowStockProducts: List<Product>) {
             Spacer(modifier = Modifier.height(8.dp))
             lowStockProducts.forEach { product ->
                 Text(
-                    text = "- ${product.name} (Stock: ${product.stock})",
+                    text = "- ${product.name} (Stock: ${product.stock})", // product.stock is Double, will format as such
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
             }

@@ -28,14 +28,13 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
-    val cart by viewModel.shoppingCart.collectAsState() // Will become Map<Product, Double>
+    val cart by viewModel.shoppingCart.collectAsState() 
     val total by viewModel.saleTotal.collectAsState()
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     val inventory by viewModel.filteredInventory.collectAsState()
     val searchQuery by viewModel.productSearchQuery.collectAsState()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
 
-    // States for the new FractionalSaleDialog
     val showFractionalDialog by viewModel.showFractionalSaleDialog.collectAsState()
     val productForFractionalSale by viewModel.productForFractionalSale.collectAsState()
 
@@ -43,7 +42,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         onDispose {
             viewModel.clearCart()
             viewModel.clearProductSearchQuery()
-            viewModel.dismissFractionalSaleDialog() // Ensure dialog is dismissed
+            viewModel.dismissFractionalSaleDialog()
         }
     }
 
@@ -52,7 +51,6 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                // Assuming newProduct.stock is Double as per Product entity change
                 viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.selling_method)
             },
             productNameSuggestions = productNameSuggestions,
@@ -139,34 +137,21 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 items(inventory) { product ->
                     ProductSelectionItem(
                         product = product,
-                        quantity = cart[product] ?: 0.0, // Assuming cart value is Double
+                        quantity = cart[product] ?: 0.0,
                         onAdd = {
-                            when (product.selling_method) {
-                                SellingMethod.BY_WEIGHT_OR_AMOUNT -> {
-                                    viewModel.openFractionalSaleDialog(product)
-                                }
-                                SellingMethod.BY_UNIT, SellingMethod.DOSE_ONLY -> {
-                                    // Add 1 unit, or current cart quantity + 1
-                                    val currentQuantity = cart[product] ?: 0.0
-                                    viewModel.addOrUpdateProductInCart(product, currentQuantity + 1.0)
-                                }
+                            if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) {
+                                viewModel.openFractionalSaleDialog(product)
+                            } else {
+                                viewModel.addToCart(product) // Changed to use addToCart
                             }
                         },
                         onRemove = {
-                            // For BY_WEIGHT_OR_AMOUNT, removal might mean clearing or editing via dialog.
-                            // For simplicity, let's assume remove sets quantity to 0 or removes if 1.
-                            // This might need more nuanced handling based on full UI of ProductSelectionItem.
-                            val currentQuantity = cart[product] ?: 0.0
-                            if (currentQuantity > 0) {
-                                if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT || currentQuantity - 1.0 <= 0) {
-                                     viewModel.addOrUpdateProductInCart(product, 0.0) // Or a specific remove function
-                                } else {
-                                     viewModel.addOrUpdateProductInCart(product, currentQuantity - 1.0)
-                                }
+                            if (product.selling_method == SellingMethod.BY_WEIGHT_OR_AMOUNT) {
+                                viewModel.addOrUpdateProductInCart(product, 0.0) // Remove from cart by setting quantity to 0
+                            } else {
+                                viewModel.removeFromCart(product) // Changed to use removeFromCart
                             }
                         }
-                        // Assuming ProductSelectionItem can handle Double for quantity display
-                        // and has its own +/- buttons if needed for BY_UNIT.
                     )
                 }
             }
@@ -278,15 +263,12 @@ fun FractionalSaleDialog(
     }
 }
 
-// Placeholder for ProductSelectionItem if it's not defined elsewhere or needs adaptation
-// This is a guess based on typical list item patterns.
 @Composable
 fun ProductSelectionItem(
     product: Product,
-    quantity: Double, // Changed to Double
+    quantity: Double, 
     onAdd: () -> Unit,
     onRemove: () -> Unit,
-    // Add other relevant parameters like onQuantityChange if there are +/- buttons within the item
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -300,19 +282,16 @@ fun ProductSelectionItem(
                 Text(product.name, fontWeight = FontWeight.Bold)
                 Text("Precio: Gs ${product.price}", fontSize = 14.sp)
                 if (product.selling_method != SellingMethod.DOSE_ONLY && !product.isService) {
-                     Text("Stock: ${product.stock}", fontSize = 12.sp)
+                     Text("Stock: ${product.stock}", fontSize = 12.sp) // product.stock is Double
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // If ProductSelectionItem has its own +/- buttons, they would go here.
-                // For BY_WEIGHT_OR_AMOUNT, onAdd now opens a dialog.
-                // For BY_UNIT / DOSE_ONLY, onAdd increments. onRemove decrements.
                 IconButton(onClick = onRemove, enabled = quantity > 0) {
-                    Icon(Icons.Default.Clear, contentDescription = "Quitar") // Example, could be a minus
+                    Icon(Icons.Default.Clear, contentDescription = "Quitar") 
                 }
                 Text(
-                    text = if (quantity > 0) "%.2f".format(Locale.US, quantity) else "0",
+                    text = if (quantity > 0) "%.2f".format(Locale.US, quantity) else "0", // Displays Double quantity
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
                 IconButton(onClick = onAdd) {
