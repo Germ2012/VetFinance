@@ -21,8 +21,8 @@ class VetFinanceApp : Application(), Configuration.Provider {
         createNotificationChannel()
     }
 
-    override fun getWorkManagerConfiguration(): Configuration =
-        Configuration.Builder()
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
 
