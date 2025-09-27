@@ -2,12 +2,15 @@ package com.example.vetfinance.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import com.example.vetfinance.R
 import com.example.vetfinance.data.*
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -22,23 +25,24 @@ import javax.inject.Inject
 private const val GENERAL_CLIENT_ID = "00000000-0000-0000-0000-000000000001"
 
 /** Define los períodos de tiempo disponibles para los reportes de ventas generales. */
-enum class Period(val displayName: String) {
-    DAY("Día"),
-    WEEK("Semana"),
-    MONTH("Mes")
+enum class Period(@StringRes val displayResId: Int) {
+    DAY(R.string.period_day),
+    WEEK(R.string.period_week),
+    MONTH(R.string.period_month)
 }
 
 /** Define los períodos de tiempo para el reporte de Top Productos. */
-enum class TopProductsPeriod(val displayName: String) {
-    WEEK("Semana"),
-    MONTH("Mes"),
-    YEAR("Año")
+enum class TopProductsPeriod(@StringRes val displayResId: Int) {
+    WEEK(R.string.period_week),
+    MONTH(R.string.period_month),
+    YEAR(R.string.top_products_period_year)
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class VetViewModel @Inject constructor(
-    private val repository: VetRepository
+    private val repository: VetRepository,
+    @ApplicationContext private val context: Context // Inyectar Context
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(true)
@@ -50,7 +54,7 @@ class VetViewModel @Inject constructor(
     fun deleteClient(client: Client) = viewModelScope.launch { repository.deleteClient(client) }
 
     // --- ESTADOS DE FILTROS Y BÚSQUEDA ---
-    private val _inventoryFilter = MutableStateFlow("Todos")
+    private val _inventoryFilter = MutableStateFlow(context.getString(R.string.inventory_filter_all)) // Usar context
     val inventoryFilter: StateFlow<String> = _inventoryFilter.asStateFlow()
     private val _petSearchQuery = MutableStateFlow("")
     val petSearchQuery: StateFlow<String> = _petSearchQuery.asStateFlow()
@@ -348,5 +352,5 @@ class VetViewModel @Inject constructor(
     suspend fun importarDatosDesdeZIP(uri: Uri, context: Context): String = repository.importarDatosDesdeZIP(uri, context)
 
     // --- DATOS DE EJEMPLO ---
-    private suspend fun addSampleData() = repository.insertClient(Client(clientId = GENERAL_CLIENT_ID, name = "Cliente General", phone = null, debtAmount = 0.0))
+    private suspend fun addSampleData() = repository.insertClient(Client(clientId = GENERAL_CLIENT_ID, name = context.getString(R.string.sample_data_general_client_name), phone = null, debtAmount = 0.0))
 }

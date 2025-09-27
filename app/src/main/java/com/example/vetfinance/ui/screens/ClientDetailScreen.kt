@@ -12,9 +12,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.vetfinance.R
 import com.example.vetfinance.data.Payment
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency // Importar formatCurrency
@@ -42,10 +44,10 @@ fun ClientDetailScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Historial de Pagos") },
+                title = { Text(stringResource(R.string.client_detail_title)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.content_description_back))
                     }
                 }
             )
@@ -60,7 +62,7 @@ fun ClientDetailScreen(
             client?.let {
                 Text(it.name, style = MaterialTheme.typography.headlineSmall)
                 Text(
-                    "Deuda Actual: Gs. ${formatCurrency(it.debtAmount)}", // Usar formatCurrency y prefijo Gs.
+                    stringResource(R.string.client_detail_current_debt_label_gs, formatCurrency(it.debtAmount)),
                     style = MaterialTheme.typography.titleMedium,
                     color = if (it.debtAmount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
@@ -68,12 +70,12 @@ fun ClientDetailScreen(
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            Text("Pagos Realizados", style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.client_detail_payments_made_title), style = MaterialTheme.typography.titleLarge)
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             if (paymentHistory.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Este cliente no ha realizado ningún pago.")
+                    Text(stringResource(R.string.client_detail_no_payments_message))
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -99,7 +101,7 @@ fun PaymentItem(payment: Payment) {
         ) {
             Text(sdf.format(date), style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = "Gs. ${formatCurrency(payment.amountPaid)}", // Usar formatCurrency y prefijo Gs.
+                text = stringResource(R.string.text_prefix_gs) + formatCurrency(payment.amountPaid),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary

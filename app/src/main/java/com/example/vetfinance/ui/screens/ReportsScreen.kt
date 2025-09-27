@@ -146,7 +146,8 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
             Button(onClick = { importLauncher.launch(arrayOf("application/zip")) }) { Text(stringResource(R.string.button_import)) }
             Button(onClick = {
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                exportLauncher.launch("backup_vetfinance_$timestamp.zip")
+                val fileName = stringResource(R.string.export_file_prefix) + timestamp + stringResource(R.string.export_file_suffix)
+                exportLauncher.launch(fileName)
             }) { Text(stringResource(R.string.button_export)) }
         }
     }
@@ -289,10 +290,11 @@ fun TopProductsFilterControls(
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
+        val wordDe = stringResource(R.string.word_de)
         Button(onClick = onDateSelectorClick, modifier = Modifier.fillMaxWidth()) {
             val formatter = when (selectedPeriod) {
-                TopProductsPeriod.WEEK -> DateTimeFormatter.ofPattern("w 'de' YYYY", Locale("es", "ES"))
-                TopProductsPeriod.MONTH -> DateTimeFormatter.ofPattern("MMMM 'de' yyyy", Locale("es", "ES"))
+                TopProductsPeriod.WEEK -> DateTimeFormatter.ofPattern("w '${wordDe}' YYYY", Locale("es", "ES"))
+                TopProductsPeriod.MONTH -> DateTimeFormatter.ofPattern("MMMM '${wordDe}' yyyy", Locale("es", "ES"))
                 TopProductsPeriod.YEAR -> DateTimeFormatter.ofPattern("yyyy", Locale("es", "ES"))
             }
             Text(selectedDate.format(formatter).replaceFirstChar { it.uppercase() }) // Date format might need localization if not covered by Locale

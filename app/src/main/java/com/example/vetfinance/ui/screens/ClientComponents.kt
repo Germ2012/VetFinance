@@ -7,9 +7,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.vetfinance.R // Added import for R class
 import com.example.vetfinance.data.Client
 import ui.utils.ThousandsSeparatorTransformation
 import ui.utils.formatCurrency // Importar formatCurrency
@@ -32,12 +34,12 @@ fun ClientItem(client: Client, onPayClick: () -> Unit, onItemClick: () -> Unit) 
             Column(modifier = Modifier.weight(1f)) {
                 Text(client.name, fontWeight = FontWeight.Bold)
                 Text(
-                    text = "Deuda: Gs. ${formatCurrency(client.debtAmount)}", // Usar formatCurrency y prefijo Gs.
+                    text = stringResource(R.string.client_item_debt_label, formatCurrency(client.debtAmount)),
                     color = MaterialTheme.colorScheme.error
                 )
             }
             Button(onClick = onPayClick) {
-                Text("Abonar")
+                Text(stringResource(R.string.client_item_pay_button))
             }
         }
     }
@@ -52,13 +54,13 @@ fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> 
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Abonar Deuda de ${client.name}") },
+        title = { Text(stringResource(R.string.payment_dialog_title, client.name)) },
         text = {
             OutlinedTextField(
                 value = amount,
                 onValueChange = { amount = it.filter { char -> char.isDigit() } },
-                label = { Text("Monto a abonar") },
-                prefix = { Text("Gs. ") }, // Prefijo Gs.
+                label = { Text(stringResource(R.string.payment_dialog_amount_label)) },
+                prefix = { Text(stringResource(R.string.text_prefix_gs)) }, // Prefijo Gs.
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number
                 ),
@@ -75,12 +77,12 @@ fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> 
                 },
                 enabled = amount.isNotBlank()
             ) {
-                Text("Confirmar Pago")
+                Text(stringResource(R.string.payment_dialog_confirm_button))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancelar")
+                Text(stringResource(R.string.cancel_button))
             }
         }
     )

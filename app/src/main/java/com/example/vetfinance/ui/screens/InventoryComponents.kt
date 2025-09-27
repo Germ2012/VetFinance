@@ -15,16 +15,19 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SellingMethod
 import ui.utils.ThousandsSeparatorTransformation
 import ui.utils.formatCurrency // Importar formatCurrency
 import java.util.Locale // Added import
 
+@OptIn(ExperimentalMaterial3Api::class) // Added OptIn for ExposedDropdownMenuBox
 @Composable
 fun ProductDialog(
     product: Product?,
@@ -54,8 +57,8 @@ fun ProductDialog(
     if (showDeleteConfirmation && product != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
-            title = { Text("Confirmar eliminación") },
-            text = { Text("¿Estás seguro de que deseas eliminar ${product.name}? Esta acción no se puede deshacer.") },
+            title = { Text(stringResource(R.string.confirm_deletion_title)) },
+            text = { Text(stringResource(R.string.confirm_delete_product_message, product.name)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -64,12 +67,12 @@ fun ProductDialog(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Eliminar")
+                    Text(stringResource(R.string.delete_button))
                 }
             },
             dismissButton = {
                 Button(onClick = { showDeleteConfirmation = false }) {
-                    Text("Cancelar")
+                    Text(stringResource(R.string.cancel_button))
                 }
             }
         )
@@ -77,7 +80,7 @@ fun ProductDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (isEditing) "Editar Producto/Servicio" else "Añadir Producto/Servicio") },
+        title = { Text(if (isEditing) stringResource(R.string.product_dialog_edit_title) else stringResource(R.string.product_dialog_add_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
@@ -86,14 +89,14 @@ fun ProductDialog(
                         name = it
                         onProductNameChange(it) // Actualizar para sugerencias en tiempo real
                     },
-                    label = { Text("Nombre") },
+                    label = { Text(stringResource(R.string.product_dialog_name_label)) },
                     modifier = Modifier.fillMaxWidth(),
                     isError = name.isBlank() // Marcar error si el nombre está vacío
                 )
 
                 AnimatedVisibility(visible = productNameSuggestions.isNotEmpty() && name.isNotBlank()) {
                     Column(modifier = Modifier.padding(top = 4.dp)) {
-                        Text("Coincidencias existentes:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                        Text(stringResource(R.string.product_dialog_existing_matches), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -116,21 +119,21 @@ fun ProductDialog(
                 OutlinedTextField(
                     value = price,
                     onValueChange = { if (it.all { char -> char.isDigit() }) price = it },
-                    label = { Text("Precio") },
+                    label = { Text(stringResource(R.string.product_dialog_price_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     visualTransformation = ThousandsSeparatorTransformation(),
                     modifier = Modifier.fillMaxWidth(),
-                    prefix = { Text("Gs. ") },
+                    prefix = { Text(stringResource(R.string.text_prefix_gs)) },
                     isError = price.isBlank() // Marcar error si el precio está vacío
                 )
                 OutlinedTextField(
                     value = cost,
                     onValueChange = { if (it.all { char -> char.isDigit() }) cost = it },
-                    label = { Text("Costo") },
+                    label = { Text(stringResource(R.string.product_dialog_cost_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     visualTransformation = ThousandsSeparatorTransformation(),
                     modifier = Modifier.fillMaxWidth(),
-                    prefix = { Text("Gs. ") },
+                    prefix = { Text(stringResource(R.string.text_prefix_gs)) },
                     isError = cost.isBlank() // Marcar error si el costo está vacío
                 )
                 OutlinedTextField(
@@ -142,7 +145,7 @@ fun ProductDialog(
                             stock = filtered
                         }
                     },
-                    label = { Text("Stock") },
+                    label = { Text(stringResource(R.string.product_dialog_stock_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     enabled = !isService,
                     modifier = Modifier.fillMaxWidth(),
@@ -150,7 +153,7 @@ fun ProductDialog(
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(checked = isService, onCheckedChange = { isService = it })
-                    Text("Es un servicio")
+                    Text(stringResource(R.string.product_dialog_is_service_checkbox))
                 }
                 if (!isService) {
                     SellingMethodDropdown(
@@ -177,7 +180,7 @@ fun ProductDialog(
                 },
                 enabled = name.isNotBlank() && price.isNotBlank() && cost.isNotBlank() && (isService || selectedSellingMethod == SellingMethod.DOSE_ONLY || stock.isNotBlank())
             ) {
-                Text(if (isEditing) "Actualizar" else "Guardar")
+                Text(if (isEditing) stringResource(R.string.product_dialog_update_button) else stringResource(R.string.save_button))
             }
         },
         dismissButton = {
@@ -190,11 +193,11 @@ fun ProductDialog(
                         onClick = { showDeleteConfirmation = true },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
-                        Text("ELIMINAR")
+                        Text(stringResource(R.string.delete_button).uppercase(Locale.getDefault()))
                     }
                 }
                 TextButton(onClick = onDismiss) {
-                    Text("CANCELAR")
+                    Text(stringResource(R.string.cancel_button).uppercase(Locale.getDefault()))
                 }
             }
         }
@@ -216,7 +219,7 @@ fun SellingMethodDropdown(selectedMethod: SellingMethod, onMethodSelected: (Sell
             value = selectedMethod.displayName,
             onValueChange = {}, // No editable directamente
             readOnly = true,
-            label = { Text("Forma de Venta") },
+            label = { Text(stringResource(R.string.selling_method_dropdown_label)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier.menuAnchor().fillMaxWidth()
         )
@@ -226,7 +229,7 @@ fun SellingMethodDropdown(selectedMethod: SellingMethod, onMethodSelected: (Sell
         ) {
             methods.forEach { method ->
                 DropdownMenuItem(
-                    text = { Text(method.displayName) },
+                    text = { Text(method.displayName) }, // Assuming SellingMethod.displayName is already localized or non-translatable
                     onClick = {
                         onMethodSelected(method)
                         expanded = false
@@ -253,21 +256,21 @@ fun ProductSelectionItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(product.name, fontWeight = FontWeight.Bold)
-                Text("Precio: Gs. ${formatCurrency(product.price)}", fontSize = 14.sp) // Usar formatCurrency y prefijo Gs.
+                Text(stringResource(R.string.product_selection_price_label_gs, formatCurrency(product.price)), fontSize = 14.sp)
                 if (product.selling_method != SellingMethod.DOSE_ONLY && !product.isService) {
-                     Text("Stock: ${formatCurrency(product.stock)}", fontSize = 12.sp) // Usar formatCurrency
+                     Text(stringResource(R.string.product_selection_stock_label, formatCurrency(product.stock)), fontSize = 12.sp)
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onRemove, enabled = quantity > 0.0) {
-                    Icon(Icons.Default.Remove, contentDescription = "Quitar")
+                    Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.product_selection_remove_content_description))
                 }
                 Text(
-                    text = if (quantity > 0) formatCurrency(quantity) else "0", // Usar formatCurrency
+                    text = if (quantity > 0) formatCurrency(quantity) else "0", // Consider if "0" needs to be localized
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
                 IconButton(onClick = onAdd) {
-                    Icon(Icons.Default.Add, contentDescription = "Añadir")
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.product_selection_add_content_description))
                 }
             }
         }

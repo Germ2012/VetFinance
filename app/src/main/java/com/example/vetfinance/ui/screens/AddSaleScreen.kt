@@ -214,7 +214,7 @@ fun FractionalSaleDialog(
                             val amount = filtered.toDoubleOrNull() ?: 0.0
                             if (product.price > 0) {
                                 val qty = amount / product.price
-                                calculatedValue = "${'$'}{formatCurrency(qty)} ${'$'}{product.selling_method.unitName}"
+                                calculatedValue = stringResource(R.string.quantity_unit_format, formatCurrency(qty), product.selling_method.unitName)
                             } else {
                                 calculatedValue = invalidPriceMsg
                             }
@@ -234,7 +234,7 @@ fun FractionalSaleDialog(
                                 quantityString = filtered
                                 val qty = filtered.toDoubleOrNull() ?: 0.0
                                 val totalAmount = qty * product.price
-                                calculatedValue = "Gs. ${'$'}{formatCurrency(totalAmount)}"
+                                calculatedValue = stringResource(R.string.text_prefix_gs) + formatCurrency(totalAmount)
                             }
                         },
                         label = { Text(stringResource(R.string.label_quantity_unit, product.selling_method.unitName)) },

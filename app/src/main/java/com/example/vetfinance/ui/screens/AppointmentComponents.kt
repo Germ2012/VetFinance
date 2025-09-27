@@ -2,13 +2,13 @@ package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import com.example.vetfinance.R
 import com.example.vetfinance.data.Appointment
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.data.Pet
@@ -39,7 +39,7 @@ fun AddAppointmentDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Agendar Nueva Cita") },
+        title = { Text(stringResource(R.string.add_appointment_dialog_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 // Menú desplegable para Clientes
@@ -48,10 +48,10 @@ fun AddAppointmentDialog(
                     onExpandedChange = { clientMenuExpanded = !clientMenuExpanded }
                 ) {
                     OutlinedTextField(
-                        value = selectedClient?.name ?: "Seleccionar Cliente",
+                        value = selectedClient?.name ?: stringResource(R.string.add_appointment_select_client_placeholder),
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Cliente") },
+                        label = { Text(stringResource(R.string.add_appointment_client_label)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = clientMenuExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
@@ -78,10 +78,10 @@ fun AddAppointmentDialog(
                     onExpandedChange = { if (selectedClient != null) petMenuExpanded = !petMenuExpanded }
                 ) {
                     OutlinedTextField(
-                        value = selectedPet?.name ?: "Seleccionar Mascota",
+                        value = selectedPet?.name ?: stringResource(R.string.add_appointment_select_pet_placeholder),
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Mascota") },
+                        label = { Text(stringResource(R.string.add_appointment_pet_label)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = petMenuExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
                         enabled = selectedClient != null
@@ -106,7 +106,7 @@ fun AddAppointmentDialog(
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Descripción de la cita") },
+                    label = { Text(stringResource(R.string.add_appointment_description_label)) },
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -128,12 +128,12 @@ fun AddAppointmentDialog(
                 },
                 enabled = selectedClient != null && selectedPet != null && description.isNotBlank()
             ) {
-                Text("Confirmar")
+                Text(stringResource(R.string.button_confirm))
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancelar")
+                Text(stringResource(R.string.cancel_button))
             }
         }
     )

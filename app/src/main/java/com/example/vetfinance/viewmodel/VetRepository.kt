@@ -6,7 +6,9 @@ import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.room.withTransaction
+import com.example.vetfinance.R
 import com.example.vetfinance.data.*
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -62,7 +64,8 @@ class VetRepository @Inject constructor(
     private val paymentDao: PaymentDao,
     private val petDao: PetDao,
     private val treatmentDao: TreatmentDao,
-    private val appointmentDao: AppointmentDao
+    private val appointmentDao: AppointmentDao,
+    @ApplicationContext private val context: Context // Inyectar Context
 ) {
 
     /** Tamaño del lote para operaciones de exportación para no sobrecargar la memoria. */
@@ -259,7 +262,7 @@ class VetRepository @Inject constructor(
                     }
                 }
             }
-            if (archivosDelZip.isEmpty()) return@withContext "Error: El archivo ZIP está vacío o no es válido."
+            if (archivosDelZip.isEmpty()) return@withContext this.context.getString(R.string.import_error_zip_empty_or_invalid)
 
             // 2. Validar y parsear los datos CSV.
             val backupData = validateAndParseBackupData(archivosDelZip)
@@ -267,13 +270,13 @@ class VetRepository @Inject constructor(
             // 3. Insertar los datos validados en la base de datos en una única transacción.
             performMergeImport(backupData)
 
-            return@withContext "Fusión de datos completada con éxito."
+            return@withContext this.context.getString(R.string.import_success_merge_completed)
         } catch (e: BackupValidationException) {
             e.printStackTrace()
-            return@withContext e.message ?: "Error de validación desconocido."
+            return@withContext e.message ?: this.context.getString(R.string.import_error_validation_unknown)
         } catch (e: Exception) {
             e.printStackTrace()
-            return@withContext "Error inesperado al importar: ${e.message ?: "Sin detalles."}"
+            return@withContext this.context.getString(R.string.import_error_unexpected, e.message ?: this.context.getString(R.string.import_error_no_details))
         }
     }
 
@@ -301,17 +304,17 @@ class VetRepository @Inject constructor(
         val saleIds = sales.map { it.saleId }.toSet()
 
         // Se comprueba que todas las claves foráneas apunten a entidades existentes.
-        pets.forEach { if (it.ownerIdFk !in clientIds) throw BackupValidationException("Mascota con dueño inválido: ${it.name}") }
-        treatments.forEach { if (it.petIdFk !in petIds) throw BackupValidationException("Tratamiento con mascota inválida: ${it.treatmentId}") }
-        sales.forEach { if (it.clientIdFk !in clientIds) throw BackupValidationException("Venta con cliente inválido: ${it.saleId}") }
-        payments.forEach { if (it.clientIdFk !in clientIds) throw BackupValidationException("Pago con cliente inválido: ${it.paymentId}") }
+        pets.forEach { if (it.ownerIdFk !in clientIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_pet_invalid_owner, it.name)) }
+        treatments.forEach { if (it.petIdFk !in petIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_treatment_invalid_pet, it.treatmentId)) }
+        sales.forEach { if (it.clientIdFk !in clientIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_sale_invalid_client, it.saleId)) }
+        payments.forEach { if (it.clientIdFk !in clientIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_payment_invalid_client, it.paymentId)) }
         saleProductCrossRefs.forEach {
-            if (it.saleId !in saleIds) throw BackupValidationException("Detalle de venta con ID de venta inválido: ${it.saleId}")
-            if (it.productId !in productIds) throw BackupValidationException("Detalle de venta con ID de producto inválido: ${it.productId}")
+            if (it.saleId !in saleIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_sale_detail_invalid_sale_id, it.saleId))
+            if (it.productId !in productIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_sale_detail_invalid_product_id, it.productId))
         }
         appointments.forEach {
-            if (it.clientIdFk !in clientIds) throw BackupValidationException("Cita con cliente inválido: ${it.appointmentId}")
-            if (it.petIdFk !in petIds) throw BackupValidationException("Cita con mascota inválida: ${it.appointmentId}")
+            if (it.clientIdFk !in clientIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_appointment_invalid_client, it.appointmentId))
+            if (it.petIdFk !in petIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_appointment_invalid_pet, it.appointmentId))
         }
 
         return ParsedBackupData(clients, products, pets, treatments, sales, transactions, payments, saleProductCrossRefs, appointments)

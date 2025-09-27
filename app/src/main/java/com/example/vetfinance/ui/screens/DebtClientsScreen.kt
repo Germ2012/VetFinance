@@ -12,9 +12,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency // Importar formatCurrency
@@ -59,8 +61,8 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
     clientToDelete?.let { client ->
         AlertDialog(
             onDismissRequest = { clientToDelete = null },
-            title = { Text("Confirmar Eliminación") },
-            text = { Text("¿Estás seguro de que quieres eliminar a '${client.name}'? Esta acción no se puede deshacer.") },
+            title = { Text(stringResource(R.string.confirm_deletion_title)) },
+            text = { Text(stringResource(R.string.debt_clients_confirm_delete_message, client.name)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -69,12 +71,12 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Eliminar")
+                    Text(stringResource(R.string.delete_button))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { clientToDelete = null }) {
-                    Text("Cancelar")
+                    Text(stringResource(R.string.cancel_button))
                 }
             }
         )
@@ -83,7 +85,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { navController.navigate("add_client_screen") }) {
-                Icon(Icons.Default.Add, contentDescription = "Añadir Cliente")
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.debt_clients_add_client_fab))
             }
         }
     ) { paddingValues ->
@@ -93,7 +95,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 .padding(horizontal = 16.dp)
         ) {
             Text(
-                text = "Clientes",
+                text = stringResource(R.string.debt_clients_screen_title),
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.padding(vertical = 16.dp)
             )
@@ -102,12 +104,12 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 value = searchQuery,
                 onValueChange = { viewModel.onClientSearchQueryChange(it) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Buscar cliente...") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                label = { Text(stringResource(R.string.debt_clients_search_placeholder)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, // Assuming null is fine if clear icon has description
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.clearClientSearchQuery() }) {
-                            Icon(Icons.Default.Clear, contentDescription = "Limpiar")
+                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.clear_search_content_description))
                         }
                     }
                 },
@@ -120,7 +122,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.End
             ) {
-                Text("Mostrar solo con deuda")
+                Text(stringResource(R.string.debt_clients_show_only_with_debt_switch))
                 Spacer(modifier = Modifier.width(8.dp))
                 Switch(
                     checked = showOnlyWithDebt,
@@ -153,9 +155,9 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                                 contentAlignment = Alignment.Center
                             ) {
                                 val message = when {
-                                    searchQuery.isNotBlank() -> "No se encontraron clientes que coincidan con la búsqueda."
-                                    showOnlyWithDebt -> "No hay clientes con deudas."
-                                    else -> "No hay clientes registrados. \nAñade uno con el botón '+'"
+                                    searchQuery.isNotBlank() -> stringResource(R.string.debt_clients_empty_search_message)
+                                    showOnlyWithDebt -> stringResource(R.string.debt_clients_empty_debt_message)
+                                    else -> stringResource(R.string.debt_clients_empty_clients_message)
                                 }
                                 Text(message)
                             }
@@ -183,28 +185,27 @@ fun ClientItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(client.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                val formattedDebt = "Gs. ${formatCurrency(client.debtAmount)}" // Usar formatCurrency y prefijo Gs.
-                Text("Deuda: $formattedDebt", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.client_item_debt_label, formatCurrency(client.debtAmount)), style = MaterialTheme.typography.bodyMedium)
             }
             if (client.debtAmount > 0) {
                 TextButton(onClick = onPayClick) {
-                    Text("Abonar")
+                    Text(stringResource(R.string.client_item_pay_button))
                 }
             }
             Box {
                 IconButton(onClick = { expanded = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Más opciones")
+                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options_content_description))
                 }
                 DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                     DropdownMenuItem(
-                        text = { Text("Ver Detalles") },
+                        text = { Text(stringResource(R.string.debt_clients_view_details_menu_item)) },
                         onClick = {
                             onDetailClick()
                             expanded = false
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text("Eliminar") },
+                        text = { Text(stringResource(R.string.delete_button)) },
                         onClick = {
                             onDeleteClick()
                             expanded = false
