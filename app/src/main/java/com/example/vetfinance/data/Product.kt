@@ -1,10 +1,12 @@
+// ruta: app/src/main/java/com/example/vetfinance/data/Product.kt
+
 package com.example.vetfinance.data
 
-import androidx.annotation.StringRes
+import androidx.annotation.StringRes // <-- AÑADIDO
 import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
-import com.example.vetfinance.R
+import com.example.vetfinance.R // <-- AÑADIDO
 import java.util.UUID
 
 /**
@@ -31,8 +33,8 @@ data class Product(
     val selling_method: SellingMethod = SellingMethod.BY_UNIT // <-- AÑADIR este campo
 )
 
-enum class SellingMethod(@StringRes val displayResId: Int) {
-    BY_UNIT(R.string.selling_method_by_unit), // Por unidad (comportamiento actual)
-    BY_WEIGHT_OR_AMOUNT(R.string.selling_method_by_weight_or_amount), // Por peso o monto (ej. balanceado)
-    DOSE_ONLY(R.string.selling_method_dose_only) // Dosis que no descuenta stock
+enum class SellingMethod(@StringRes val displayResId: Int) { // <-- MODIFICADO
+    BY_UNIT(R.string.selling_method_by_unit),
+    BY_WEIGHT_OR_AMOUNT(R.string.selling_method_by_weight_or_amount),
+    DOSE_ONLY(R.string.selling_method_dose_only)
 }

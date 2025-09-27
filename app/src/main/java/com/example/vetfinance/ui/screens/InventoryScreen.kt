@@ -176,7 +176,7 @@ fun InventoryItem(
                 Text(product.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                 Text(
                     text = if (product.isService) stringResource(R.string.inventory_item_type_service)
-                           else stringResource(R.string.inventory_item_type_product, product.selling_method.name),
+                           else stringResource(R.string.inventory_item_type_product, stringResource(product.selling_method.displayResId)), // <-- MODIFICADO AQUÍ
                     style = MaterialTheme.typography.bodySmall
                 )
             }

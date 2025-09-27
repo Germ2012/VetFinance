@@ -138,8 +138,8 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
         val formattedSales = stringResource(R.string.text_prefix_gs) + formatCurrency(salesSummary)
         val formattedProfit = stringResource(R.string.text_prefix_gs) + formatCurrency(grossProfit)
 
-        SummaryCard(title = stringResource(R.string.summary_total_sales, selectedPeriod.displayName), value = formattedSales)
-        SummaryCard(title = stringResource(R.string.summary_gross_profit, selectedPeriod.displayName), value = formattedProfit)
+        SummaryCard(title = stringResource(R.string.summary_total_sales, stringResource(selectedPeriod.displayResId)), value = formattedSales)
+        SummaryCard(title = stringResource(R.string.summary_gross_profit, stringResource(selectedPeriod.displayResId)), value = formattedProfit)
 
         Spacer(modifier = Modifier.weight(1f))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -285,7 +285,7 @@ fun TopProductsFilterControls(
                     selected = period == selectedPeriod,
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
                 ) {
-                    Text(period.displayName) // Assuming period.displayName is already localized or non-translatable
+                    Text(stringResource(period.displayResId)) // <-- MODIFICADO
                 }
             }
         }
@@ -297,7 +297,7 @@ fun TopProductsFilterControls(
                 TopProductsPeriod.MONTH -> DateTimeFormatter.ofPattern("MMMM '${wordDe}' yyyy", Locale("es", "ES"))
                 TopProductsPeriod.YEAR -> DateTimeFormatter.ofPattern("yyyy", Locale("es", "ES"))
             }
-            Text(selectedDate.format(formatter).replaceFirstChar { it.uppercase() }) // Date format might need localization if not covered by Locale
+            Text(selectedDate.format(formatter).replaceFirstChar { it.uppercase() })
         }
     }
 }
@@ -371,7 +371,7 @@ fun InventoryReportTab(viewModel: VetViewModel) {
     ) {
         SummaryCard(title = stringResource(R.string.title_total_inventory_value), value = formattedValue)
         HorizontalDivider()
-        Text(stringResource(R.string.title_stock_details_products), style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(R.string.title_stock_details_products), style = MaterialTheme. typography.titleLarge)
 
         LazyColumn(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(productsOnly) { product ->
@@ -398,7 +398,7 @@ fun SegmentedControl(selected: Period, onPeriodSelected: (Period) -> Unit) {
                 selected = period == selected,
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
             ) {
-                Text(period.displayName) // Assuming period.displayName is already localized or non-translatable
+                Text(stringResource(period.displayResId)) // <-- MODIFICADO
             }
         }
     }

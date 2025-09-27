@@ -216,7 +216,7 @@ fun SellingMethodDropdown(selectedMethod: SellingMethod, onMethodSelected: (Sell
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
     ) {
         OutlinedTextField(
-            value = selectedMethod.displayName,
+            value = stringResource(selectedMethod.displayResId), // <-- MODIFICADO AQUÍ
             onValueChange = {}, // No editable directamente
             readOnly = true,
             label = { Text(stringResource(R.string.selling_method_dropdown_label)) },
@@ -229,7 +229,7 @@ fun SellingMethodDropdown(selectedMethod: SellingMethod, onMethodSelected: (Sell
         ) {
             methods.forEach { method ->
                 DropdownMenuItem(
-                    text = { Text(method.displayName) }, // Assuming SellingMethod.displayName is already localized or non-translatable
+                    text = { Text(stringResource(method.displayResId)) }, // <-- MODIFICADO AQUÍ
                     onClick = {
                         onMethodSelected(method)
                         expanded = false

@@ -1,16 +1,17 @@
+// ruta: app/src/main/java/com/example/vetfinance/viewmodel/VetViewModel.kt
+
 package com.example.vetfinance.viewmodel
 
 import android.content.Context
 import android.net.Uri
-import androidx.annotation.StringRes
+import androidx.annotation.StringRes // <-- AÑADIDO
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import com.example.vetfinance.R
+import com.example.vetfinance.R // <-- AÑADIDO
 import com.example.vetfinance.data.*
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -25,14 +26,14 @@ import javax.inject.Inject
 private const val GENERAL_CLIENT_ID = "00000000-0000-0000-0000-000000000001"
 
 /** Define los períodos de tiempo disponibles para los reportes de ventas generales. */
-enum class Period(@StringRes val displayResId: Int) {
+enum class Period(@StringRes val displayResId: Int) { // <-- MODIFICADO
     DAY(R.string.period_day),
     WEEK(R.string.period_week),
     MONTH(R.string.period_month)
 }
 
 /** Define los períodos de tiempo para el reporte de Top Productos. */
-enum class TopProductsPeriod(@StringRes val displayResId: Int) {
+enum class TopProductsPeriod(@StringRes val displayResId: Int) { // <-- MODIFICADO
     WEEK(R.string.period_week),
     MONTH(R.string.period_month),
     YEAR(R.string.top_products_period_year)
@@ -41,8 +42,7 @@ enum class TopProductsPeriod(@StringRes val displayResId: Int) {
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class VetViewModel @Inject constructor(
-    private val repository: VetRepository,
-    @ApplicationContext private val context: Context // Inyectar Context
+    private val repository: VetRepository
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(true)
@@ -54,7 +54,7 @@ class VetViewModel @Inject constructor(
     fun deleteClient(client: Client) = viewModelScope.launch { repository.deleteClient(client) }
 
     // --- ESTADOS DE FILTROS Y BÚSQUEDA ---
-    private val _inventoryFilter = MutableStateFlow(context.getString(R.string.inventory_filter_all)) // Usar context
+    private val _inventoryFilter = MutableStateFlow("Todos")
     val inventoryFilter: StateFlow<String> = _inventoryFilter.asStateFlow()
     private val _petSearchQuery = MutableStateFlow("")
     val petSearchQuery: StateFlow<String> = _petSearchQuery.asStateFlow()
@@ -175,8 +175,8 @@ class VetViewModel @Inject constructor(
     val productForFractionalSale: StateFlow<Product?> = _productForFractionalSale.asStateFlow()
 
     // --- LÓGICA DEL CARRITO DE COMPRAS ---
-    private val _shoppingCart = MutableStateFlow<Map<Product, Double>>(emptyMap()) // <-- CAMBIAR a Double (Already Double)
-    val shoppingCart: StateFlow<Map<Product, Double>> = _shoppingCart.asStateFlow() // <-- CAMBIAR a Double (Already Double)
+    private val _shoppingCart = MutableStateFlow<Map<Product, Double>>(emptyMap())
+    val shoppingCart: StateFlow<Map<Product, Double>> = _shoppingCart.asStateFlow()
     private val _saleTotal = MutableStateFlow(0.0)
     val saleTotal: StateFlow<Double> = _saleTotal.asStateFlow()
 
@@ -240,11 +240,11 @@ class VetViewModel @Inject constructor(
     // --- OPERACIONES CRUD ---
     private fun executeWithLoading(action: suspend () -> Unit) = viewModelScope.launch { _isLoading.value = true; try { action() } finally { _isLoading.value = false } }
     
-    fun addProduct(name: String, price: Double, stock: Double, cost: Double, isService: Boolean, sellingMethod: SellingMethod) = executeWithLoading { // <-- CAMBIAR stock a Double y añadir sellingMethod (Already Double, sellingMethod already present)
-        repository.insertProduct(Product(name = name, price = price, stock = stock, cost = cost, isService = isService, selling_method = sellingMethod)) // <-- AÑADIR selling_method (Already present)
+    fun addProduct(name: String, price: Double, stock: Double, cost: Double, isService: Boolean, sellingMethod: SellingMethod) = executeWithLoading {
+        repository.insertProduct(Product(name = name, price = price, stock = stock, cost = cost, isService = isService, selling_method = sellingMethod))
         onDismissAddProductDialog()
     }
-    fun updateProduct(product: Product) = executeWithLoading { repository.updateProduct(product) } // Ensure product passed has Double stock and SellingMethod
+    fun updateProduct(product: Product) = executeWithLoading { repository.updateProduct(product) }
     fun addClient(name: String, phone: String, debt: Double) = executeWithLoading { repository.insertClient(Client(name = name, phone = phone.ifBlank { null }, debtAmount = debt)); onDismissAddClientDialog() }
     fun updateClient(client: Client) = executeWithLoading { repository.updateClient(client) }
     fun addPet(pet: Pet) = executeWithLoading { repository.insertPet(pet) }
@@ -265,7 +265,6 @@ class VetViewModel @Inject constructor(
     fun addToCart(product: Product) {
         val currentCart = _shoppingCart.value.toMutableMap()
         val currentQuantity = currentCart[product] ?: 0.0
-        // Lógica para no exceder el stock
         if (product.selling_method != SellingMethod.DOSE_ONLY && !product.isService && currentQuantity >= product.stock) return
         currentCart[product] = currentQuantity + 1.0
         _shoppingCart.value = currentCart
@@ -289,11 +288,8 @@ class VetViewModel @Inject constructor(
         if (quantity <= 0.0) {
             currentCart.remove(product)
         } else {
-            // Stock check only if not a service and not DOSE_ONLY
             if (!product.isService && product.selling_method != SellingMethod.DOSE_ONLY) {
                 if (quantity > product.stock) {
-                    // Optionally, provide user feedback about insufficient stock here (e.g., via a Toast or a SnackBar event)
-                    // For now, just cap at available stock. Or prevent adding if more granular control is needed.
                     currentCart[product] = product.stock
                 } else {
                     currentCart[product] = quantity
@@ -313,7 +309,7 @@ class VetViewModel @Inject constructor(
         if (_shoppingCart.value.isNotEmpty()) {
             repository.insertSale(
                 Sale(clientIdFk = GENERAL_CLIENT_ID, totalAmount = _saleTotal.value),
-                _shoppingCart.value // <-- El valor ya es Map<Product, Double>
+                _shoppingCart.value
             )
             clearCart()
             onFinished()
@@ -321,7 +317,7 @@ class VetViewModel @Inject constructor(
     }
 
     // --- CÁLCULO DE REPORTES ---
-    fun getSalesSummary(period: Period): Double { // Remains the same as it sums totalAmount from Sale entity
+    fun getSalesSummary(period: Period): Double {
         val now = LocalDate.now()
         val startOfPeriod = when (period) {
             Period.DAY -> now
@@ -332,7 +328,7 @@ class VetViewModel @Inject constructor(
         return _sales.value.filter { it.sale.date >= startEpoch }.sumOf { it.sale.totalAmount }
     }
 
-    fun getGrossProfitSummary(period: Period): Double { // Needs to use Double for quantity from crossRefs
+    fun getGrossProfitSummary(period: Period): Double {
         val now = LocalDate.now()
         val startOfPeriod = when (period) {
             Period.DAY -> now
@@ -342,7 +338,6 @@ class VetViewModel @Inject constructor(
         val startEpoch = startOfPeriod.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val relevantSales = _sales.value.filter { it.sale.date >= startEpoch }
         val totalRevenue = relevantSales.sumOf { it.sale.totalAmount }
-        // SaleProductCrossRef.quantity is now Double, so this should work correctly.
         val totalCost = relevantSales.sumOf { sale -> sale.crossRefs.sumOf { ref -> (sale.products.find { it.id == ref.productId }?.cost ?: 0.0) * ref.quantity } }
         return totalRevenue - totalCost
     }
@@ -352,5 +347,5 @@ class VetViewModel @Inject constructor(
     suspend fun importarDatosDesdeZIP(uri: Uri, context: Context): String = repository.importarDatosDesdeZIP(uri, context)
 
     // --- DATOS DE EJEMPLO ---
-    private suspend fun addSampleData() = repository.insertClient(Client(clientId = GENERAL_CLIENT_ID, name = context.getString(R.string.sample_data_general_client_name), phone = null, debtAmount = 0.0))
+    private suspend fun addSampleData() = repository.insertClient(Client(clientId = GENERAL_CLIENT_ID, name = "Cliente General", phone = null, debtAmount = 0.0))
 }
