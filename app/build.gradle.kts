@@ -2,7 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
-    id("com.google.devtools.ksp") 
+    id("com.google.devtools.ksp") // AÑADIR ESTA LÍNEA
 }
 
 android {
@@ -75,21 +75,23 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
-
     // ---- Hilt (Inyección de Dependencias) ----
     implementation(libs.hilt.android)
-    ksp(libs.hilt.compiler)     // CAMBIO: Agrega esta línea
+    ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
+    // --- LÍNEAS AÑADIDAS ---
+    implementation("androidx.hilt:hilt-work:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
+    // -------------------------
 
     // ---- Navigation y Componentes de UI ----
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.material.icons.extended)
 
-
     // ---- Room (Base de Datos Local) ----
     implementation(libs.room.runtime)
-    ksp(libs.room.compiler)      // CAMBIO: Agrega esta línea
+    ksp(libs.room.compiler)
     implementation(libs.room.ktx)
     implementation(libs.room.paging)
 
@@ -104,7 +106,7 @@ dependencies {
     implementation(libs.calendar.compose)
 
     //---CSV---//
-    implementation("org.apache.commons:commons-csv:1.11.0")
+    implementation("org.apache.commons.csv:commons-csv:1.11.0")
 
     //----Desugaring---//
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
@@ -114,7 +116,6 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-
 
     implementation("androidx.work:work-runtime-ktx:2.9.0")
 }
