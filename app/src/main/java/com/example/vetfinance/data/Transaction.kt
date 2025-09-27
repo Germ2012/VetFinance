@@ -8,12 +8,15 @@ import androidx.room.PrimaryKey
 import com.example.vetfinance.R
 import java.util.UUID
 
+const val TRANSACTION_TYPE_INCOME = "Ingreso"
+const val TRANSACTION_TYPE_EXPENSE = "Egreso"
+
 @Entity(
     tableName = "transactions",
     foreignKeys = [
         ForeignKey(
             entity = Sale::class,
-            parentColumns = ["id"], // Corregido de "saleId" a "id" para que coincida con Sale.kt
+            parentColumns = ["id"],
             childColumns = ["saleIdFk"],
             onDelete = ForeignKey.SET_NULL
         )
@@ -22,8 +25,8 @@ import java.util.UUID
 )
 data class Transaction(
     @PrimaryKey
-    val transactionId: String = UUID.randomUUID().toString(),
-    val saleIdFk: Long?, // Corregido a Long? para coincidir con el id de Sale
+    val id: String = UUID.randomUUID().toString(),
+    val saleIdFk: String?,
     val date: Long,
     val type: String,
     val amount: Double,

@@ -17,18 +17,12 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object AppModule {
 
-    // Migraciones
+    // Define tus migraciones aquí si las necesitas
     private val MIGRATION_1_2 = object : Migration(1, 2) {
         override fun migrate(database: SupportSQLiteDatabase) {
-            database.execSQL("ALTER TABLE clients ADD COLUMN address TEXT")
+            // Ejemplo: database.execSQL("ALTER TABLE clients ADD COLUMN address TEXT")
         }
     }
-    private val MIGRATION_2_3 = object : Migration(2, 3) {
-        override fun migrate(database: SupportSQLiteDatabase) {
-            database.execSQL("ALTER TABLE pets ADD COLUMN breed TEXT")
-        }
-    }
-    //... (y así sucesivamente para todas las migraciones)
 
     @Provides
     @Singleton
@@ -38,23 +32,24 @@ object AppModule {
             AppDatabase::class.java,
             "vet_database"
         )
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3) // Añade aquí todas tus migraciones
+            // .addMigrations(MIGRATION_1_2) // Descomenta y añade tus migraciones si las tienes
             .build()
     }
 
     @Provides
     @Singleton
     fun provideRepository(db: AppDatabase, @ApplicationContext context: Context): VetRepository {
+        // CORRECCIÓN CLAVE: Pasamos todos los DAOs desde la instancia 'db'
         return VetRepository(
-            db.productDao(),
-            db.saleDao(),
-            db.transactionDao(),
-            db.clientDao(),
-            db.paymentDao(),
-            db.petDao(),
-            db.treatmentDao(),
-            db.appointmentDao(),
-            context
+            productDao = db.productDao(),
+            saleDao = db.saleDao(),
+            transactionDao = db.transactionDao(),
+            clientDao = db.clientDao(),
+            paymentDao = db.paymentDao(),
+            petDao = db.petDao(),
+            treatmentDao = db.treatmentDao(),
+            appointmentDao = db.appointmentDao(),
+            context = context
         )
     }
 }
