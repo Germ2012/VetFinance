@@ -106,7 +106,7 @@ dependencies {
     implementation(libs.calendar.compose)
 
     //---CSV---//
-    implementation("org.apache.commons.csv:commons-csv:1.11.0")
+    implementation("org.apache.commons:commons-csv:1.11.0")
 
     //----Desugaring---//
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
