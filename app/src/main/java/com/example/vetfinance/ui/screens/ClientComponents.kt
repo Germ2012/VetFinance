@@ -11,10 +11,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.vetfinance.R // Added import for R class
+import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
 import ui.utils.ThousandsSeparatorTransformation
-import ui.utils.formatCurrency // Importar formatCurrency
+import ui.utils.formatCurrency
 
 /**
  * Componente que muestra la informaciÃ³n de un cliente en una tarjeta.

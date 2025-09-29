@@ -8,7 +8,7 @@ import java.util.*
     foreignKeys = [
         ForeignKey(
             entity = Client::class,
-            parentColumns = ["id"],
+            parentColumns = ["clientId"],
             childColumns = ["clientIdFk"],
             onDelete = ForeignKey.SET_NULL
         )
@@ -34,7 +34,7 @@ data class SaleProductCrossRef(
     val saleId: String,
     val productId: String,
     val quantity: Int,
-    val price: Double,
+    val priceAtTimeOfSale: Double,
     val isByFraction: Boolean,
     val amount: Double?
 )
@@ -50,5 +50,11 @@ data class SaleWithProducts(
             entityColumn = "productId"
         )
     )
-    val products: List<Product>
+    val products: List<Product>,
+    @Relation(
+parentColumn = "id",
+entityColumn = "saleId"
+)
+val crossRefs: List<SaleProductCrossRef>
+
 )

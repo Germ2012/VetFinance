@@ -8,7 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.vetfinance.ui.screens.*
 import com.example.vetfinance.viewmodel.VetViewModel
-import ui.screens.CalendarScreen
+import com.example.vetfinance.ui.screens.CalendarScreen
 
 @Composable
 fun AppNavigation(navController: NavHostController, viewModel: VetViewModel) {

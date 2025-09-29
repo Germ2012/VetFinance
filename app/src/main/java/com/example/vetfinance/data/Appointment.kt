@@ -9,7 +9,7 @@ import java.util.UUID
 @Entity(
     tableName = "appointments",
     foreignKeys = [
-        ForeignKey(entity = Client::class, parentColumns = ["id"], childColumns = ["clientIdFk"]),
+        ForeignKey(entity = Client::class, parentColumns = ["clientId"], childColumns = ["clientIdFk"]),
         ForeignKey(entity = Pet::class, parentColumns = ["id"], childColumns = ["petIdFk"])
     ]
 )

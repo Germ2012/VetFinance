@@ -14,7 +14,7 @@ data class AppointmentWithDetails(
     val pet: Pet,
     @Relation(
         parentColumn = "clientIdFk",
-        entityColumn = "id"
+        entityColumn = "clientId"
     )
     val client: Client
 )

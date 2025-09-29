@@ -34,7 +34,7 @@ data class PetWithOwner(
     @Embedded val pet: Pet,
     @Relation(
         parentColumn = "ownerIdFk",
-        entityColumn = "id"
+        entityColumn = "clientId"
     )
     val owner: Client
 )

@@ -15,7 +15,7 @@ data class Product(
     val name: String,
     var price: Double,
     var cost: Double,
-    var stock: Int,
+    var stock: Double,
     val isService: Boolean,
     var sellingMethod: String = SELLING_METHOD_BY_UNIT
 )
