@@ -9,7 +9,7 @@ data class AppointmentWithDetails(
     @Embedded val appointment: Appointment,
     @Relation(
         parentColumn = "petIdFk",
-        entityColumn = "id"
+        entityColumn = "petId" // Corrected: was "id"
     )
     val pet: Pet,
     @Relation(
@@ -86,8 +86,8 @@ interface SaleDao {
     @Query("""
         SELECT p.name, SUM(sp.quantity) as totalSold
         FROM sales_products_cross_ref AS sp
-        JOIN sales AS s ON sp.saleId = s.id
-        JOIN products AS p ON sp.productId = p.id
+        JOIN sales AS s ON sp.saleId = s.saleId
+        JOIN products AS p ON sp.productId = p.productId
         WHERE s.date BETWEEN :startDate AND :endDate
         GROUP BY p.name
         ORDER BY totalSold DESC
@@ -162,7 +162,7 @@ interface TreatmentDao {
     @Query("SELECT * FROM treatments WHERE nextTreatmentDate IS NOT NULL AND isNextTreatmentCompleted = 0 ORDER BY nextTreatmentDate ASC")
     fun getUpcomingTreatments(): Flow<List<Treatment>>
 
-    @Query("UPDATE treatments SET isNextTreatmentCompleted = 1 WHERE id = :treatmentId")
+    @Query("UPDATE treatments SET isNextTreatmentCompleted = 1 WHERE treatmentId = :treatmentId")
     suspend fun markAsCompleted(treatmentId: String)
 }
 

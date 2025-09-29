@@ -10,12 +10,12 @@ import java.util.UUID
     tableName = "appointments",
     foreignKeys = [
         ForeignKey(entity = Client::class, parentColumns = ["clientId"], childColumns = ["clientIdFk"]),
-        ForeignKey(entity = Pet::class, parentColumns = ["id"], childColumns = ["petIdFk"])
+        ForeignKey(entity = Pet::class, parentColumns = ["petId"], childColumns = ["petIdFk"])
     ]
 )
 data class Appointment(
     @PrimaryKey
-    val id: String = UUID.randomUUID().toString(),
+    val appointmentId: String = UUID.randomUUID().toString(),
     val clientIdFk: String,
     val petIdFk: String,
     val appointmentDate: Date,

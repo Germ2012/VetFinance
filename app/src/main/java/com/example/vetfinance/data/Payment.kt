@@ -14,7 +14,7 @@ import java.util.UUID
 )
 data class Payment(
     @PrimaryKey
-    val id: String = UUID.randomUUID().toString(),
+    val paymentId: String = UUID.randomUUID().toString(),
     val clientIdFk: String,
     val amount: Double,
     val paymentDate: Date

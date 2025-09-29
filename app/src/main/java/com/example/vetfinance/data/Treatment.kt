@@ -9,8 +9,8 @@ import java.util.UUID
 @Entity(
     tableName = "treatments",
     foreignKeys = [
-        ForeignKey(entity = Pet::class, parentColumns = ["id"], childColumns = ["petIdFk"]),
-        ForeignKey(entity = Product::class, parentColumns = ["id"], childColumns = ["serviceId"])
+        ForeignKey(entity = Pet::class, parentColumns = ["petId"], childColumns = ["petIdFk"]),
+        ForeignKey(entity = Product::class, parentColumns = ["productId"], childColumns = ["serviceId"])
     ]
 )
 data class Treatment(
@@ -24,7 +24,7 @@ data class Treatment(
     val isNextTreatmentCompleted: Boolean = false,
     val symptoms: String?,
     val diagnosis: String?,
-    val plan: String?,
+    val treatmentPlan: String?, // Renamed from 'plan'
     val weight: Double?,
     val temperature: String?
 )

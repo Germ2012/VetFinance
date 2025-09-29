@@ -50,9 +50,10 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
         }
     }
 
-    if (showPaymentDialog && clientForPayment != null) {
+    val currentClientForPayment = clientForPayment
+    if (showPaymentDialog && currentClientForPayment != null) {
         PaymentDialog(
-            client = clientForPayment!!,
+            client = currentClientForPayment, // Smart-cast to non-null
             onDismiss = { viewModel.onDismissPaymentDialog() },
             onConfirm = { amount -> viewModel.makePayment(amount) }
         )
@@ -105,7 +106,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 onValueChange = { viewModel.onClientSearchQueryChange(it) },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.debt_clients_search_placeholder)) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, // Assuming null is fine if clear icon has description
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, 
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.clearClientSearchQuery() }) {
@@ -137,7 +138,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(filteredClients, key = { it.clientId }) { client -> // Key added for better performance
+                    items(filteredClients, key = { it.clientId }) { client -> 
                         ClientItem(
                             client = client,
                             onDetailClick = { navController.navigate("client_detail/${client.clientId}") },

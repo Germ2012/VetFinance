@@ -13,7 +13,7 @@ import java.util.UUID
     foreignKeys = [
         ForeignKey(
             entity = Client::class,
-            parentColumns = ["id"],
+            parentColumns = ["clientId"],
             childColumns = ["ownerIdFk"],
             onDelete = ForeignKey.CASCADE
         )

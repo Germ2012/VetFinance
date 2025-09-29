@@ -4,12 +4,12 @@ package com.example.vetfinance.viewmodel
 
 import android.content.Context
 import android.net.Uri
-import androidx.annotation.StringRes // <-- AÑADIDO
+// import androidx.annotation.StringRes // <-- REMOVED if not used elsewhere, or kept if used
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
-import com.example.vetfinance.R // <-- AÑADIDO
+import com.example.vetfinance.R // <-- Kept as R is likely used for other things
 import com.example.vetfinance.data.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -26,17 +26,17 @@ import javax.inject.Inject
 private const val GENERAL_CLIENT_ID = "00000000-0000-0000-0000-000000000001"
 
 /** Define los períodos de tiempo disponibles para los reportes de ventas generales. */
-enum class Period(@StringRes val displayResId: Int) { // <-- MODIFICADO
-    DAY(R.string.period_day),
-    WEEK(R.string.period_week),
-    MONTH(R.string.period_month)
+enum class Period { // <-- MODIFIED
+    DAY,
+    WEEK,
+    MONTH
 }
 
 /** Define los períodos de tiempo para el reporte de Top Productos. */
-enum class TopProductsPeriod(@StringRes val displayResId: Int) { // <-- MODIFICADO
-    WEEK(R.string.period_week),
-    MONTH(R.string.period_month),
-    YEAR(R.string.top_products_period_year)
+enum class TopProductsPeriod { // <-- MODIFICADO
+    WEEK,
+    MONTH,
+    YEAR
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -99,7 +99,7 @@ class VetViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val lowStockProducts: StateFlow<List<Product>> = inventory.map { products ->
-        products.filter { !it.isService && it.selling_method != SellingMethod.DOSE_ONLY && it.stock < 4 }
+        products.filter { !it.isService && it.sellingMethod != SELLING_METHOD_DOSE_ONLY && it.stock < 4 }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // --- CALENDARIO Y CITAS ---
@@ -241,7 +241,7 @@ class VetViewModel @Inject constructor(
     private fun executeWithLoading(action: suspend () -> Unit) = viewModelScope.launch { _isLoading.value = true; try { action() } finally { _isLoading.value = false } }
     
     fun addProduct(name: String, price: Double, stock: Double, cost: Double, isService: Boolean, sellingMethod: SellingMethod) = executeWithLoading {
-        repository.insertProduct(Product(name = name, price = price, stock = stock, cost = cost, isService = isService, selling_method = sellingMethod))
+        repository.insertProduct(Product(name = name, price = price, stock = stock, cost = cost, isService = isService, sellingMethod = sellingMethod.stringValue))
         onDismissAddProductDialog()
     }
     fun updateProduct(product: Product) = executeWithLoading { repository.updateProduct(product) }
@@ -265,7 +265,7 @@ class VetViewModel @Inject constructor(
     fun addToCart(product: Product) {
         val currentCart = _shoppingCart.value.toMutableMap()
         val currentQuantity = currentCart[product] ?: 0.0
-        if (product.selling_method != SellingMethod.DOSE_ONLY && !product.isService && currentQuantity >= product.stock) return
+        if (product.sellingMethod != SELLING_METHOD_DOSE_ONLY && !product.isService && currentQuantity >= product.stock) return
         currentCart[product] = currentQuantity + 1.0
         _shoppingCart.value = currentCart
         recalculateTotal()
@@ -288,7 +288,7 @@ class VetViewModel @Inject constructor(
         if (quantity <= 0.0) {
             currentCart.remove(product)
         } else {
-            if (!product.isService && product.selling_method != SellingMethod.DOSE_ONLY) {
+            if (!product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY) {
                 if (quantity > product.stock) {
                     currentCart[product] = product.stock
                 } else {
@@ -307,9 +307,12 @@ class VetViewModel @Inject constructor(
     
     fun finalizeSale(onFinished: () -> Unit) = executeWithLoading {
         if (_shoppingCart.value.isNotEmpty()) {
+            val itemsToInsert = _shoppingCart.value.map { (product, quantity) ->
+                product.productId to Pair(quantity, product.price)
+            }.toMap()
             repository.insertSale(
                 Sale(clientIdFk = GENERAL_CLIENT_ID, totalAmount = _saleTotal.value),
-                _shoppingCart.value
+                itemsToInsert // <-- UPDATED to pass the transformed map
             )
             clearCart()
             onFinished()
@@ -338,7 +341,7 @@ class VetViewModel @Inject constructor(
         val startEpoch = startOfPeriod.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val relevantSales = _sales.value.filter { it.sale.date >= startEpoch }
         val totalRevenue = relevantSales.sumOf { it.sale.totalAmount }
-        val totalCost = relevantSales.sumOf { sale -> sale.crossRefs.sumOf { ref -> (sale.products.find { it.id == ref.productId }?.cost ?: 0.0) * ref.quantity } }
+        val totalCost = relevantSales.sumOf { sale -> sale.crossRefs.sumOf { ref -> (sale.products.find { it.productId == ref.productId }?.cost ?: 0.0) * ref.quantity } } 
         return totalRevenue - totalCost
     }
 

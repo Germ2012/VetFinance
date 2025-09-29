@@ -16,7 +16,7 @@ const val TRANSACTION_TYPE_EXPENSE = "Egreso"
     foreignKeys = [
         ForeignKey(
             entity = Sale::class,
-            parentColumns = ["id"],
+            parentColumns = ["saleId"],
             childColumns = ["saleIdFk"],
             onDelete = ForeignKey.SET_NULL
         )
