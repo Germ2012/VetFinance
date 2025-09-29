@@ -1,5 +1,3 @@
-// ruta: /build.gradle.kts
-
 plugins {
     id("com.google.dagger.hilt.android") version "2.51.1" apply false
     id("com.android.application") version "8.4.1" apply false
