@@ -15,7 +15,7 @@ import java.util.UUID
 )
 data class Treatment(
     @PrimaryKey
-    val id: String = UUID.randomUUID().toString(),
+    val treatmentId: String = UUID.randomUUID().toString(),
     val petIdFk: String,
     val serviceId: String?,
     val treatmentDate: Date,

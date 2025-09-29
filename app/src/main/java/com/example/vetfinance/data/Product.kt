@@ -11,7 +11,7 @@ const val SELLING_METHOD_DOSE_ONLY = "Solo Dosis"
 @Entity(tableName = "products")
 data class Product(
     @PrimaryKey
-    val id: String = UUID.randomUUID().toString(),
+    val productId: String = UUID.randomUUID().toString(),
     val name: String,
     var price: Double,
     var cost: Double,

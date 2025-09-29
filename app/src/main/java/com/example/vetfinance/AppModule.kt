@@ -29,6 +29,7 @@ object AppModule {
     @Singleton
     fun provideRepository(db: AppDatabase, @ApplicationContext context: Context): VetRepository {
         return VetRepository(
+            db = db, // <-- LÍNEA AÑADIDA
             productDao = db.productDao(),
             saleDao = db.saleDao(),
             transactionDao = db.transactionDao(),

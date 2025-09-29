@@ -22,7 +22,7 @@ import java.util.UUID
 )
 data class Pet(
     @PrimaryKey
-    val id: String = UUID.randomUUID().toString(),
+    val petId: String = UUID.randomUUID().toString(),
     val name: String,
     val ownerIdFk: String,
     val birthDate: Long? = null,

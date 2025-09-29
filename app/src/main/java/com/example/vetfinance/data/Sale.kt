@@ -17,7 +17,7 @@ import com.example.vetfinance.data.Converters
 )
 data class Sale(
     @PrimaryKey
-    val id: String = UUID.randomUUID().toString(),
+    val saleId: String = UUID.randomUUID().toString(),
     val date: Date,
     val totalAmount: Double,
     val clientIdFk: String?
@@ -43,7 +43,7 @@ data class SaleProductCrossRef(
 data class SaleWithProducts(
     @Embedded val sale: Sale,
     @Relation(
-        parentColumn = "id",
+        parentColumn = "productId",
         entity = Product::class,
         associateBy = Junction(
             value = SaleProductCrossRef::class,
@@ -53,7 +53,7 @@ data class SaleWithProducts(
     )
     val products: List<Product>,
     @Relation(
-parentColumn = "id",
+parentColumn = "productId",
 entityColumn = "saleId"
 )
 val crossRefs: List<SaleProductCrossRef>

@@ -25,7 +25,7 @@ const val TRANSACTION_TYPE_EXPENSE = "Egreso"
 )
 data class Transaction(
     @PrimaryKey
-    val id: String = UUID.randomUUID().toString(),
+    val transactionId: String = UUID.randomUUID().toString(),
     val saleIdFk: String?,
     val date: Long,
     val type: String,

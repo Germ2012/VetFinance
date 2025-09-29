@@ -43,7 +43,7 @@ interface ProductDao {
     @Query("SELECT * FROM products ORDER BY name ASC")
     fun getAllProducts(): Flow<List<Product>>
 
-    @Query("SELECT * FROM products WHERE id = :productId")
+    @Query("SELECT * FROM products WHERE productId = :productId")
     suspend fun getProductById(productId: String): Product?
 
     @Query("SELECT * FROM products WHERE (:filterType = 'Todos') OR (:filterType = 'Productos' AND isService = 0) OR (:filterType = 'Servicios' AND isService = 1) ORDER BY name ASC")
@@ -110,7 +110,7 @@ interface ClientDao {
     @Query("SELECT * FROM clients ORDER BY name ASC")
     fun getAllClients(): Flow<List<Client>>
 
-    @Query("UPDATE clients SET debtAmount = :newDebtAmount WHERE id = :clientId")
+    @Query("UPDATE clients SET debtAmount = :newDebtAmount WHERE clientId = :clientId")
     suspend fun updateDebt(clientId: String, newDebtAmount: Double)
 
     @Query("SELECT * FROM clients WHERE debtAmount > 0 AND name LIKE '%' || :searchQuery || '%' ORDER BY name ASC")
