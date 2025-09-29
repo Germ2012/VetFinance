@@ -189,4 +189,6 @@
     <string name="period_day">Día</string>
     <string name="period_week">Semana</string>
     <string name="period_month">Mes</string>
+    <string name="transaction_type_income">Ingreso</string>
+    <string name="transaction_type_expense">Egreso</string>
 </resources>

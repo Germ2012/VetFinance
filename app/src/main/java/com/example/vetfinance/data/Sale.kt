@@ -2,6 +2,7 @@ package com.example.vetfinance.data
 
 import androidx.room.*
 import java.util.*
+import com.example.vetfinance.data.Converters
 
 @Entity(
     tableName = "sales",
