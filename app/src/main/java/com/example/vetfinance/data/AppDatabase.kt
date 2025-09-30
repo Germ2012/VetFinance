@@ -6,8 +6,8 @@ import androidx.room.TypeConverters
 import androidx.room.migration.AutoMigrationSpec // Added this import
 
 @Database(
-    entities = [Transaction::class, Pet::class, Treatment::class, Product::class, Sale::class, Client::class, SaleProductCrossRef::class, Payment::class, Appointment::class],
-    version = 15,
+    entities = [Transaction::class, Pet::class, Treatment::class, Product::class, Sale::class, Client::class, SaleProductCrossRef::class, Payment::class, Appointment::class, Supplier::class, Purchase::class, PurchaseProductCrossRef::class],
+    version = 18,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -21,5 +21,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun petDao(): PetDao
     abstract fun treatmentDao(): TreatmentDao
     abstract fun appointmentDao(): AppointmentDao
+    abstract fun supplierDao(): SupplierDao
+    abstract fun purchaseDao(): PurchaseDao
 
 }

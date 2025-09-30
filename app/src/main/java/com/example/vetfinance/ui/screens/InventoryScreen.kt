@@ -15,8 +15,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
-import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
-import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency
 
@@ -50,7 +48,8 @@ fun InventoryScreen(viewModel: VetViewModel) {
                 viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.sellingMethod)
             },
             productNameSuggestions = productNameSuggestions,
-            onProductNameChange = { viewModel.onProductNameChange(it) }
+            onProductNameChange = { viewModel.onProductNameChange(it) },
+            allProducts = inventory // CORREGIDO: Se pasa la lista completa de productos
         )
     }
 
@@ -66,7 +65,8 @@ fun InventoryScreen(viewModel: VetViewModel) {
                 productToEdit = null
             },
             productNameSuggestions = productNameSuggestions,
-            onProductNameChange = { viewModel.onProductNameChange(it) }
+            onProductNameChange = { viewModel.onProductNameChange(it) },
+            allProducts = inventory // CORREGIDO: Se pasa la lista completa de productos
         )
     }
 
@@ -117,7 +117,8 @@ fun InventoryScreen(viewModel: VetViewModel) {
                         InventoryItem(
                             product = product,
                             onEdit = { productToEdit = it },
-                            onDelete = { productToDelete = it }
+                            onDelete = { productToDelete = it },
+                            onOpenContainer = { viewModel.openContainerForBulkSale(it) }
                         )
                     }
                     if (filteredProducts.isEmpty() && !isLoading) {
@@ -162,7 +163,8 @@ fun InventoryFilter(selectedFilter: String, onFilterSelected: (String) -> Unit) 
 fun InventoryItem(
     product: Product,
     onEdit: (Product) -> Unit,
-    onDelete: (Product) -> Unit
+    onDelete: (Product) -> Unit,
+    onOpenContainer: (Product) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
@@ -172,6 +174,7 @@ fun InventoryItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // CORREGIDO: Estructura de Columnas anidadas arreglada
             Column(modifier = Modifier.weight(1f)) {
                 Text(product.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                 Text(
@@ -179,13 +182,19 @@ fun InventoryItem(
                     else stringResource(R.string.inventory_item_type_product) + ": " + product.sellingMethod,
                     style = MaterialTheme.typography.bodySmall
                 )
+                if (product.isContainer) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = { onOpenContainer(product) }, enabled = product.stock >= 1) {
+                        Text("Abrir 1 para Venta a Granel")
+                    }
+                }
             }
             Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 8.dp)) {
                 Text(
                     text = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(product.price),
                     style = MaterialTheme.typography.bodyLarge
                 )
-                if (!product.isService && product.sellingMethod == SELLING_METHOD_BY_UNIT) {
+                if (!product.isService) {
                     Text(
                         text = stringResource(R.string.label_product_stock, formatCurrency(product.stock).replace(",00","")),
                         style = MaterialTheme.typography.bodyMedium

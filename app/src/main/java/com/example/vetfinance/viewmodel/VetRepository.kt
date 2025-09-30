@@ -1,4 +1,4 @@
-package com.example.vetfinance.viewmodel
+package com.example.vetfinance.data
 
 import android.content.Context
 import android.net.Uri
@@ -7,7 +7,7 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.room.withTransaction
 import com.example.vetfinance.R
-import com.example.vetfinance.data.*
+import com.example.vetfinance.data.Caritem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -53,7 +53,24 @@ class VetRepository @Inject constructor(
     suspend fun deleteProduct(product: Product) {
         productDao.delete(product)
     }
+    suspend fun performInventoryTransfer(containerId: String, containedId: String, amountToTransfer: Double) {
+        db.withTransaction {
+            val containerProduct = productDao.getProductById(containerId)
+            val containedProduct = productDao.getProductById(containedId)
 
+            if (containerProduct != null && containedProduct != null) {
+                if (containerProduct.stock >= 1) {
+                    // Restar 1 del contenedor (la bolsa)
+                    val updatedContainer = containerProduct.copy(stock = containerProduct.stock - 1)
+                    productDao.update(updatedContainer)
+
+                    // Sumar la cantidad al producto a granel
+                    val updatedContained = containedProduct.copy(stock = containedProduct.stock + amountToTransfer)
+                    productDao.update(updatedContained)
+                }
+            }
+        }
+    }
     suspend fun deleteClient(client: Client) {
         clientDao.delete(client)
     }
@@ -94,6 +111,11 @@ class VetRepository @Inject constructor(
         return appointmentDao.getAppointmentsForDateRange(startOfDay, endOfDay)
     }
 
+    // Exposes the DAO query for a date range
+    fun getAppointmentsForDate(startDate: Long, endDate: Long): Flow<List<AppointmentWithDetails>> {
+        return appointmentDao.getAppointmentsForDateRange(startDate, endDate)
+    }
+
     fun getTopSellingProducts(startDate: Long, endDate: Long, limit: Int): Flow<List<TopSellingProduct>> = saleDao.getTopSellingProducts(startDate, endDate, limit)
     fun getTotalDebt(): Flow<Double?> = clientDao.getTotalDebt()
     fun getTotalInventoryValue(): Flow<Double?> = productDao.getTotalInventoryValue()
@@ -122,52 +144,43 @@ class VetRepository @Inject constructor(
     suspend fun markTreatmentAsCompleted(treatmentId: String) = treatmentDao.markAsCompleted(treatmentId)
 
     suspend fun makePayment(client: Client, amount: Double) {
-        // No procesar pagos de cero o negativos
         if (amount <= 0) return
-
-        // Calcular el monto real a pagar, que no puede exceder la deuda
         val actualPaymentAmount = min(amount, client.debtAmount)
-
-        // Si el monto a pagar es cero (porque la deuda ya era cero), no hacer nada
         if (actualPaymentAmount <= 0) return
 
-        // Crear el registro de pago con el monto correcto
         val payment = Payment(clientIdFk = client.clientId, amount = actualPaymentAmount, paymentDate = System.currentTimeMillis())
         paymentDao.insert(payment)
 
-        // Actualizar la deuda del cliente
         val newDebt = client.debtAmount - actualPaymentAmount
-        clientDao.updateDebt(client.clientId, if (newDebt < 0.01) 0.0 else newDebt) // Usar < 0.01 por seguridad con doubles
+        clientDao.updateDebt(client.clientId, if (newDebt < 0.01) 0.0 else newDebt)
     }
 
-
-    suspend fun insertSale(sale: Sale, items: Map<String, Pair<Double, Double>>) {
+    // --- FUNCTION REPLACED WITH INTEGRATED VERSION ---
+    suspend fun insertSale(sale: Sale, items: List<CartItem>) {
         db.withTransaction {
             saleDao.insertSale(sale)
-            items.forEach { (productId, quantityAndPrice) ->
-                val quantity = quantityAndPrice.first
-                val priceAtTimeOfSale = quantityAndPrice.second
-
+            items.forEach { cartItem ->
+                val product = cartItem.product
                 val crossRef = SaleProductCrossRef(
                     saleId = sale.saleId,
-                    productId = productId,
-                    quantitySold = quantity,
-                    priceAtTimeOfSale = priceAtTimeOfSale
+                    productId = product.productId,
+                    quantitySold = cartItem.quantity,
+                    // Use the manual price if it exists, otherwise use the product's price.
+                    priceAtTimeOfSale = cartItem.overridePrice ?: product.price,
+                    notes = cartItem.notes,
+                    overridePrice = cartItem.overridePrice
                 )
                 saleDao.insertSaleProductCrossRef(crossRef)
 
-                val product = productDao.getProductById(productId)
-                if (product != null) {
-                    if (product.sellingMethod != SELLING_METHOD_DOSE_ONLY && !product.isService) {
-                        val updatedStock = product.stock - quantity
-                        updateProduct(product.copy(stock = updatedStock))
-                    }
+                // The logic to discount stock remains the same
+                if (product.sellingMethod != SELLING_METHOD_DOSE_ONLY && !product.isService) {
+                    val updatedStock = product.stock - cartItem.quantity
+                    updateProduct(product.copy(stock = updatedStock))
                 }
             }
         }
     }
 
-    // Función de utilidad para convertir una lista a un string CSV
     private fun <T> listToCsvString(data: List<T>, headers: Array<String>, recordToStringArray: (T) -> Array<String>): String {
         StringWriter().use { writer ->
             CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(*headers)).use { csvPrinter ->
@@ -178,10 +191,7 @@ class VetRepository @Inject constructor(
             return writer.toString()
         }
     }
-    // AÑADIDO: Nueva función para exponer la consulta del DAO
-    fun getAppointmentsForDate(startDate: Long, endDate: Long): Flow<List<AppointmentWithDetails>> {
-        return appointmentDao.getAppointmentsForDateRange(startDate, endDate)
-    }
+
     suspend fun exportarDatosCompletos(): Map<String, String> = withContext(Dispatchers.IO) {
         val csvMap = mutableMapOf<String, String>()
 
@@ -195,11 +205,11 @@ class VetRepository @Inject constructor(
         }
 
         // Products
-        val productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod")
+        val productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod", "lowStockThreshold")
         val products = productDao.getAllProducts().first()
         if (products.isNotEmpty()) {
             csvMap["products.csv"] = listToCsvString(products, productHeaders) { product ->
-                arrayOf(product.productId, product.name, product.price.toString(), product.cost.toString(), product.stock.toString(), product.isService.toString(), product.sellingMethod)
+                arrayOf(product.productId, product.name, product.price.toString(), product.cost.toString(), product.stock.toString(), product.isService.toString(), product.sellingMethod, product.lowStockThreshold?.toString() ?: "")
             }
         }
 
@@ -249,11 +259,11 @@ class VetRepository @Inject constructor(
         }
 
         // SaleProductCrossRefs
-        val saleProductCrossRefHeaders = arrayOf("saleId", "productId", "quantitySold", "priceAtTimeOfSale")
+        val saleProductCrossRefHeaders = arrayOf("saleId", "productId", "quantitySold", "priceAtTimeOfSale", "notes", "overridePrice")
         val saleProductCrossRefs = saleDao.getAllSaleProductCrossRefsSimple().first()
         if (saleProductCrossRefs.isNotEmpty()){
             csvMap["sale_product_cross_refs.csv"] = listToCsvString(saleProductCrossRefs, saleProductCrossRefHeaders) { cr ->
-                arrayOf(cr.saleId, cr.productId, cr.quantitySold.toString(), cr.priceAtTimeOfSale.toString())
+                arrayOf(cr.saleId, cr.productId, cr.quantitySold.toString(), cr.priceAtTimeOfSale.toString(), cr.notes ?: "", cr.overridePrice?.toString() ?: "")
             }
         }
 
@@ -348,12 +358,12 @@ class VetRepository @Inject constructor(
     }
 
     private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r["phone"].ifEmpty { null }, r.get("address")?.ifEmpty { null }, r["debtAmount"].toDouble())
-    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["productId"], r["name"], r["price"].toDouble(), r["cost"].toDouble(), r["stock"].toDouble(), r["isService"].toBoolean(), r.get("sellingMethod") ?: SELLING_METHOD_BY_UNIT)
+    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["productId"], r["name"], r["price"].toDouble(), r["cost"].toDouble(), r["stock"].toDouble(), r["isService"].toBoolean(), r.get("sellingMethod") ?: SELLING_METHOD_BY_UNIT, r.get("lowStockThreshold")?.toDoubleOrNull())
     private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r["birthDate"].toLongOrNull(), r["breed"].ifEmpty { null }, r["allergies"].ifEmpty { null })
     private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r["serviceId"].ifEmpty { null }, r["treatmentDate"].toLong(), r["description"]?.ifEmpty { null }, r["nextTreatmentDate"].toLongOrNull(), r["isNextTreatmentCompleted"].toBoolean(), r["symptoms"].ifEmpty { null }, r["diagnosis"].ifEmpty { null }, r["treatmentPlan"].ifEmpty { null }, r["weight"].toDoubleOrNull(), r["temperature"]?.ifEmpty { null })
     private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["date"].toLong(), r["totalAmount"].toDouble(), r["clientIdFk"]?.ifEmpty { null })
     private fun parseTransaction(r: org.apache.commons.csv.CSVRecord) = Transaction(r["transactionId"], r["saleIdFk"].ifEmpty { null }, r["date"].toLong(), r["type"], r["amount"].toDouble(), r["description"].ifEmpty { null })
     private fun parsePayment(r: org.apache.commons.csv.CSVRecord) = Payment(r["paymentId"], r["clientIdFk"], r["amount"].toDouble(), r["paymentDate"].toLong())
-    private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(r["saleId"], r["productId"], r["quantitySold"].toDouble(), r["priceAtTimeOfSale"].toDouble())
+    private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(r["saleId"], r["productId"], r["quantitySold"].toDouble(), r["priceAtTimeOfSale"].toDouble(), r.get("notes")?.ifEmpty { null }, r.get("overridePrice")?.toDoubleOrNull())
     private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], r["appointmentDate"].toLong(), r["description"]?.ifEmpty { null })
 }

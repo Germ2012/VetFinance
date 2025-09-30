@@ -18,5 +18,9 @@ data class Product(
     var stock: Double,
     val isService: Boolean,
     var sellingMethod: String = SELLING_METHOD_BY_UNIT,
-    var lowStockThreshold: Double? = null
+    var lowStockThreshold: Double? = null,
+    val isContainer: Boolean = false, // Es un producto contenedor (ej. la bolsa)
+    val containedProductId: String? = null, // ID del producto a granel que contiene
+    val containerSize: Double? = null // Tamaño del contenedor (ej. 25 para 25kg)
+
 )

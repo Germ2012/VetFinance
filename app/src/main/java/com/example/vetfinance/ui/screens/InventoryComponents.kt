@@ -5,8 +5,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
@@ -37,7 +39,8 @@ fun ProductDialog(
     onConfirm: (Product) -> Unit,
     onDelete: ((Product) -> Unit)? = null,
     productNameSuggestions: List<Product>,
-    onProductNameChange: (String) -> Unit
+    onProductNameChange: (String) -> Unit,
+    allProducts: List<Product>
 ) {
     val isEditing = product != null
     var name by remember { mutableStateOf(product?.name ?: "") }
@@ -49,7 +52,15 @@ fun ProductDialog(
     var lowStockThreshold by remember { mutableStateOf(product?.lowStockThreshold?.toString() ?: "") }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    // Estados para la funcionalidad de contenedor
+    var isContainer by remember { mutableStateOf(product?.isContainer ?: false) }
+    var containerSize by remember { mutableStateOf(product?.containerSize?.toString() ?: "") }
+    var selectedContainedProduct by remember { mutableStateOf<Product?>(null) }
+
+    LaunchedEffect(product) {
+        if (product?.isContainer == true && product.containedProductId != null) {
+            selectedContainedProduct = allProducts.find { it.productId == product.containedProductId }
+        }
         if (!isEditing) {
             onProductNameChange(name)
         }
@@ -67,14 +78,10 @@ fun ProductDialog(
                         showDeleteConfirmation = false
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text(stringResource(R.string.delete_button))
-                }
+                ) { Text(stringResource(R.string.delete_button)) }
             },
             dismissButton = {
-                Button(onClick = { showDeleteConfirmation = false }) {
-                    Text(stringResource(R.string.cancel_button))
-                }
+                Button(onClick = { showDeleteConfirmation = false }) { Text(stringResource(R.string.cancel_button)) }
             }
         )
     }
@@ -83,7 +90,10 @@ fun ProductDialog(
         onDismissRequest = onDismiss,
         title = { Text(if (isEditing) stringResource(R.string.product_dialog_edit_title) else stringResource(R.string.product_dialog_add_title)) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 OutlinedTextField(
                     value = name,
                     onValueChange = {
@@ -141,9 +151,7 @@ fun ProductDialog(
                     value = stock,
                     onValueChange = {
                         val filtered = it.filter { char -> char.isDigit() || char == '.' }
-                        if (filtered.count { char -> char == '.' } <= 1) {
-                            stock = filtered
-                        }
+                        if (filtered.count { char -> char == '.' } <= 1) stock = filtered
                     },
                     label = { Text(stringResource(R.string.product_dialog_stock_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -166,10 +174,57 @@ fun ProductDialog(
                     OutlinedTextField(
                         value = lowStockThreshold,
                         onValueChange = { lowStockThreshold = it.filter { char -> char.isDigit() || char == '.' } },
-                        label = { Text(stringResource(R.string.low_stock_threshold_label)) }, // <-- CORRECCIÓN APLICADA
+                        label = { Text(stringResource(R.string.low_stock_threshold_label)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = isContainer, onCheckedChange = { isContainer = it })
+                    Text(stringResource(R.string.is_container_product_checkbox))
+                }
+
+                if (isContainer) {
+                    OutlinedTextField(
+                        value = containerSize,
+                        onValueChange = { containerSize = it },
+                        label = { Text(stringResource(R.string.container_size_label)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
+                    )
+
+                    var expanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = !expanded },
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = selectedContainedProduct?.name ?: stringResource(R.string.select_bulk_product_placeholder),
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text(stringResource(R.string.contained_product_label))},
+                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                            modifier = Modifier.menuAnchor().fillMaxWidth()
+                        )
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            allProducts.filter { !it.isContainer && !it.isService }.forEach { prod ->
+                                DropdownMenuItem(
+                                    text = { Text(prod.name) },
+                                    onClick = {
+                                        selectedContainedProduct = prod
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
                 }
             }
         },
@@ -185,7 +240,10 @@ fun ProductDialog(
                         cost = cost.replace(".", "").toDoubleOrNull() ?: 0.0,
                         isService = isService,
                         sellingMethod = if (isService) SELLING_METHOD_DOSE_ONLY else selectedSellingMethod,
-                        lowStockThreshold = if (selectedSellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) lowStockThreshold.toDoubleOrNull() else null
+                        lowStockThreshold = if (selectedSellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) lowStockThreshold.toDoubleOrNull() else null,
+                        isContainer = isContainer,
+                        containerSize = if (isContainer) containerSize.toDoubleOrNull() else null,
+                        containedProductId = if (isContainer) selectedContainedProduct?.productId else null
                     )
                     onConfirm(newOrUpdatedProduct)
                 },

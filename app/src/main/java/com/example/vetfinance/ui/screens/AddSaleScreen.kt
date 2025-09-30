@@ -8,12 +8,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -25,6 +27,7 @@ import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
 import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
+import com.example.vetfinance.data.CartItem
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency
 import java.util.Locale
@@ -42,11 +45,15 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     val showFractionalDialog by viewModel.showFractionalSaleDialog.collectAsState()
     val productForFractionalSale by viewModel.productForFractionalSale.collectAsState()
 
+    val showDoseDialog by viewModel.showDoseSaleDialog.collectAsState()
+    val productForDoseSale by viewModel.productForDoseSale.collectAsState()
+
     DisposableEffect(Unit) {
         onDispose {
             viewModel.clearCart()
             viewModel.clearProductSearchQuery()
             viewModel.dismissFractionalSaleDialog()
+            viewModel.dismissDoseSaleDialog()
         }
     }
 
@@ -56,12 +63,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.addProduct(
-                    newProduct.name,
-                    newProduct.price,
-                    newProduct.stock,
-                    newProduct.cost,
-                    newProduct.isService,
-                    newProduct.sellingMethod
+                    newProduct.name, newProduct.price, newProduct.stock,
+                    newProduct.cost, newProduct.isService, newProduct.sellingMethod
                 )
             },
             productNameSuggestions = productNameSuggestions,
@@ -77,6 +80,17 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             onConfirm = { product, quantity ->
                 viewModel.addOrUpdateProductInCart(product, quantity)
                 viewModel.dismissFractionalSaleDialog()
+            }
+        )
+    }
+
+    val currentProductForDoseSale = productForDoseSale
+    if (showDoseDialog && currentProductForDoseSale != null) {
+        DoseSaleDialog(
+            product = currentProductForDoseSale,
+            onDismiss = { viewModel.dismissDoseSaleDialog() },
+            onConfirm = { product, notes, price ->
+                viewModel.addOrUpdateDoseInCart(product, notes, price)
             }
         )
     }
@@ -100,9 +114,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         bottomBar = {
             BottomAppBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -112,9 +124,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                         fontWeight = FontWeight.Bold
                     )
                     Button(
-                        onClick = {
-                            viewModel.finalizeSale { navController.popBackStack() }
-                        },
+                        onClick = { viewModel.finalizeSale { navController.popBackStack() } },
                         enabled = cart.isNotEmpty()
                     ) {
                         Text(stringResource(R.string.button_confirm_sale))
@@ -127,9 +137,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.onProductSearchQueryChange(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
                 label = { Text(stringResource(R.string.placeholder_search_product_service)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.content_description_search)) },
                 trailingIcon = {
@@ -142,30 +150,53 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 singleLine = true
             )
 
+            // --- SECCIÓN DEL CARRITO ---
+            if (cart.isNotEmpty()) {
+                Text(
+                    text = stringResource(R.string.shopping_cart_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+                LazyColumn(
+                    modifier = Modifier.weight(1f), // Ocupa el espacio disponible
+                    contentPadding = PaddingValues(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(cart, key = { it.cartItemId }) { cartItem ->
+                        CartItemRow(
+                            cartItem = cartItem,
+                            onRemove = { viewModel.removeFromCart(cartItem) },
+                            onAdd = { viewModel.addToCart(cartItem.product) }
+                        )
+                    }
+                }
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+            }
+
+            // --- SECCIÓN DE INVENTARIO ---
             LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(inventory, key = { it.productId }) { product ->
                     ProductSelectionItem(
                         product = product,
-                        quantityInCart = cart.entries.find { it.key.productId == product.productId }?.value ?: 0.0,
+                        quantityInCart = cart.filter { it.product.productId == product.productId }.sumOf { it.quantity },
                         onAdd = {
-                            if (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) {
-                                viewModel.openFractionalSaleDialog(product)
-                            } else {
-                                viewModel.addToCart(product)
+                            when (product.sellingMethod) {
+                                SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> viewModel.openFractionalSaleDialog(product)
+                                SELLING_METHOD_DOSE_ONLY -> viewModel.openDoseSaleDialog(product)
+                                else -> viewModel.addToCart(product)
                             }
                         },
                         onRemove = {
-                            viewModel.removeFromCart(product)
+                            val itemToRemove = cart.findLast { it.product.productId == product.productId }
+                            if (itemToRemove != null) {
+                                viewModel.removeFromCart(itemToRemove)
+                            }
                         },
                         onQuantityChange = { qty ->
-                            if (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) {
-                                viewModel.addOrUpdateProductInCart(product, qty)
-                            } else {
-                                viewModel.addOrUpdateProductInCart(product, qty.toInt().toDouble())
-                            }
+                            viewModel.addOrUpdateProductInCart(product, qty)
                         }
                     )
                 }
@@ -180,17 +211,10 @@ fun FractionalSaleDialog(
     onDismiss: () -> Unit,
     onConfirm: (product: Product, quantity: Double) -> Unit
 ) {
-    var inputMode by remember {
-        mutableStateOf(
-            if (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) "amount"
-            else "quantity"
-        )
-    }
+    var inputMode by remember { mutableStateOf(if (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) "amount" else "quantity") }
     var amountString by remember { mutableStateOf("") }
     var quantityString by remember { mutableStateOf("") }
     var calculatedValue by remember { mutableStateOf("") }
-
-    // CORREGIDO: Obtenemos los textos de los recursos aquí fuera de los lambdas.
     val quantityUnitFormat = stringResource(R.string.quantity_unit_format)
     val gsPrefix = stringResource(R.string.text_prefix_gs)
     val invalidPriceMsg = stringResource(R.string.error_invalid_product_price)
@@ -213,16 +237,10 @@ fun FractionalSaleDialog(
 
                 if (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        RadioButton(
-                            selected = inputMode == "amount",
-                            onClick = { inputMode = "amount"; quantityString = ""; amountString = ""; calculatedValue = "" }
-                        )
+                        RadioButton(selected = inputMode == "amount", onClick = { inputMode = "amount"; quantityString = ""; amountString = ""; calculatedValue = "" })
                         Text(stringResource(R.string.radio_button_by_amount))
                         Spacer(modifier = Modifier.width(8.dp))
-                        RadioButton(
-                            selected = inputMode == "quantity",
-                            onClick = { inputMode = "quantity"; quantityString = ""; amountString = ""; calculatedValue = "" }
-                        )
+                        RadioButton(selected = inputMode == "quantity", onClick = { inputMode = "quantity"; quantityString = ""; amountString = ""; calculatedValue = "" })
                         Text(stringResource(R.string.radio_button_by_quantity, unitName))
                     }
                     Spacer(modifier = Modifier.height(8.dp))
@@ -235,12 +253,11 @@ fun FractionalSaleDialog(
                             val filtered = it.filter { char -> char.isDigit() }
                             amountString = filtered
                             val amount = filtered.toDoubleOrNull() ?: 0.0
-                            if (product.price > 0) {
+                            calculatedValue = if (product.price > 0) {
                                 val qty = amount / product.price
-                                // CORREGIDO: Usamos la variable de texto pre-cargada
-                                calculatedValue = quantityUnitFormat.format(String.format(Locale.getDefault(), "%.3f", qty), unitName)
+                                quantityUnitFormat.format(String.format(Locale.getDefault(), "%.3f", qty), unitName)
                             } else {
-                                calculatedValue = invalidPriceMsg
+                                invalidPriceMsg
                             }
                         },
                         label = { Text(stringResource(R.string.label_amount_gs)) },
@@ -258,7 +275,6 @@ fun FractionalSaleDialog(
                                 quantityString = filtered
                                 val qty = filtered.toDoubleOrNull() ?: 0.0
                                 val totalAmount = qty * product.price
-                                // CORREGIDO: Usamos la variable de texto pre-cargada
                                 calculatedValue = "$gsPrefix ${formatCurrency(totalAmount)}"
                             }
                         },
@@ -270,13 +286,8 @@ fun FractionalSaleDialog(
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
-                ) {
-                    TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.cancel_button))
-                    }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(onClick = {
                         val finalQuantity = if (inputMode == "amount" && product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) {
@@ -289,6 +300,107 @@ fun FractionalSaleDialog(
                             onConfirm(product, finalQuantity)
                         }
                     }) {
+                        Text(stringResource(R.string.button_confirm))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(cartItem.product.name, fontWeight = FontWeight.Bold)
+                    if (cartItem.notes != null) {
+                        Text(
+                            text = stringResource(R.string.notes_prefix, cartItem.notes),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontStyle = FontStyle.Italic
+                        )
+                    }
+                }
+                Text(
+                    text = formatCurrency(cartItem.overridePrice ?: (cartItem.product.price * cartItem.quantity)),
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.align(Alignment.End)
+            ) {
+                IconButton(onClick = onRemove) {
+                    Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.content_description_remove_one))
+                }
+                Text(
+                    text = if (cartItem.quantity % 1.0 == 0.0) cartItem.quantity.toInt().toString() else "%.2f".format(cartItem.quantity),
+                    modifier = Modifier.padding(horizontal = 8.dp)
+                )
+                IconButton(
+                    onClick = onAdd,
+                    enabled = cartItem.product.sellingMethod == SELLING_METHOD_BY_UNIT
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.content_description_add_one))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun DoseSaleDialog(
+    product: Product,
+    onDismiss: () -> Unit,
+    onConfirm: (product: Product, notes: String, price: Double) -> Unit
+) {
+    var notes by remember { mutableStateOf("") }
+    var priceString by remember { mutableStateOf(product.price.toLong().toString()) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Card {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(stringResource(R.string.dose_dialog_title, product.name), style = MaterialTheme.typography.titleLarge)
+
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text(stringResource(R.string.dose_dialog_notes_label)) },
+                    modifier = Modifier.fillMaxWidth().height(100.dp)
+                )
+
+                OutlinedTextField(
+                    value = priceString,
+                    onValueChange = { priceString = it.filter { char -> char.isDigit() } },
+                    label = { Text(stringResource(R.string.dose_dialog_price_label)) },
+                    prefix = { Text(stringResource(R.string.text_prefix_gs)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(
+                        onClick = {
+                            val finalPrice = priceString.toDoubleOrNull() ?: product.price
+                            onConfirm(product, notes, finalPrice)
+                        },
+                        enabled = priceString.isNotBlank()
+                    ) {
                         Text(stringResource(R.string.button_confirm))
                     }
                 }

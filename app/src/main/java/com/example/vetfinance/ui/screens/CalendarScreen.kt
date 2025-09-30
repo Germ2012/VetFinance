@@ -69,7 +69,6 @@ fun CalendarScreen(viewModel: VetViewModel) {
         firstDayOfWeek = firstDayOfWeek
     )
 
-    // AÑADIDO: Detectar la orientación del dispositivo
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -80,16 +79,16 @@ fun CalendarScreen(viewModel: VetViewModel) {
             }
         }
     ) { paddingValues ->
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            // CORREGIDO: Se elige el tipo de calendario según la orientación
-            if (isLandscape) {
-                // Calendario Vertical para modo horizontal
+        // --- LÓGICA DE DISEÑO INTEGRADA ---
+        // Se decide el layout principal (Row o Column) según la orientación
+        if (isLandscape) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
                 VerticalCalendar(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f), // Ocupa la mitad del ancho
                     state = state,
                     dayContent = { day -> Day(day, selectedDate == day.date) { viewModel.onCalendarDateSelected(it.date) } },
                     monthHeader = { month ->
@@ -98,25 +97,29 @@ fun CalendarScreen(viewModel: VetViewModel) {
                         MonthHeader(daysOfWeek = daysOfWeek, monthName = "$monthName ${month.yearMonth.year}")
                     }
                 )
-            } else {
-                // Calendario Horizontal para modo vertical
-                Column(modifier = Modifier.weight(1f)) {
-                    HorizontalCalendar(
-                        state = state,
-                        dayContent = { day -> Day(day, selectedDate == day.date) { viewModel.onCalendarDateSelected(it.date) } },
-                        monthHeader = { month ->
-                            val daysOfWeek = month.weekDays.first().map { it.date.dayOfWeek }
-                            val monthName = month.yearMonth.month.getDisplayName(TextStyle.FULL, Locale.forLanguageTag("es-ES")).replaceFirstChar { it.uppercase() }
-                            MonthHeader(daysOfWeek = daysOfWeek, monthName = "$monthName ${month.yearMonth.year}")
-                        }
-                    )
+                Column(modifier = Modifier.weight(1f)) { // Ocupa la otra mitad del ancho
+                    AppointmentList(appointments = appointments)
                 }
             }
-
-            // La lista de citas ahora ocupa el espacio restante o toda la pantalla si es necesario
-            Column(modifier = Modifier.weight(1f)) {
-                HorizontalDivider()
-                AppointmentList(appointments = appointments)
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                HorizontalCalendar(
+                    modifier = Modifier.weight(1f), // Ocupa la mitad de la altura
+                    state = state,
+                    dayContent = { day -> Day(day, selectedDate == day.date) { viewModel.onCalendarDateSelected(it.date) } },
+                    monthHeader = { month ->
+                        val daysOfWeek = month.weekDays.first().map { it.date.dayOfWeek }
+                        val monthName = month.yearMonth.month.getDisplayName(TextStyle.FULL, Locale.forLanguageTag("es-ES")).replaceFirstChar { it.uppercase() }
+                        MonthHeader(daysOfWeek = daysOfWeek, monthName = "$monthName ${month.yearMonth.year}")
+                    }
+                )
+                Column(modifier = Modifier.weight(1f)) { // Ocupa la otra mitad de la altura
+                    AppointmentList(appointments = appointments)
+                }
             }
         }
     }
@@ -150,8 +153,7 @@ fun MonthHeader(daysOfWeek: List<DayOfWeek>, monthName: String) {
 fun Day(day: CalendarDay, isSelected: Boolean, onClick: (CalendarDay) -> Unit) {
     Box(
         modifier = Modifier
-            .aspectRatio(if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) 0.7f else 1f) // Ajusta el aspect ratio en landscape
-            .padding(4.dp)
+            .padding(4.dp) // Se quita aspectRatio para que la celda se adapte
             .clip(CircleShape)
             .background(color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
             .border(
@@ -171,22 +173,26 @@ fun Day(day: CalendarDay, isSelected: Boolean, onClick: (CalendarDay) -> Unit) {
 
 @Composable
 fun AppointmentList(appointments: List<AppointmentWithDetails>) {
-    if (appointments.isEmpty()) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(stringResource(R.string.no_appointments_for_selected_day))
-        }
-    } else {
-        LazyColumn(
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(appointments) { appointmentDetails ->
-                AppointmentItem(appointmentDetails)
+    Column {
+        HorizontalDivider()
+        if (appointments.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(stringResource(R.string.no_appointments_for_selected_day))
+            }
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxSize() // Asegura que la lista ocupe todo el espacio
+            ) {
+                items(appointments) { appointmentDetails ->
+                    AppointmentItem(appointmentDetails)
+                }
             }
         }
     }
@@ -199,7 +205,9 @@ fun AppointmentItem(details: AppointmentWithDetails) {
             Text(details.pet.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(stringResource(R.string.owner_label, details.client.name), style = MaterialTheme.typography.bodyMedium)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(details.appointment.description ?: "", style = MaterialTheme.typography.bodyLarge)
+            if (!details.appointment.description.isNullOrBlank()) {
+                Text(details.appointment.description, style = MaterialTheme.typography.bodyLarge)
+            }
         }
     }
 }

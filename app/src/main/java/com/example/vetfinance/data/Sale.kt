@@ -44,7 +44,9 @@ data class SaleProductCrossRef(
     val saleId: String,
     val productId: String,
     val quantitySold: Double,
-    val priceAtTimeOfSale: Double
+    val priceAtTimeOfSale: Double,
+    val notes: String? = null,
+    val overridePrice: Double? = null
 )
 
 data class SaleWithProducts(

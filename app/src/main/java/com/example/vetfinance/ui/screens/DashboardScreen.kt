@@ -27,6 +27,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import com.example.vetfinance.data.AppointmentWithDetails
+
 @Composable
 fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val salesToday by viewModel.salesSummaryToday.collectAsState()

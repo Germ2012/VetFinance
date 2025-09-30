@@ -185,7 +185,6 @@
     <string name="filter_by_date_chip">Filtrar por fecha</string>
     <string name="no_sales_for_date">No hay ventas registradas para la fecha seleccionada.</string>
     <string name="no_sales_recorded">Aún no se han registrado ventas.</string>
-    <string name="low_stock_threshold_label">Umbral de Alerta de Stock (Opcional)</string>
     <string name="sale_item_title">Venta #%1$s</string>
     <string name="total_amount_label">Total: Gs. %1$s</string>
     <string name="period_day">Día</string>
@@ -199,4 +198,16 @@
     <string name="unit_kg">kg</string>
     <string name="unit_unit">unid.</string>
     <string name="unit_dose">dosis</string>
+    <string name="dose_dialog_title">Detalle de %1$s</string>
+    <string name="dose_dialog_notes_label">Productos/medicamentos usados (opcional)</string>
+    <string name="dose_dialog_price_label">Precio Total del Servicio (Gs.)</string>
+    <string name="shopping_cart_title">Carrito de Venta</string>
+    <string name="notes_prefix">Notas:</string>
+    <string name="content_description_remove_one">Quitar uno</string>
+    <string name="content_description_add_one">Agregar uno</string>
+    <string name="low_stock_threshold_label">Umbral de Alerta de Stock (Opcional)</string>
+    <string name="is_container_product_checkbox">Es un producto contenedor (ej. Bolsa)</string>
+    <string name="container_size_label">Tamaño del contenedor (ej. 25)</string>
+    <string name="select_bulk_product_placeholder">Seleccionar producto a granel</string>
+    <string name="contained_product_label">Producto a granel que contiene</string>
 </resources>
