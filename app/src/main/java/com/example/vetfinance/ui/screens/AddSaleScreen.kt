@@ -50,6 +50,9 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     val showDoseDialog by viewModel.showDoseSaleDialog.collectAsState()
     val productForDoseSale by viewModel.productForDoseSale.collectAsState()
 
+    // --- CÓDIGO AÑADIDO ---
+    val saleTypeDialogProduct by viewModel.saleTypeDialogProduct.collectAsState()
+
     DisposableEffect(Unit) {
         onDispose {
             viewModel.clearCart()
@@ -96,6 +99,16 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         )
     }
 
+    // --- CÓDIGO AÑADIDO: Lógica para mostrar el nuevo diálogo ---
+    if (saleTypeDialogProduct != null) {
+        SaleTypeDialog(
+            product = saleTypeDialogProduct!!,
+            viewModel = viewModel,
+            allProducts = allProductsList
+        )
+    }
+
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -115,7 +128,9 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         bottomBar = {
             BottomAppBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -138,7 +153,9 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.onProductSearchQueryChange(it) },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 label = { Text(stringResource(R.string.placeholder_search_product_service)) },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.content_description_search)) },
                 trailingIcon = {
@@ -183,10 +200,14 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                     ProductSelectionItem(
                         product = product,
                         quantityInCart = cart.filter { it.product.productId == product.productId }.sumOf { it.quantity },
+                        // --- LÓGICA MODIFICADA ---
                         onAdd = {
-                            when (product.sellingMethod) {
-                                SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> viewModel.openFractionalSaleDialog(product)
-                                SELLING_METHOD_DOSE_ONLY -> viewModel.openDoseSaleDialog(product)
+                            when {
+                                product.isContainer -> {
+                                    viewModel.openSaleTypeDialog(product)
+                                }
+                                product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> viewModel.openFractionalSaleDialog(product)
+                                product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> viewModel.openDoseSaleDialog(product)
                                 else -> viewModel.addToCart(product)
                             }
                         },
@@ -377,7 +398,9 @@ fun DoseSaleDialog(
                     value = notes,
                     onValueChange = { notes = it },
                     label = { Text(stringResource(R.string.dose_dialog_notes_label)) },
-                    modifier = Modifier.fillMaxWidth().height(100.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp)
                 )
 
                 OutlinedTextField(
@@ -408,4 +431,51 @@ fun DoseSaleDialog(
             }
         }
     }
+}
+
+// --- NUEVO COMPOSABLE AÑADIDO ---
+@Composable
+fun SaleTypeDialog(
+    product: Product,
+    viewModel: VetViewModel,
+    allProducts: List<Product>
+) {
+    AlertDialog(
+        onDismissRequest = { viewModel.closeSaleTypeDialog() },
+        title = { Text("¿Cómo vender ${product.name}?") },
+        text = { Text("Elige si quieres vender la bolsa entera o una fracción a granel.") },
+        confirmButton = {
+            Column(modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp)) {
+                Button(
+                    onClick = {
+                        viewModel.addToCart(product) // Vende la bolsa entera
+                        viewModel.closeSaleTypeDialog()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Vender por Unidad (Bolsa Entera)")
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        val containedProduct = allProducts.find { it.productId == product.containedProductId }
+                        if (containedProduct != null) {
+                            viewModel.openFractionalSaleDialog(containedProduct)
+                        }
+                        viewModel.closeSaleTypeDialog()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Vender a Granel (Fraccionado)")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { viewModel.closeSaleTypeDialog() }) {
+                Text("Cancelar")
+            }
+        }
+    )
 }

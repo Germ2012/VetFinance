@@ -235,6 +235,10 @@ class VetViewModel @Inject constructor(
     private val _productForDoseSale = MutableStateFlow<Product?>(null)
     val productForDoseSale: StateFlow<Product?> = _productForDoseSale.asStateFlow()
 
+    // --- CÓDIGO AÑADIDO: Estado para el nuevo diálogo ---
+    private val _saleTypeDialogProduct = MutableStateFlow<Product?>(null)
+    val saleTypeDialogProduct: StateFlow<Product?> = _saleTypeDialogProduct.asStateFlow()
+
 
     init {
         viewModelScope.launch {
@@ -281,6 +285,14 @@ class VetViewModel @Inject constructor(
     fun dismissFractionalSaleDialog() { _productForFractionalSale.value = null; _showFractionalSaleDialog.value = false }
     fun openDoseSaleDialog(product: Product) { _productForDoseSale.value = product; _showDoseSaleDialog.value = true }
     fun dismissDoseSaleDialog() { _productForDoseSale.value = null; _showDoseSaleDialog.value = false }
+
+    // --- CÓDIGO AÑADIDO: Funciones para el nuevo diálogo ---
+    fun openSaleTypeDialog(product: Product) {
+        _saleTypeDialogProduct.value = product
+    }
+    fun closeSaleTypeDialog() {
+        _saleTypeDialogProduct.value = null
+    }
 
     private fun executeWithLoading(action: suspend () -> Unit) = viewModelScope.launch { _isLoading.value = true; try { action() } finally { _isLoading.value = false } }
     fun addProduct(product: Product) = executeWithLoading { repository.insertProduct(product); onDismissAddProductDialog() } // Modified addProduct
