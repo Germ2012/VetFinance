@@ -3,10 +3,10 @@ package com.example.vetfinance.data
 import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.Junction
 import androidx.room.PrimaryKey
 import androidx.room.Relation
-import java.util.Date // Asegúrate de que java.util.Date es la que usas
 import java.util.UUID
 
 @Entity(
@@ -18,12 +18,14 @@ import java.util.UUID
             childColumns = ["clientIdFk"],
             onDelete = ForeignKey.SET_NULL
         )
-    ]
+    ],
+    // AÑADIDO: Índice para la llave foránea
+    indices = [Index("clientIdFk")]
 )
 data class Sale(
     @PrimaryKey
     val saleId: String = UUID.randomUUID().toString(),
-    val date: Date,
+    val date: Long,
     val totalAmount: Double,
     val clientIdFk: String?
 )
@@ -34,28 +36,28 @@ data class Sale(
     foreignKeys = [
         ForeignKey(entity = Sale::class, parentColumns = ["saleId"], childColumns = ["saleId"]),
         ForeignKey(entity = Product::class, parentColumns = ["productId"], childColumns = ["productId"])
-    ]
+    ],
+    // AÑADIDO: Índice para la columna de la relación
+    indices = [Index("productId")]
 )
 data class SaleProductCrossRef(
     val saleId: String,
     val productId: String,
-    val quantity: Int,
-    val priceAtTimeOfSale: Double,
-    val isByFraction: Boolean,
-    val amount: Double?
+    val quantitySold: Double,
+    val priceAtTimeOfSale: Double
 )
 
 data class SaleWithProducts(
     @Embedded val sale: Sale,
     @Relation(
         parentColumn = "saleId",
-        entity = Product::class,
-        associateBy = Junction(value = SaleProductCrossRef::class, parentColumn = "saleId", entityColumn = "productId")
+        entityColumn = "productId",
+        associateBy = Junction(SaleProductCrossRef::class)
     )
     val products: List<Product>,
     @Relation(
         parentColumn = "saleId",
-        entityColumn = "saleId" // Esto debería referenciar SaleProductCrossRef.saleId
+        entityColumn = "saleId"
     )
     val crossRefs: List<SaleProductCrossRef>
 )

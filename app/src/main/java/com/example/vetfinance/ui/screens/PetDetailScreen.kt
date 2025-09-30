@@ -15,7 +15,6 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Treatment
-import com.example.vetfinance.data.SellingMethod // Added import
 import com.example.vetfinance.viewmodel.VetViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -41,14 +40,16 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
             services = services,
             onDismiss = { showTreatmentDialog = false },
             onConfirm = { description, weight, temperature, symptoms, diagnosis, treatmentPlan, nextDateMillis ->
+                // INTEGRADO: Se convierten los Strings a los tipos de datos correctos
+                // y se manejan los campos opcionales que pueden venir en blanco.
                 viewModel.addTreatment(
                     pet = petWithOwner.pet,
                     description = description,
-                    weight = weight,
-                    temperature = temperature,
-                    symptoms = symptoms,
-                    diagnosis = diagnosis,
-                    treatmentPlan = treatmentPlan,
+                    weight = weight.toDoubleOrNull(),
+                    temperature = temperature.ifBlank { null },
+                    symptoms = symptoms.ifBlank { null },
+                    diagnosis = diagnosis.ifBlank { null },
+                    treatmentPlan = treatmentPlan.ifBlank { null },
                     nextDate = nextDateMillis
                 )
                 showTreatmentDialog = false
@@ -65,7 +66,7 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
             product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.selling_method) // Added selling_method
+                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.sellingMethod)
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) }
@@ -119,12 +120,14 @@ fun TreatmentHistoryItem(treatment: Treatment) {
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold
             )
-            Text(text = stringResource(R.string.treatment_item_description_prefix, treatment.description))
+            // INTEGRADO: Se maneja la posible nulabilidad de la descripción.
+            Text(text = stringResource(R.string.treatment_item_description_prefix, treatment.description ?: ""))
             treatment.symptoms?.takeIf { it.isNotBlank() }?.let { Text(text = stringResource(R.string.treatment_item_symptoms_prefix, it)) }
             treatment.diagnosis?.takeIf { it.isNotBlank() }?.let { Text(text = stringResource(R.string.treatment_item_diagnosis_prefix, it)) }
             treatment.treatmentPlan?.takeIf { it.isNotBlank() }?.let { Text(text = stringResource(R.string.treatment_item_plan_prefix, it)) }
+            // INTEGRADO: Se usa 'let' para seguridad con nulos.
             treatment.weight?.let { Text(text = stringResource(R.string.treatment_item_weight_prefix, it.toString())) }
-            treatment.temperature?.let { Text(text = stringResource(R.string.treatment_item_temperature_prefix, it.toString())) }
+            treatment.temperature?.let { Text(text = stringResource(R.string.treatment_item_temperature_prefix, it)) }
             Text(text = nextDateString, style = MaterialTheme.typography.bodySmall)
         }
     }

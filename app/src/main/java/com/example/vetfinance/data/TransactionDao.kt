@@ -9,7 +9,7 @@ data class AppointmentWithDetails(
     @Embedded val appointment: Appointment,
     @Relation(
         parentColumn = "petIdFk",
-        entityColumn = "petId" // Corrected: was "id"
+        entityColumn = "petId"
     )
     val pet: Pet,
     @Relation(
@@ -19,7 +19,7 @@ data class AppointmentWithDetails(
     val client: Client
 )
 
-data class TopSellingProduct(val name: String, val totalSold: Int)
+data class TopSellingProduct(val name: String, val totalSold: Double)
 
 
 // --- DAOs ---
@@ -84,7 +84,7 @@ interface SaleDao {
     fun getAllSalesWithProducts(): Flow<List<SaleWithProducts>>
 
     @Query("""
-        SELECT p.name, SUM(sp.quantity) as totalSold
+        SELECT p.name, SUM(sp.quantitySold) as totalSold
         FROM sales_products_cross_ref AS sp
         JOIN sales AS s ON sp.saleId = s.saleId
         JOIN products AS p ON sp.productId = p.productId
@@ -94,6 +94,12 @@ interface SaleDao {
         LIMIT :limit
     """)
     fun getTopSellingProducts(startDate: Long, endDate: Long, limit: Int = 10): Flow<List<TopSellingProduct>>
+
+    // AÑADIDO: Funciones para exportación
+    @Query("SELECT * FROM sales")
+    fun getAllSalesSimple(): Flow<List<Sale>>
+    @Query("SELECT * FROM sales_products_cross_ref")
+    fun getAllSaleProductCrossRefsSimple(): Flow<List<SaleProductCrossRef>>
 }
 
 @Dao
@@ -130,6 +136,10 @@ interface PaymentDao {
 
     @Query("SELECT * FROM payments WHERE clientIdFk = :clientId ORDER BY paymentDate DESC")
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>>
+
+    // AÑADIDO: Función para exportación
+    @Query("SELECT * FROM payments")
+    fun getAllPaymentsSimple(): Flow<List<Payment>>
 }
 
 @Dao
@@ -146,6 +156,10 @@ interface PetDao {
     @androidx.room.Transaction
     @Query("SELECT * FROM pets ORDER BY name ASC")
     fun getAllPetsWithOwners(): Flow<List<PetWithOwner>>
+
+    // AÑADIDO: Función para exportación
+    @Query("SELECT * FROM pets")
+    fun getAllPetsSimple(): Flow<List<Pet>>
 }
 
 @Dao
@@ -164,6 +178,10 @@ interface TreatmentDao {
 
     @Query("UPDATE treatments SET isNextTreatmentCompleted = 1 WHERE treatmentId = :treatmentId")
     suspend fun markAsCompleted(treatmentId: String)
+
+    // AÑADIDO: Función para exportación
+    @Query("SELECT * FROM treatments")
+    fun getAllTreatmentsSimple(): Flow<List<Treatment>>
 }
 
 @Dao
@@ -186,4 +204,8 @@ interface AppointmentDao {
 
     @Query("DELETE FROM appointments")
     suspend fun deleteAllAppointments()
+
+    // AÑADIDO: Función para exportación
+    @Query("SELECT * FROM appointments")
+    fun getAllAppointmentsSimple(): Flow<List<Appointment>>
 }

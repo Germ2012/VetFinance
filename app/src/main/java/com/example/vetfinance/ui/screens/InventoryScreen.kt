@@ -15,7 +15,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
-import com.example.vetfinance.data.SellingMethod
+import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
+import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency
 
@@ -23,7 +24,7 @@ import ui.utils.formatCurrency
 @Composable
 fun InventoryScreen(viewModel: VetViewModel) {
     val showDialog by viewModel.showAddProductDialog.collectAsState()
-    val filter by viewModel.inventoryFilter.collectAsState() // This will hold localized filter string
+    val filter by viewModel.inventoryFilter.collectAsState()
     val inventory by viewModel.inventory.collectAsState()
     var productToEdit by remember { mutableStateOf<Product?>(null) }
     var productToDelete by remember { mutableStateOf<Product?>(null) }
@@ -37,17 +38,16 @@ fun InventoryScreen(viewModel: VetViewModel) {
         when (filter) {
             productsFilterText -> inventory.filter { !it.isService }
             servicesFilterText -> inventory.filter { it.isService }
-            else -> inventory // "Todos" or default
+            else -> inventory
         }
     }
 
-    // --- DIÁLOGOS ---
     if (showDialog) {
         ProductDialog(
             product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.selling_method)
+                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.sellingMethod)
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) }
@@ -113,7 +113,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(filteredProducts, key = { it.id }) { product ->
+                    items(filteredProducts, key = { it.productId }) { product ->
                         InventoryItem(
                             product = product,
                             onEdit = { productToEdit = it },
@@ -149,7 +149,7 @@ fun InventoryFilter(selectedFilter: String, onFilterSelected: (String) -> Unit) 
         filters.forEachIndexed { index, label ->
             SegmentedButton(
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = filters.size),
-                onClick = { onFilterSelected(label) }, // label is already localized
+                onClick = { onFilterSelected(label) },
                 selected = selectedFilter == label
             ) {
                 Text(label)
@@ -176,16 +176,16 @@ fun InventoryItem(
                 Text(product.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                 Text(
                     text = if (product.isService) stringResource(R.string.inventory_item_type_service)
-                           else stringResource(R.string.inventory_item_type_product, stringResource(product.selling_method.displayResId)), // <-- MODIFICADO AQUÍ
+                    else stringResource(R.string.inventory_item_type_product) + ": " + product.sellingMethod,
                     style = MaterialTheme.typography.bodySmall
                 )
             }
             Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 8.dp)) {
                 Text(
-                    text = stringResource(R.string.text_prefix_gs) + formatCurrency(product.price),
+                    text = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(product.price),
                     style = MaterialTheme.typography.bodyLarge
                 )
-                if (!product.isService && product.selling_method != SellingMethod.DOSE_ONLY) {
+                if (!product.isService && product.sellingMethod == SELLING_METHOD_BY_UNIT) {
                     Text(
                         text = stringResource(R.string.label_product_stock, formatCurrency(product.stock).replace(",00","")),
                         style = MaterialTheme.typography.bodyMedium

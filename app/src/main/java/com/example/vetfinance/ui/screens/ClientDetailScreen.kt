@@ -19,7 +19,7 @@ import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Payment
 import com.example.vetfinance.viewmodel.VetViewModel
-import ui.utils.formatCurrency // Importar formatCurrency
+import ui.utils.formatCurrency
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -32,7 +32,6 @@ fun ClientDetailScreen(
     navController: NavController
 ) {
     if (clientId.isBlank()) return
-    // Carga los pagos para este cliente específico una sola vez
     LaunchedEffect(key1 = clientId) {
         viewModel.loadPaymentsForClient(clientId)
     }
@@ -101,7 +100,7 @@ fun PaymentItem(payment: Payment) {
         ) {
             Text(sdf.format(date), style = MaterialTheme.typography.bodyLarge)
             Text(
-                text = stringResource(R.string.text_prefix_gs) + formatCurrency(payment.amountPaid),
+                text = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(payment.amount),
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary

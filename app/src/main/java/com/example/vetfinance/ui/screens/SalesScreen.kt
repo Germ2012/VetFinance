@@ -1,5 +1,3 @@
-// ruta: app/src/main/java/com/example/vetfinance/ui/screens/SalesScreen.kt
-
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.layout.*
@@ -21,7 +19,7 @@ import com.example.vetfinance.R
 import com.example.vetfinance.data.SaleWithProducts
 import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.VetViewModel
-import ui.utils.formatCurrency // Importar formatCurrency
+import ui.utils.formatCurrency
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.LocalDateTime
@@ -35,7 +33,7 @@ import java.util.Locale
 fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
     val filteredSales by viewModel.filteredSales.collectAsState()
     val selectedDate by viewModel.selectedSaleDateFilter.collectAsState()
-    val isLoading = filteredSales.isEmpty() && selectedDate == null // Consider loading only if no filter and no sales
+    val isLoading by viewModel.isLoading.collectAsState()
 
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
@@ -124,7 +122,7 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
             }
             Spacer(modifier = Modifier.height(16.dp))
 
-            if (isLoading) {
+            if (isLoading && filteredSales.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
@@ -140,7 +138,7 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                     }
                 } else {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(filteredSales) { saleWithProducts ->
+                        items(filteredSales, key = { it.sale.saleId }) { saleWithProducts ->
                             SaleItem(
                                 saleWithProducts = saleWithProducts,
                                 onDeleteClick = { saleToDelete = saleWithProducts }
@@ -171,7 +169,7 @@ fun SaleItem(saleWithProducts: SaleWithProducts, onDeleteClick: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.sale_item_title, saleWithProducts.sale.saleId.take(8)),
+                    text = stringResource(R.string.sale_item_title, saleWithProducts.sale.saleId.take(8).uppercase()),
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.weight(1f)
                 )
@@ -202,8 +200,18 @@ fun SaleItem(saleWithProducts: SaleWithProducts, onDeleteClick: () -> Unit) {
 
             if (saleWithProducts.crossRefs.isNotEmpty()) {
                 saleWithProducts.crossRefs.forEach { crossRef ->
-                    val product = saleWithProducts.products.find { it.id == crossRef.productId }
-                    Text(stringResource(R.string.sale_item_product_detail, formatCurrency(crossRef.quantity), product?.name ?: stringResource(R.string.unknown_product), formatCurrency(crossRef.priceAtTimeOfSale)))
+                    val product = saleWithProducts.products.find { it.productId == crossRef.productId }
+                    val quantityFormatted = if (crossRef.quantitySold % 1.0 == 0.0) {
+                        crossRef.quantitySold.toInt().toString()
+                    } else {
+                        String.format(Locale.getDefault(), "%.2f", crossRef.quantitySold)
+                    }
+                    Text(stringResource(
+                        R.string.sale_item_product_detail,
+                        quantityFormatted,
+                        product?.name ?: stringResource(R.string.unknown_product),
+                        formatCurrency(crossRef.priceAtTimeOfSale))
+                    )
                 }
             } else {
                 Text(stringResource(R.string.manual_sale_no_details), style = MaterialTheme.typography.bodySmall)

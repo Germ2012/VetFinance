@@ -22,12 +22,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavHostController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
-import com.example.vetfinance.data.SellingMethod // Assuming SellingMethod enum is here
+import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
+import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
+import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
 import com.example.vetfinance.viewmodel.VetViewModel
-import ui.utils.formatCurrency // Importar formatCurrency
-// Asegúrate de que esta importación esté presente si los archivos están en diferentes paquetes.
-// Si están en el mismo, es opcional.
-import com.example.vetfinance.ui.screens.ProductSelectionItem
+import ui.utils.formatCurrency
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,22 +52,16 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
 
     if (showAddProductDialog) {
         ProductDialog(
-            product = null, // Assuming ProductDialog can handle null for new product
+            product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
-            onConfirm = { newProduct -> // newProduct here should be a temporary data holder
-                // This part needs to align with ProductDialog's output and VetViewModel.addProduct
-                // Assuming newProduct contains a 'sellingMethodEnum: SellingMethod'
-                // Or if newProduct.selling_method is a string like "Por Unidad":
-                // val sm = SellingMethod.fromString(newProduct.selling_method) ?: SellingMethod.BY_UNIT // Fallback
-                // For now, I'll assume newProduct.selling_method is the enum type as expected by addProduct
-                // This might need adjustment based on ProductDialog implementation
+            onConfirm = { newProduct ->
                 viewModel.addProduct(
-                    newProduct.name, 
-                    newProduct.price, 
-                    newProduct.stock, 
-                    newProduct.cost, 
-                    newProduct.isService, 
-                    newProduct.selling_method // This expects SellingMethod enum
+                    newProduct.name,
+                    newProduct.price,
+                    newProduct.stock,
+                    newProduct.cost,
+                    newProduct.isService,
+                    newProduct.sellingMethod
                 )
             },
             productNameSuggestions = productNameSuggestions,
@@ -79,7 +72,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     val currentProductForFractionalSale = productForFractionalSale
     if (showFractionalDialog && currentProductForFractionalSale != null) {
         FractionalSaleDialog(
-            product = currentProductForFractionalSale, // Smart-cast to non-null
+            product = currentProductForFractionalSale,
             onDismiss = { viewModel.dismissFractionalSaleDialog() },
             onConfirm = { product, quantity ->
                 viewModel.addOrUpdateProductInCart(product, quantity)
@@ -153,25 +146,25 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(inventory) { product ->
+                items(inventory, key = { it.productId }) { product ->
                     ProductSelectionItem(
                         product = product,
-                        quantity = cart[product] ?: 0.0,
+                        quantityInCart = cart.entries.find { it.key.productId == product.productId }?.value ?: 0.0,
                         onAdd = {
-                            // Assuming Product.sellingMethod is String, and SellingMethod enum has stringValue
-                            if (product.sellingMethod == SellingMethod.BY_WEIGHT_OR_AMOUNT.stringValue || 
-                                product.sellingMethod == SellingMethod.BY_FRACTION.stringValue) { 
+                            if (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) {
                                 viewModel.openFractionalSaleDialog(product)
                             } else {
                                 viewModel.addToCart(product)
                             }
                         },
                         onRemove = {
-                             if (product.sellingMethod == SellingMethod.BY_WEIGHT_OR_AMOUNT.stringValue || 
-                                 product.sellingMethod == SellingMethod.BY_FRACTION.stringValue) { 
-                                viewModel.addOrUpdateProductInCart(product, 0.0) // This quita el producto
+                            viewModel.removeFromCart(product)
+                        },
+                        onQuantityChange = { qty ->
+                            if (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) {
+                                viewModel.addOrUpdateProductInCart(product, qty)
                             } else {
-                                viewModel.removeFromCart(product)
+                                viewModel.addOrUpdateProductInCart(product, qty.toInt().toDouble())
                             }
                         }
                     )
@@ -187,21 +180,24 @@ fun FractionalSaleDialog(
     onDismiss: () -> Unit,
     onConfirm: (product: Product, quantity: Double) -> Unit
 ) {
-    var inputMode by remember { 
+    var inputMode by remember {
         mutableStateOf(
-            if (product.sellingMethod == SellingMethod.BY_WEIGHT_OR_AMOUNT.stringValue) "amount" 
-            else "quantity" // Default a cantidad para BY_FRACTION (o si no es BY_WEIGHT_OR_AMOUNT)
-        ) 
+            if (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) "amount"
+            else "quantity"
+        )
     }
     var amountString by remember { mutableStateOf("") }
     var quantityString by remember { mutableStateOf("") }
-    var calculatedValue by remember { mutableStateof("") }
+    var calculatedValue by remember { mutableStateOf("") }
+
+    // CORREGIDO: Obtenemos los textos de los recursos aquí fuera de los lambdas.
+    val quantityUnitFormat = stringResource(R.string.quantity_unit_format)
+    val gsPrefix = stringResource(R.string.text_prefix_gs)
     val invalidPriceMsg = stringResource(R.string.error_invalid_product_price)
-    // Placeholder for unitName, this needs to be resolved based on SellingMethod enum or string resources
-    val unitName = when(SellingMethod.fromString(product.sellingMethod)){
-        SellingMethod.BY_WEIGHT_OR_AMOUNT -> stringResource(R.string.unit_kg) // Example
-        SellingMethod.BY_UNIT -> stringResource(R.string.unit_unit)   // Example
-        SellingMethod.DOSE_ONLY -> stringResource(R.string.unit_dose) // Example
+    val unitName = when (product.sellingMethod) {
+        SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> stringResource(R.string.unit_kg)
+        SELLING_METHOD_BY_UNIT -> stringResource(R.string.unit_unit)
+        SELLING_METHOD_DOSE_ONLY -> stringResource(R.string.unit_dose)
         else -> ""
     }
 
@@ -215,7 +211,7 @@ fun FractionalSaleDialog(
                 Text(stringResource(R.string.text_price_details, formatCurrency(product.price), unitName), style = MaterialTheme.typography.bodyMedium)
                 Spacer(modifier = Modifier.height(16.dp))
 
-                if (product.sellingMethod == SellingMethod.BY_WEIGHT_OR_AMOUNT.stringValue) {
+                if (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RadioButton(
                             selected = inputMode == "amount",
@@ -232,7 +228,7 @@ fun FractionalSaleDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                 }
 
-                if (inputMode == "amount" && product.sellingMethod == SellingMethod.BY_WEIGHT_OR_AMOUNT.stringValue) {
+                if (inputMode == "amount" && product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) {
                     OutlinedTextField(
                         value = amountString,
                         onValueChange = {
@@ -241,7 +237,8 @@ fun FractionalSaleDialog(
                             val amount = filtered.toDoubleOrNull() ?: 0.0
                             if (product.price > 0) {
                                 val qty = amount / product.price
-                                calculatedValue = stringResource(R.string.quantity_unit_format, formatCurrency(qty), unitName)
+                                // CORREGIDO: Usamos la variable de texto pre-cargada
+                                calculatedValue = quantityUnitFormat.format(String.format(Locale.getDefault(), "%.3f", qty), unitName)
                             } else {
                                 calculatedValue = invalidPriceMsg
                             }
@@ -249,10 +246,10 @@ fun FractionalSaleDialog(
                         label = { Text(stringResource(R.string.label_amount_gs)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
-                        prefix = { Text(stringResource(R.string.text_prefix_gs)) }
+                        prefix = { Text(gsPrefix) }
                     )
                     Text(stringResource(R.string.text_equivalent_to, calculatedValue), style = MaterialTheme.typography.bodySmall)
-                } else { // Aplica a inputMode == "quantity" para BY_WEIGHT_OR_AMOUNT y siempre para BY_FRACTION
+                } else {
                     OutlinedTextField(
                         value = quantityString,
                         onValueChange = {
@@ -261,7 +258,8 @@ fun FractionalSaleDialog(
                                 quantityString = filtered
                                 val qty = filtered.toDoubleOrNull() ?: 0.0
                                 val totalAmount = qty * product.price
-                                calculatedValue = stringResource(R.string.text_prefix_gs) + formatCurrency(totalAmount)
+                                // CORREGIDO: Usamos la variable de texto pre-cargada
+                                calculatedValue = "$gsPrefix ${formatCurrency(totalAmount)}"
                             }
                         },
                         label = { Text(stringResource(R.string.label_quantity_unit, unitName)) },
@@ -281,7 +279,7 @@ fun FractionalSaleDialog(
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(onClick = {
-                        val finalQuantity = if (inputMode == "amount" && product.sellingMethod == SellingMethod.BY_WEIGHT_OR_AMOUNT.stringValue) {
+                        val finalQuantity = if (inputMode == "amount" && product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) {
                             val amount = amountString.toDoubleOrNull() ?: 0.0
                             if (product.price > 0) amount / product.price else 0.0
                         } else {
@@ -298,7 +296,3 @@ fun FractionalSaleDialog(
         }
     }
 }
-
-// ¡IMPORTANTE!
-// La función @Composable fun ProductSelectionItem(...) ha sido eliminada de este archivo.
-// Ahora solo existe en `InventoryComponents.kt`, lo que resuelve el error de compilación.

@@ -16,11 +16,10 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
-import com.example.vetfinance.data.SellingMethod // Import SellingMethod
 import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.VetViewModel
-import ui.utils.formatCurrency // Importar formatCurrency
+import ui.utils.formatCurrency
 import java.util.concurrent.TimeUnit
 
 @Composable
@@ -42,20 +41,20 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val isLoading by viewModel.isLoading.collectAsState()
     val petIdToNameMap = petsWithOwners.associate { it.pet.petId to it.pet.name }
 
-    // --- DIÁLOGOS ---
     if (treatmentForNextDialog != null && petForDialog != null) {
         AddTreatmentDialog(
             services = services,
             onDismiss = { treatmentForNextDialog = null },
+            // INTEGRADO: Se convierten los valores de String a los tipos correctos.
             onConfirm = { description, weight, temperature, symptoms, diagnosis, treatmentPlan, nextDateMillis ->
                 viewModel.addTreatment(
                     pet = petForDialog.pet,
                     description = description,
-                    weight = weight,
-                    temperature = temperature,
-                    symptoms = symptoms,
-                    diagnosis = diagnosis,
-                    treatmentPlan = treatmentPlan,
+                    weight = weight.toDoubleOrNull(),
+                    temperature = temperature.ifBlank { null },
+                    symptoms = symptoms.ifBlank { null },
+                    diagnosis = diagnosis.ifBlank { null },
+                    treatmentPlan = treatmentPlan.ifBlank { null },
                     nextDate = nextDateMillis
                 )
                 treatmentForNextDialog = null
@@ -72,7 +71,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.selling_method) // Added selling_method
+                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.sellingMethod)
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) }
@@ -129,9 +128,9 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         ) {
             Text(stringResource(R.string.dashboard_summary_of_the_day), style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
-            val formattedSales = stringResource(R.string.text_prefix_gs) + formatCurrency(salesToday)
+            val formattedSales = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(salesToday)
             ReportSummaryCard(stringResource(R.string.dashboard_sales_today_title), formattedSales)
-            Spacer(modifier = Modifier.height(16.dp)) 
+            Spacer(modifier = Modifier.height(16.dp))
 
             if (isLoading) {
                 Box(
@@ -199,7 +198,11 @@ fun LowStockAlert(lowStockProducts: List<Product>) {
             Spacer(modifier = Modifier.height(8.dp))
             lowStockProducts.forEach { product ->
                 Text(
-                    text = stringResource(R.string.dashboard_low_stock_product_item, product.name, formatCurrency(product.stock).replace(",00", "")),
+                    text = stringResource(
+                        R.string.dashboard_low_stock_product_item,
+                        product.name,
+                        formatCurrency(product.stock).replace(",00", "")
+                    ),
                     color = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
@@ -215,11 +218,11 @@ fun TreatmentReminderItem(
 ) {
     val daysUntilNext = treatment.nextTreatmentDate?.let { TimeUnit.MILLISECONDS.toDays(it - System.currentTimeMillis()) }
     val cardColor = when {
-        daysUntilNext == null -> MaterialTheme.colorScheme.surfaceVariant 
-        daysUntilNext < 0 -> MaterialTheme.colorScheme.errorContainer 
-        daysUntilNext == 0L -> MaterialTheme.colorScheme.tertiaryContainer 
-        daysUntilNext < 3 -> MaterialTheme.colorScheme.secondaryContainer 
-        else -> MaterialTheme.colorScheme.surfaceVariant 
+        daysUntilNext == null -> MaterialTheme.colorScheme.surfaceVariant
+        daysUntilNext < 0 -> MaterialTheme.colorScheme.errorContainer
+        daysUntilNext == 0L -> MaterialTheme.colorScheme.tertiaryContainer
+        daysUntilNext < 3 -> MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
     }
     val nextDateText = when {
         daysUntilNext == null -> stringResource(R.string.dashboard_next_appointment_not_defined)
@@ -228,11 +231,10 @@ fun TreatmentReminderItem(
         else -> stringResource(R.string.dashboard_appointment_in_days, daysUntilNext)
     }
 
-
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(text = stringResource(R.string.dashboard_pet_label, petName), fontWeight = FontWeight.Bold)
-            Text(text = stringResource(R.string.dashboard_treatment_label, treatment.description))
+            treatment.description?.let { Text(text = stringResource(R.string.dashboard_treatment_label, it)) }
             Text(text = stringResource(R.string.dashboard_next_appointment_label, nextDateText))
             Spacer(modifier = Modifier.height(8.dp))
             Button(onClick = onMarkAsCompleted) {

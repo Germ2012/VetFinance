@@ -11,6 +11,7 @@ import com.example.vetfinance.data.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
@@ -18,14 +19,11 @@ import org.apache.commons.csv.CSVPrinter
 import java.io.StringWriter
 import java.time.LocalDate
 import java.time.ZoneId
-import java.util.Date
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.min
 
-/**
- * Data class interna para manejar los datos del backup durante la importación/exportación.
- */
 private data class ParsedBackupData(
     val clients: List<Client>,
     val products: List<Product>,
@@ -38,14 +36,6 @@ private data class ParsedBackupData(
     val appointments: List<Appointment>
 )
 
-/**
- * Repositorio central que maneja todas las operaciones de datos de la aplicación.
- *
- * Actúa como una única fuente de verdad (Single Source of Truth) para la UI, abstrayendo los
- * orígenes de datos (en este caso, la base de datos de Room). Proporciona métodos limpios
- * para que el `VetViewModel` acceda y manipule los datos sin conocer los detalles de la
- * implementación de la base de datos.
- */
 @Singleton
 class VetRepository @Inject constructor(
     private val db: AppDatabase,
@@ -57,10 +47,8 @@ class VetRepository @Inject constructor(
     private val petDao: PetDao,
     private val treatmentDao: TreatmentDao,
     private val appointmentDao: AppointmentDao,
-    @ApplicationContext private val context: Context // Inyectar Context
+    @ApplicationContext private val context: Context
 ) {
-
-    private val batchSize = 500
 
     suspend fun deleteProduct(product: Product) {
         productDao.delete(product)
@@ -76,8 +64,8 @@ class VetRepository @Inject constructor(
             val saleDetails = saleDao.getSaleDetailsBySaleId(sale.saleId)
             for (detail in saleDetails) {
                 val product = productDao.getProductById(detail.productId)
-                if (product != null && !product.isService) {
-                    val newStock = product.stock + detail.quantity
+                if (product != null && product.sellingMethod == SELLING_METHOD_BY_UNIT && !product.isService) {
+                    val newStock = product.stock + detail.quantitySold
                     productDao.update(product.copy(stock = newStock))
                 }
             }
@@ -134,13 +122,26 @@ class VetRepository @Inject constructor(
     suspend fun markTreatmentAsCompleted(treatmentId: String) = treatmentDao.markAsCompleted(treatmentId)
 
     suspend fun makePayment(client: Client, amount: Double) {
-        val payment = Payment(clientIdFk = client.clientId, amount = amount, paymentDate = Date())
+        // No procesar pagos de cero o negativos
+        if (amount <= 0) return
+
+        // Calcular el monto real a pagar, que no puede exceder la deuda
+        val actualPaymentAmount = min(amount, client.debtAmount)
+
+        // Si el monto a pagar es cero (porque la deuda ya era cero), no hacer nada
+        if (actualPaymentAmount <= 0) return
+
+        // Crear el registro de pago con el monto correcto
+        val payment = Payment(clientIdFk = client.clientId, amount = actualPaymentAmount, paymentDate = System.currentTimeMillis())
         paymentDao.insert(payment)
-        val newDebt = client.debtAmount - amount
-        clientDao.updateDebt(client.clientId, if (newDebt < 0) 0.0 else newDebt)
+
+        // Actualizar la deuda del cliente
+        val newDebt = client.debtAmount - actualPaymentAmount
+        clientDao.updateDebt(client.clientId, if (newDebt < 0.01) 0.0 else newDebt) // Usar < 0.01 por seguridad con doubles
     }
 
-    suspend fun insertSale(sale: Sale, items: Map<String, Pair<Double, Double>>) { // <-- SIGNATURE CHANGED
+
+    suspend fun insertSale(sale: Sale, items: Map<String, Pair<Double, Double>>) {
         db.withTransaction {
             saleDao.insertSale(sale)
             items.forEach { (productId, quantityAndPrice) ->
@@ -149,18 +150,15 @@ class VetRepository @Inject constructor(
 
                 val crossRef = SaleProductCrossRef(
                     saleId = sale.saleId,
-                    productId = productId, // Use productId from map key
-                    quantity = quantity.toInt(),
-                    priceAtTimeOfSale = priceAtTimeOfSale, // Use priceAtTimeOfSale from map value
-                    isByFraction = false, // Assuming default, adjust if fractional logic is more complex here
-                    amount = null // Assuming default
+                    productId = productId,
+                    quantitySold = quantity,
+                    priceAtTimeOfSale = priceAtTimeOfSale
                 )
                 saleDao.insertSaleProductCrossRef(crossRef)
 
-                // Fetch product to check its properties for stock update
                 val product = productDao.getProductById(productId)
-                if (product != null) { // Check if product exists
-                    if (product.sellingMethod != SELLING_METHOD_DOSE_ONLY && !product.isService) {
+                if (product != null) {
+                    if (product.sellingMethod == SELLING_METHOD_BY_UNIT && !product.isService) {
                         val updatedStock = product.stock - quantity
                         updateProduct(product.copy(stock = updatedStock))
                     }
@@ -169,40 +167,101 @@ class VetRepository @Inject constructor(
         }
     }
 
+    // Función de utilidad para convertir una lista a un string CSV
+    private fun <T> listToCsvString(data: List<T>, headers: Array<String>, recordToStringArray: (T) -> Array<String>): String {
+        StringWriter().use { writer ->
+            CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(*headers)).use { csvPrinter ->
+                data.forEach { record ->
+                    csvPrinter.printRecord(*recordToStringArray(record))
+                }
+            }
+            return writer.toString()
+        }
+    }
+
     suspend fun exportarDatosCompletos(): Map<String, String> = withContext(Dispatchers.IO) {
         val csvMap = mutableMapOf<String, String>()
 
-        suspend fun <T> exportBatch(
-            daoMethod: suspend (limit: Int, offset: Int) -> List<T>,
-            fileName: String,
-            headers: Array<String>,
-            recordMapper: (T, CSVPrinter) -> Unit
-        ) {
-            val sw = StringWriter()
-            val format = CSVFormat.Builder.create(CSVFormat.DEFAULT).setHeader(*headers).build()
-            CSVPrinter(sw, format).use { printer ->
-                var offset = 0
-                var batch: List<T>
-                do {
-                    batch = daoMethod(batchSize, offset)
-                    batch.forEach { recordMapper(it, printer) }
-                    offset += batchSize
-                } while (batch.isNotEmpty())
+        // Clients
+        val clientHeaders = arrayOf("clientId", "name", "phone", "address", "debtAmount")
+        val clients = clientDao.getAllClients().first()
+        if (clients.isNotEmpty()) {
+            csvMap["clients.csv"] = listToCsvString(clients, clientHeaders) { client ->
+                arrayOf(client.clientId, client.name, client.phone ?: "", client.address ?: "", client.debtAmount.toString())
             }
-            csvMap[fileName] = sw.toString()
         }
 
-        /*
-        exportBatch(clientDao::getClientsPaged, "clients.csv", arrayOf("clientId", "name", "phone", "debtAmount")) { it, p -> p.printRecord(it.clientId, it.name, it.phone ?: "", it.debtAmount) }
-        exportBatch(productDao::getProductsPaged, "products.csv", arrayOf("id", "name", "price", "stock", "cost", "isService", "selling_method")) { it, p -> p.printRecord(it.productId, it.name, it.price, it.stock, it.cost, it.isService, it.sellingMethod) }
-        exportBatch(petDao::getPetsPaged, "pets.csv", arrayOf("petId", "name", "ownerIdFk", "birthDate", "breed", "allergies")) { it, p -> p.printRecord(it.petId, it.name, it.ownerIdFk, it.birthDate ?: "", it.breed ?: "", it.allergies ?: "") }
-        exportBatch(treatmentDao::getTreatmentsPaged, "treatments.csv", arrayOf("treatmentId", "petIdFk", "treatmentDate", "description", "weight", "temperature", "symptoms", "diagnosis", "treatmentPlan", "nextTreatmentDate", "isNextTreatmentCompleted")) { it, p -> p.printRecord(it.treatmentId, it.petIdFk, it.treatmentDate, it.description, it.weight ?: "", it.temperature ?: "", it.symptoms ?: "", it.diagnosis ?: "", it.treatmentPlan ?: "", it.nextTreatmentDate ?: "", it.isNextTreatmentCompleted) }
-        exportBatch(saleDao::getSalesPaged, "sales.csv", arrayOf("saleId", "clientIdFk", "date", "totalAmount")) { it, p -> p.printRecord(it.saleId, it.clientIdFk, it.date, it.totalAmount) }
-        exportBatch(transactionDao::getTransactionsPaged, "transactions.csv", arrayOf("transactionId", "saleIdFk", "date", "type", "amount", "description")) { it, p -> p.printRecord(it.transactionId, it.saleIdFk ?: "", it.date, it.type, it.amount, it.description ?: "") }
-        exportBatch(paymentDao::getPaymentsPaged, "payments.csv", arrayOf("paymentId", "clientIdFk", "paymentDate", "amountPaid")) { it, p -> p.printRecord(it.paymentId, it.clientIdFk, it.paymentDate, it.amount) }
-        exportBatch(saleDao::getSaleProductCrossRefsPaged, "sale_product_cross_refs.csv", arrayOf("saleId", "productId", "quantity", "priceAtTimeOfSale")) { it, p -> p.printRecord(it.saleId, it.productId, it.quantity, it.priceAtTimeOfSale) }
-        exportBatch(appointmentDao::getAppointmentsPaged, "appointments.csv", arrayOf("appointmentId", "clientIdFk", "petIdFk", "appointmentDate", "description", "isCompleted")) { it, p -> p.printRecord(it.appointmentId, it.clientIdFk, it.petIdFk, it.appointmentDate, it.description, false) }
-        */
+        // Products
+        val productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod")
+        val products = productDao.getAllProducts().first()
+        if (products.isNotEmpty()) {
+            csvMap["products.csv"] = listToCsvString(products, productHeaders) { product ->
+                arrayOf(product.productId, product.name, product.price.toString(), product.cost.toString(), product.stock.toString(), product.isService.toString(), product.sellingMethod)
+            }
+        }
+
+        // Pets
+        val petHeaders = arrayOf("petId", "name", "ownerIdFk", "birthDate", "breed", "allergies")
+        val pets = petDao.getAllPetsSimple().first()
+        if (pets.isNotEmpty()){
+            csvMap["pets.csv"] = listToCsvString(pets, petHeaders) { pet ->
+                arrayOf(pet.petId, pet.name, pet.ownerIdFk, pet.birthDate?.toString() ?: "", pet.breed ?: "", pet.allergies ?: "")
+            }
+        }
+
+        // Treatments
+        val treatmentHeaders = arrayOf("treatmentId", "petIdFk", "serviceId", "treatmentDate", "description", "nextTreatmentDate", "isNextTreatmentCompleted", "symptoms", "diagnosis", "treatmentPlan", "weight", "temperature")
+        val treatments = treatmentDao.getAllTreatmentsSimple().first()
+        if (treatments.isNotEmpty()){
+            csvMap["treatments.csv"] = listToCsvString(treatments, treatmentHeaders) { t ->
+                arrayOf(t.treatmentId, t.petIdFk, t.serviceId ?: "", t.treatmentDate.toString(), t.description ?: "", t.nextTreatmentDate?.toString() ?: "", t.isNextTreatmentCompleted.toString(), t.symptoms ?: "", t.diagnosis ?: "", t.treatmentPlan ?: "", t.weight?.toString() ?: "", t.temperature ?: "")
+            }
+        }
+
+        // Sales
+        val saleHeaders = arrayOf("saleId", "date", "totalAmount", "clientIdFk")
+        val sales = saleDao.getAllSalesSimple().first()
+        if (sales.isNotEmpty()){
+            csvMap["sales.csv"] = listToCsvString(sales, saleHeaders) { sale ->
+                arrayOf(sale.saleId, sale.date.toString(), sale.totalAmount.toString(), sale.clientIdFk ?: "")
+            }
+        }
+
+        // Transactions
+        val transactionHeaders = arrayOf("transactionId", "saleIdFk", "date", "type", "amount", "description")
+        val transactions = transactionDao.getAllTransactions().first()
+        if (transactions.isNotEmpty()){
+            csvMap["transactions.csv"] = listToCsvString(transactions, transactionHeaders) { t ->
+                arrayOf(t.transactionId, t.saleIdFk ?: "", t.date.toString(), t.type, t.amount.toString(), t.description ?: "")
+            }
+        }
+
+        // Payments
+        val paymentHeaders = arrayOf("paymentId", "clientIdFk", "amount", "paymentDate")
+        val payments = paymentDao.getAllPaymentsSimple().first()
+        if (payments.isNotEmpty()){
+            csvMap["payments.csv"] = listToCsvString(payments, paymentHeaders) { p ->
+                arrayOf(p.paymentId, p.clientIdFk, p.amount.toString(), p.paymentDate.toString())
+            }
+        }
+
+        // SaleProductCrossRefs
+        val saleProductCrossRefHeaders = arrayOf("saleId", "productId", "quantitySold", "priceAtTimeOfSale")
+        val saleProductCrossRefs = saleDao.getAllSaleProductCrossRefsSimple().first()
+        if (saleProductCrossRefs.isNotEmpty()){
+            csvMap["sale_product_cross_refs.csv"] = listToCsvString(saleProductCrossRefs, saleProductCrossRefHeaders) { cr ->
+                arrayOf(cr.saleId, cr.productId, cr.quantitySold.toString(), cr.priceAtTimeOfSale.toString())
+            }
+        }
+
+        // Appointments
+        val appointmentHeaders = arrayOf("appointmentId", "clientIdFk", "petIdFk", "appointmentDate", "description")
+        val appointments = appointmentDao.getAllAppointmentsSimple().first()
+        if (appointments.isNotEmpty()){
+            csvMap["appointments.csv"] = listToCsvString(appointments, appointmentHeaders) { a ->
+                arrayOf(a.appointmentId, a.clientIdFk, a.petIdFk, a.appointmentDate.toString(), a.description ?: "")
+            }
+        }
 
         return@withContext csvMap
     }
@@ -285,15 +344,13 @@ class VetRepository @Inject constructor(
         return CSVParser.parse(content, format).map(parser)
     }
 
-    private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r["phone"].ifEmpty { null }, "", r["debtAmount"].toDouble())
-    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["id"], r["name"], r["price"].toDouble(), r["cost"].toDouble(), r["stock"].toDouble(), r["isService"].toBoolean(), r.get("selling_method") ?: "BY_UNIT")
+    private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r["phone"].ifEmpty { null }, r.get("address")?.ifEmpty { null }, r["debtAmount"].toDouble())
+    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["productId"], r["name"], r["price"].toDouble(), r["cost"].toDouble(), r["stock"].toDouble(), r["isService"].toBoolean(), r.get("sellingMethod") ?: SELLING_METHOD_BY_UNIT)
     private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r["birthDate"].toLongOrNull(), r["breed"].ifEmpty { null }, r["allergies"].ifEmpty { null })
-    private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], null, Date(r["treatmentDate"].toLong()), r["description"], if(r["nextTreatmentDate"].isNullOrEmpty()) null else Date(r["nextTreatmentDate"].toLong()), r["isNextTreatmentCompleted"].toBoolean(), r["symptoms"].ifEmpty { null }, r["diagnosis"].ifEmpty { null }, r["treatmentPlan"].ifEmpty { null }, r["weight"].toDoubleOrNull(), r["temperature"].ifEmpty { null })
-    private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], Date(r["date"].toLong()), r["totalAmount"].toDouble(), r["clientIdFk"])
+    private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r["serviceId"].ifEmpty { null }, r["treatmentDate"].toLong(), r["description"]?.ifEmpty { null }, r["nextTreatmentDate"].toLongOrNull(), r["isNextTreatmentCompleted"].toBoolean(), r["symptoms"].ifEmpty { null }, r["diagnosis"].ifEmpty { null }, r["treatmentPlan"].ifEmpty { null }, r["weight"].toDoubleOrNull(), r["temperature"]?.ifEmpty { null })
+    private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["date"].toLong(), r["totalAmount"].toDouble(), r["clientIdFk"]?.ifEmpty { null })
     private fun parseTransaction(r: org.apache.commons.csv.CSVRecord) = Transaction(r["transactionId"], r["saleIdFk"].ifEmpty { null }, r["date"].toLong(), r["type"], r["amount"].toDouble(), r["description"].ifEmpty { null })
-    private fun parsePayment(r: org.apache.commons.csv.CSVRecord) = Payment(r["paymentId"], r["clientIdFk"], r["amountPaid"].toDouble(), Date(r["paymentDate"].toLong()))
-    private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(r["saleId"], r["productId"], r["quantity"].toInt(), r["priceAtTimeOfSale"].toDouble(), false, null)
-    private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], Date(r["appointmentDate"].toLong()), r["description"])
+    private fun parsePayment(r: org.apache.commons.csv.CSVRecord) = Payment(r["paymentId"], r["clientIdFk"], r["amount"].toDouble(), r["paymentDate"].toLong())
+    private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(r["saleId"], r["productId"], r["quantitySold"].toDouble(), r["priceAtTimeOfSale"].toDouble())
+    private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], r["appointmentDate"].toLong(), r["description"]?.ifEmpty { null })
 }
-
-class BackupValidationException(message: String) : Exception(message)

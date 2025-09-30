@@ -1,4 +1,3 @@
-// ruta: app/src/main/java/com/example/vetfinance/ui/screens/ReportsScreen.kt
 package com.example.vetfinance.ui.screens
 
 import android.widget.Toast
@@ -37,16 +36,18 @@ import co.yml.charts.ui.barchart.models.BarChartData
 import co.yml.charts.ui.barchart.models.BarData
 import co.yml.charts.ui.barchart.models.BarStyle
 import com.example.vetfinance.R
+import com.example.vetfinance.data.TopSellingProduct
 import com.example.vetfinance.viewmodel.Period
 import com.example.vetfinance.viewmodel.TopProductsPeriod
 import com.example.vetfinance.viewmodel.VetViewModel
+import androidx.compose.runtime.collectAsState // Corrected import
 import kotlinx.coroutines.launch
+import ui.utils.formatCurrency
 import java.text.SimpleDateFormat
 import java.time.format.DateTimeFormatter
 import java.util.*
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
-import ui.utils.formatCurrency // Importar formatCurrency
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -89,10 +90,16 @@ fun ReportsScreen(viewModel: VetViewModel) {
 @Composable
 fun SalesAndBackupTab(viewModel: VetViewModel) {
     var selectedPeriod by remember { mutableStateOf(Period.DAY) }
-    val salesSummary = viewModel.getSalesSummary(selectedPeriod)
-    val grossProfit = viewModel.getGrossProfitSummary(selectedPeriod)
+    val salesSummary by viewModel.getSalesSummary(selectedPeriod).collectAsState(initial = 0.0)
+    val grossProfit by viewModel.getGrossProfitSummary(selectedPeriod).collectAsState(initial = 0.0)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    val noDataToExportMsg = stringResource(R.string.toast_no_data_to_export)
+    val exportCompletedMsg = stringResource(R.string.toast_export_completed)
+    val exportErrorMsg = stringResource(R.string.toast_export_error)
+    val exportFilePrefix = stringResource(R.string.export_file_prefix)
+    val exportFileSuffix = stringResource(R.string.export_file_suffix)
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -108,7 +115,7 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
             scope.launch {
                 val csvDataMap = viewModel.exportarDatosCompletos()
                 if (csvDataMap.isEmpty()) {
-                    Toast.makeText(context, stringResource(R.string.toast_no_data_to_export), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, noDataToExportMsg, Toast.LENGTH_SHORT).show()
                     return@launch
                 }
                 try {
@@ -121,22 +128,25 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
                             }
                         }
                     }
-                    Toast.makeText(context, stringResource(R.string.toast_export_completed), Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, exportCompletedMsg, Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
-                    Toast.makeText(context, stringResource(R.string.toast_export_error, e.message ?: ""), Toast.LENGTH_LONG).show()
+                    val errorDetail = e.message ?: ""
+                    Toast.makeText(context, "$exportErrorMsg: $errorDetail", Toast.LENGTH_LONG).show()
                 }
             }
         }
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Top)
     ) {
         SegmentedControl(selected = selectedPeriod, onPeriodSelected = { newPeriod -> selectedPeriod = newPeriod })
-        val formattedSales = stringResource(R.string.text_prefix_gs) + formatCurrency(salesSummary)
-        val formattedProfit = stringResource(R.string.text_prefix_gs) + formatCurrency(grossProfit)
+        val formattedSales = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(salesSummary)
+        val formattedProfit = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(grossProfit)
 
         SummaryCard(title = stringResource(R.string.summary_total_sales, stringResource(selectedPeriod.displayResId)), value = formattedSales)
         SummaryCard(title = stringResource(R.string.summary_gross_profit, stringResource(selectedPeriod.displayResId)), value = formattedProfit)
@@ -146,7 +156,7 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
             Button(onClick = { importLauncher.launch(arrayOf("application/zip")) }) { Text(stringResource(R.string.button_import)) }
             Button(onClick = {
                 val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                val fileName = stringResource(R.string.export_file_prefix) + timestamp + stringResource(R.string.export_file_suffix)
+                val fileName = "$exportFilePrefix$timestamp$exportFileSuffix"
                 exportLauncher.launch(fileName)
             }) { Text(stringResource(R.string.button_export)) }
         }
@@ -182,13 +192,14 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(stringResource(R.string.title_top_selling_products), style = MaterialTheme.typography.headlineSmall)
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Controles de Filtro
         TopProductsFilterControls(
             selectedPeriod = selectedPeriod,
             selectedDate = selectedDate,
@@ -209,27 +220,32 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
                     val isSelected = selectedProduct == product
                     BarData(
                         point = Point(index.toFloat(), product.totalSold.toFloat()),
-                        label = "", // Sin etiqueta en el eje X
+                        label = "",
                         color = chartColors[index % chartColors.size].copy(alpha = if (isSelected) 1f else 0.4f)
                     )
                 },
-                xAxisData = AxisData.Builder().labelData { "" }.build(), // Ocultar etiquetas del eje X
+                xAxisData = AxisData.Builder().labelData { "" }.build(),
                 yAxisData = AxisData.Builder()
                     .steps(5)
                     .labelAndAxisLinePadding(20.dp)
-                    .labelData { value -> value.toInt().toString() }
+                    .labelData { value ->
+                        // CORREGIDO: Se usa el operador módulo (%) que es más estándar y robusto.
+                        if (value % 1.0f == 0f) {
+                            value.toInt().toString()
+                        } else {
+                            String.format(Locale.US, "%.2f", value)
+                        }
+                    }
                     .build(),
                 barStyle = BarStyle(barWidth = 35.dp)
             )
 
             BarChart(modifier = Modifier.height(250.dp), barChartData = barChartData)
-
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Tarjeta de detalles del producto seleccionado
             AnimatedVisibility(visible = selectedProduct != null) {
                 selectedProduct?.let { product ->
-                    val percentage = if(totalSold > 0) (product.totalSold.toFloat() / totalSold) * 100 else 0f
+                    val percentage = if(totalSold > 0) (product.totalSold / totalSold) * 100 else 0.0
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(product.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -242,7 +258,6 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Leyenda Interactiva
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(minSize = 150.dp),
                 modifier = Modifier.fillMaxWidth(),
@@ -285,7 +300,7 @@ fun TopProductsFilterControls(
                     selected = period == selectedPeriod,
                     shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
                 ) {
-                    Text(stringResource(period.displayResId)) // <-- MODIFICADO
+                    Text(stringResource(period.displayResId))
                 }
             }
         }
@@ -325,7 +340,6 @@ fun LegendItem(
     }
 }
 
-
 @Composable
 fun DebtsReportTab(viewModel: VetViewModel) {
     val totalDebt by viewModel.totalDebt.collectAsState()
@@ -334,7 +348,9 @@ fun DebtsReportTab(viewModel: VetViewModel) {
     val clientsWithDebt = remember(clients) { clients.filter { it.debtAmount > 0 } }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -345,7 +361,9 @@ fun DebtsReportTab(viewModel: VetViewModel) {
         LazyColumn(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(clientsWithDebt) { client ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(text = client.name)
@@ -356,16 +374,17 @@ fun DebtsReportTab(viewModel: VetViewModel) {
     }
 }
 
-
 @Composable
 fun InventoryReportTab(viewModel: VetViewModel) {
     val totalValue by viewModel.totalInventoryValue.collectAsState()
-    val formattedValue = stringResource(R.string.label_client_debt_amount, formatCurrency(totalValue ?: 0.0)) // Reusing label_client_debt_amount for Gs. prefix
+    val formattedValue = stringResource(R.string.label_client_debt_amount, formatCurrency(totalValue ?: 0.0))
     val inventory by viewModel.inventory.collectAsState()
     val productsOnly = remember(inventory) { inventory.filter { !it.isService } }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -376,11 +395,13 @@ fun InventoryReportTab(viewModel: VetViewModel) {
         LazyColumn(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(productsOnly) { product ->
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(text = product.name)
-                    Text(text = stringResource(R.string.label_product_stock, formatCurrency(product.stock.toDouble())))
+                    Text(text = stringResource(R.string.label_product_stock, formatCurrency(product.stock)))
                 }
             }
         }
@@ -398,7 +419,7 @@ fun SegmentedControl(selected: Period, onPeriodSelected: (Period) -> Unit) {
                 selected = period == selected,
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
             ) {
-                Text(stringResource(period.displayResId)) // <-- MODIFICADO
+                Text(stringResource(period.displayResId))
             }
         }
     }

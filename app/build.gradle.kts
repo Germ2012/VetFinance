@@ -2,7 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
-    id("com.google.devtools.ksp") // AÑADIR ESTA LÍNEA
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -52,6 +52,7 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += "META-INF/versions/9/module-info.class"
         }
     }
 }
@@ -60,6 +61,7 @@ dependencies {
     // ---- Core y Lifecycle KTX ----
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose) // <-- AÑADIDO
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
@@ -79,10 +81,8 @@ dependencies {
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
-    // --- LÍNEAS AÑADIDAS ---
-    implementation("androidx.hilt:hilt-work:1.2.0")
-    ksp("androidx.hilt:hilt-compiler:1.2.0")
-    // -------------------------
+    implementation(libs.hilt.work)
+    ksp(libs.hilt.compiler.work)
 
     // ---- Navigation y Componentes de UI ----
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -105,10 +105,13 @@ dependencies {
     // ---- Calendario ----
     implementation(libs.calendar.compose)
 
-    //---CSV---//
+    // ---- WorkManager ----
+    implementation(libs.work.manager.ktx)
+
+    // ---- CSV ----
     implementation("org.apache.commons:commons-csv:1.11.0")
 
-    //----Desugaring---//
+    // ---- Desugaring ----
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
     // ---- Testing ----
@@ -116,6 +119,4 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-
-    implementation("androidx.work:work-runtime-ktx:2.9.0")
 }

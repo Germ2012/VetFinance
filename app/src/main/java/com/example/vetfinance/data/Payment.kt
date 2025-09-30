@@ -2,20 +2,22 @@ package com.example.vetfinance.data
 
 import androidx.room.Entity
 import androidx.room.ForeignKey
+import androidx.room.Index
 import androidx.room.PrimaryKey
-import java.util.Date
 import java.util.UUID
 
 @Entity(
     tableName = "payments",
     foreignKeys = [
         ForeignKey(entity = Client::class, parentColumns = ["clientId"], childColumns = ["clientIdFk"])
-    ]
+    ],
+    // AÑADIDO: Índice para la llave foránea
+    indices = [Index("clientIdFk")]
 )
 data class Payment(
     @PrimaryKey
     val paymentId: String = UUID.randomUUID().toString(),
     val clientIdFk: String,
     val amount: Double,
-    val paymentDate: Date
+    val paymentDate: Long
 )

@@ -192,6 +192,8 @@ fun AppointmentList(appointments: List<AppointmentWithDetails>) {
     }
 }
 
+// ... (imports)
+
 @Composable
 fun AppointmentItem(details: AppointmentWithDetails) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -199,7 +201,9 @@ fun AppointmentItem(details: AppointmentWithDetails) {
             Text(details.pet.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(stringResource(R.string.owner_label, details.client.name), style = MaterialTheme.typography.bodyMedium)
             Spacer(modifier = Modifier.height(4.dp))
-            Text(details.appointment.description, style = MaterialTheme.typography.bodyLarge)
+            // CORREGIDO: Se maneja el caso en que la descripción sea nula.
+            Text(details.appointment.description ?: "", style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
+
