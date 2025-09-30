@@ -26,6 +26,8 @@ fun SupplierDialog(
     var email by remember(supplier) { mutableStateOf(supplier?.email ?: "") }
 
     var nameError by remember { mutableStateOf<String?>(null) }
+    // Solución: Obtener el string aquí, fuera del onClick
+    val nameRequiredError = stringResource(R.string.error_supplier_name_required)
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
@@ -39,8 +41,8 @@ fun SupplierDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = if (supplier == null) stringResource(R.string.dialog_title_add_supplier) 
-                           else stringResource(R.string.dialog_title_edit_supplier, supplier.name), 
+                    text = if (supplier == null) stringResource(R.string.dialog_title_add_supplier)
+                    else stringResource(R.string.dialog_title_edit_supplier, supplier.name),
                     style = MaterialTheme.typography.titleLarge
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -48,7 +50,7 @@ fun SupplierDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it; nameError = null },
-                    label = { Text(stringResource(R.string.label_supplier_name)) }, 
+                    label = { Text(stringResource(R.string.label_supplier_name)) },
                     modifier = Modifier.fillMaxWidth(),
                     isError = nameError != null,
                     singleLine = true
@@ -66,7 +68,7 @@ fun SupplierDialog(
                 OutlinedTextField(
                     value = contactPerson,
                     onValueChange = { contactPerson = it },
-                    label = { Text(stringResource(R.string.label_supplier_contact_person)) }, 
+                    label = { Text(stringResource(R.string.label_supplier_contact_person)) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -75,7 +77,7 @@ fun SupplierDialog(
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text(stringResource(R.string.label_supplier_phone)) }, 
+                    label = { Text(stringResource(R.string.label_supplier_phone)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                     singleLine = true
@@ -85,7 +87,7 @@ fun SupplierDialog(
                 OutlinedTextField(
                     value = email,
                     onValueChange = { email = it },
-                    label = { Text(stringResource(R.string.label_supplier_email)) }, 
+                    label = { Text(stringResource(R.string.label_supplier_email)) },
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     singleLine = true
@@ -102,7 +104,8 @@ fun SupplierDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(onClick = {
                         if (name.isBlank()) {
-                            nameError = stringResource(R.string.error_supplier_name_required) 
+                            // Usar la variable que contiene el string
+                            nameError = nameRequiredError
                         } else {
                             val newOrUpdatedSupplier = supplier?.copy(
                                 name = name.trim(),

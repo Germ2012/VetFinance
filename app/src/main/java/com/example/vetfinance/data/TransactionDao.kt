@@ -184,15 +184,6 @@ interface TreatmentDao {
     fun getAllTreatmentsSimple(): Flow<List<Treatment>>
 }
 @Dao
-interface SupplierDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertSupplier(supplier: Supplier)
-
-    @Query("SELECT * FROM suppliers ORDER BY name ASC")
-    fun getAllSuppliers(): Flow<List<Supplier>>
-}
-
-@Dao
 interface PurchaseDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPurchase(purchase: Purchase)
