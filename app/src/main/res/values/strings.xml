@@ -238,4 +238,7 @@
     <string name="current_cost_label">Costo actual: %1$s</string>
     <string name="label_quantity_to_add">Cantidad a añadir</string>
     <string name="label_new_unit_cost">Nuevo costo unitario</string>
+    <string name="search_product_hint">Buscar producto...</string>
+    <string name="invoice_date_label">Fecha de la factura:</string>
+    <string name="select_date_content_description">Seleccionar fecha</string>
 </resources>

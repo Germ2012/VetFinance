@@ -55,6 +55,7 @@ class VetRepository @Inject constructor(
     suspend fun deleteProduct(product: Product) {
         productDao.delete(product)
     }
+    // Reemplaza el método performInventoryTransfer con la lógica correcta.
     suspend fun performInventoryTransfer(containerId: String, containedId: String, amountToTransfer: Double) {
         db.withTransaction {
             val containerProduct = productDao.getProductById(containerId)
@@ -62,11 +63,11 @@ class VetRepository @Inject constructor(
 
             if (containerProduct != null && containedProduct != null) {
                 if (containerProduct.stock >= 1) {
-                    // Restar 1 del contenedor (la bolsa)
+                    // Restar 1 del contenedor
                     val updatedContainer = containerProduct.copy(stock = containerProduct.stock - 1)
                     productDao.update(updatedContainer)
 
-                    // Sumar la cantidad al producto a granel
+                    // Sumar la cantidad definida en 'containerSize' al producto a granel
                     val updatedContained = containedProduct.copy(stock = containedProduct.stock + amountToTransfer)
                     productDao.update(updatedContained)
                 }

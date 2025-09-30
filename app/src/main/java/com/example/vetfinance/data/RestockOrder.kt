@@ -8,7 +8,7 @@ import java.util.UUID
 data class RestockOrder(
     @PrimaryKey val orderId: String = UUID.randomUUID().toString(),
     val supplierIdFk: String,
-    val orderDate: Long,
+    var orderDate: Long, // Cambiar val por var
     val totalAmount: Double
 )
 

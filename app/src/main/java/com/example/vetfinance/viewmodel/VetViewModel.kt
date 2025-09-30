@@ -73,9 +73,16 @@ class VetViewModel @Inject constructor(
         onDismissSupplierDialog()
     }
 
-    fun executeRestock(supplierId: String, totalCost: Double, itemsToRestock: List<RestockOrderItem>) = viewModelScope.launch {
+    private val _restockSearchQuery = MutableStateFlow("")
+    val restockSearchQuery: StateFlow<String> = _restockSearchQuery.asStateFlow()
+
+    fun onRestockSearchQueryChange(query: String) {
+        _restockSearchQuery.value = query
+    }
+
+    fun executeRestock(supplierId: String, totalCost: Double, itemsToRestock: List<RestockOrderItem>, orderDate: Long) = viewModelScope.launch {
         val orderId = UUID.randomUUID().toString()
-        val order = RestockOrder(orderId = orderId, supplierIdFk = supplierId, orderDate = System.currentTimeMillis(), totalAmount = totalCost)
+        val order = RestockOrder(orderId = orderId, supplierIdFk = supplierId, orderDate = orderDate, totalAmount = totalCost)
         val updatedItems = itemsToRestock.map { it.copy(orderIdFk = orderId) }
         repository.performRestock(order, updatedItems)
     }
