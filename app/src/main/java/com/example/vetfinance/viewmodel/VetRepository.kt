@@ -1,4 +1,4 @@
-package com.example.vetfinance.data
+package com.example.vetfinance.viewmodel
 
 import android.content.Context
 import android.net.Uri
@@ -7,7 +7,7 @@ import androidx.paging.PagingConfig
 import androidx.paging.PagingData
 import androidx.room.withTransaction
 import com.example.vetfinance.R
-import com.example.vetfinance.data.Caritem
+import com.example.vetfinance.data.*
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -47,6 +47,8 @@ class VetRepository @Inject constructor(
     private val petDao: PetDao,
     private val treatmentDao: TreatmentDao,
     private val appointmentDao: AppointmentDao,
+    private val supplierDao: SupplierDao, // Added SupplierDao
+    private val restockDao: RestockDao,   // Added RestockDao
     @ApplicationContext private val context: Context
 ) {
 
@@ -123,6 +125,7 @@ class VetRepository @Inject constructor(
     fun getAllProducts(): Flow<List<Product>> = productDao.getAllProducts()
     fun getAllSales(): Flow<List<SaleWithProducts>> = saleDao.getAllSalesWithProducts()
     fun getAllClients(): Flow<List<Client>> = clientDao.getAllClients()
+    fun getAllSuppliers(): Flow<List<Supplier>> = supplierDao.getAllSuppliers() // Added supplier function
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>> = paymentDao.getPaymentsForClient(clientId)
     fun getAllPetsWithOwners(): Flow<List<PetWithOwner>> = petDao.getAllPetsWithOwners()
     fun getTreatmentsForPet(petId: String): Flow<List<Treatment>> = treatmentDao.getTreatmentsForPet(petId)
@@ -134,6 +137,9 @@ class VetRepository @Inject constructor(
     suspend fun updateProduct(product: Product) = productDao.update(product)
     suspend fun insertClient(client: Client) = clientDao.insertAll(listOf(client))
     suspend fun updateClient(client: Client) = clientDao.update(client)
+    suspend fun insertSupplier(supplier: Supplier) = supplierDao.insert(supplier) // Added supplier function
+    suspend fun updateSupplier(supplier: Supplier) = supplierDao.update(supplier) // Added supplier function
+    suspend fun deleteSupplier(supplier: Supplier) = supplierDao.delete(supplier) // Added supplier function
     suspend fun insertPet(pet: Pet) = petDao.insert(pet)
     suspend fun updatePet(pet: Pet) = petDao.update(pet)
     suspend fun insertTreatment(treatment: Treatment) = treatmentDao.insert(treatment)
@@ -181,6 +187,26 @@ class VetRepository @Inject constructor(
         }
     }
 
+    suspend fun performRestock(order: RestockOrder, items: List<RestockOrderItem>) {
+        db.withTransaction {
+            restockDao.insertOrder(order)
+            restockDao.insertOrderItems(items)
+
+            items.forEach { item ->
+                val product = productDao.getProductById(item.productIdFk)
+                // Only update stock for non-service products
+                if (product != null && !product.isService) { 
+                    val updatedStock = product.stock + item.quantity
+                    val updatedProduct = product.copy(
+                        stock = updatedStock,
+                        cost = item.costPerUnit // Update product cost to the new cost per unit
+                    )
+                    productDao.update(updatedProduct)
+                }
+            }
+        }
+    }
+
     private fun <T> listToCsvString(data: List<T>, headers: Array<String>, recordToStringArray: (T) -> Array<String>): String {
         StringWriter().use { writer ->
             CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(*headers)).use { csvPrinter ->
@@ -205,11 +231,11 @@ class VetRepository @Inject constructor(
         }
 
         // Products
-        val productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod", "lowStockThreshold")
+        val productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod", "lowStockThreshold", "supplierIdFk") // Added supplierIdFk
         val products = productDao.getAllProducts().first()
         if (products.isNotEmpty()) {
             csvMap["products.csv"] = listToCsvString(products, productHeaders) { product ->
-                arrayOf(product.productId, product.name, product.price.toString(), product.cost.toString(), product.stock.toString(), product.isService.toString(), product.sellingMethod, product.lowStockThreshold?.toString() ?: "")
+                arrayOf(product.productId, product.name, product.price.toString(), product.cost.toString(), product.stock.toString(), product.isService.toString(), product.sellingMethod, product.lowStockThreshold?.toString() ?: "", product.supplierIdFk ?: "")
             }
         }
 
@@ -358,7 +384,7 @@ class VetRepository @Inject constructor(
     }
 
     private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r["phone"].ifEmpty { null }, r.get("address")?.ifEmpty { null }, r["debtAmount"].toDouble())
-    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["productId"], r["name"], r["price"].toDouble(), r["cost"].toDouble(), r["stock"].toDouble(), r["isService"].toBoolean(), r.get("sellingMethod") ?: SELLING_METHOD_BY_UNIT, r.get("lowStockThreshold")?.toDoubleOrNull())
+    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["productId"], r["name"], r["price"].toDouble(), r["cost"].toDouble(), r["stock"].toDouble(), r["isService"].toBoolean(), r.get("sellingMethod") ?: SELLING_METHOD_BY_UNIT, r.get("lowStockThreshold")?.toDoubleOrNull(), supplierIdFk = r.get("supplierIdFk")?.ifEmpty { null }) // Added supplierIdFk
     private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r["birthDate"].toLongOrNull(), r["breed"].ifEmpty { null }, r["allergies"].ifEmpty { null })
     private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r["serviceId"].ifEmpty { null }, r["treatmentDate"].toLong(), r["description"]?.ifEmpty { null }, r["nextTreatmentDate"].toLongOrNull(), r["isNextTreatmentCompleted"].toBoolean(), r["symptoms"].ifEmpty { null }, r["diagnosis"].ifEmpty { null }, r["treatmentPlan"].ifEmpty { null }, r["weight"].toDoubleOrNull(), r["temperature"]?.ifEmpty { null })
     private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["date"].toLong(), r["totalAmount"].toDouble(), r["clientIdFk"]?.ifEmpty { null })

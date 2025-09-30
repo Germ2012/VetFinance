@@ -27,6 +27,7 @@ import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
 import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
+import com.example.vetfinance.data.Supplier // Added import
 import ui.utils.ThousandsSeparatorTransformation
 import ui.utils.formatCurrency
 import java.util.Locale
@@ -40,7 +41,8 @@ fun ProductDialog(
     onDelete: ((Product) -> Unit)? = null,
     productNameSuggestions: List<Product>,
     onProductNameChange: (String) -> Unit,
-    allProducts: List<Product>
+    allProducts: List<Product>,
+    suppliers: List<Supplier> // Added suppliers parameter
 ) {
     val isEditing = product != null
     var name by remember { mutableStateOf(product?.name ?: "") }
@@ -57,12 +59,22 @@ fun ProductDialog(
     var containerSize by remember { mutableStateOf(product?.containerSize?.toString() ?: "") }
     var selectedContainedProduct by remember { mutableStateOf<Product?>(null) }
 
+    // State for supplier selection
+    var selectedSupplierId by remember { mutableStateOf(product?.supplierIdFk) }
+    val selectedSupplier = remember(selectedSupplierId, suppliers) {
+        suppliers.find { it.supplierId == selectedSupplierId }
+    }
+
     LaunchedEffect(product) {
         if (product?.isContainer == true && product.containedProductId != null) {
             selectedContainedProduct = allProducts.find { it.productId == product.containedProductId }
         }
         if (!isEditing) {
             onProductNameChange(name)
+        }
+        // Initialize selectedSupplierId if editing an existing product
+        if (isEditing) {
+            selectedSupplierId = product?.supplierIdFk
         }
     }
 
@@ -180,6 +192,46 @@ fun ProductDialog(
                     )
                 }
 
+                // Supplier Dropdown
+                var supplierDropdownExpanded by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(
+                    expanded = supplierDropdownExpanded,
+                    onExpandedChange = { supplierDropdownExpanded = !supplierDropdownExpanded },
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = selectedSupplier?.name ?: stringResource(R.string.label_select_supplier_optional), 
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text(stringResource(R.string.label_supplier)) }, 
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = supplierDropdownExpanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = supplierDropdownExpanded,
+                        onDismissRequest = { supplierDropdownExpanded = false }
+                    ) {
+                        // Option for no supplier
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.label_no_supplier)) }, 
+                            onClick = {
+                                selectedSupplierId = null
+                                supplierDropdownExpanded = false
+                            }
+                        )
+                        suppliers.forEach { supplier ->
+                            DropdownMenuItem(
+                                text = { Text(supplier.name) },
+                                onClick = {
+                                    selectedSupplierId = supplier.supplierId
+                                    supplierDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -243,7 +295,8 @@ fun ProductDialog(
                         lowStockThreshold = if (selectedSellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) lowStockThreshold.toDoubleOrNull() else null,
                         isContainer = isContainer,
                         containerSize = if (isContainer) containerSize.toDoubleOrNull() else null,
-                        containedProductId = if (isContainer) selectedContainedProduct?.productId else null
+                        containedProductId = if (isContainer) selectedContainedProduct?.productId else null,
+                        supplierIdFk = selectedSupplierId // Save selected supplier ID
                     )
                     onConfirm(newOrUpdatedProduct)
                 },

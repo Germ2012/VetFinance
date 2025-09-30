@@ -210,4 +210,5 @@
     <string name="container_size_label">Tamaño del contenedor (ej. 25)</string>
     <string name="select_bulk_product_placeholder">Seleccionar producto a granel</string>
     <string name="contained_product_label">Producto a granel que contiene</string>
+    <string name="screen_title_suppliers">Proveedores</string>
 </resources>

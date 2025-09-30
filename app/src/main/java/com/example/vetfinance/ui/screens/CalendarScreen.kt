@@ -153,7 +153,8 @@ fun MonthHeader(daysOfWeek: List<DayOfWeek>, monthName: String) {
 fun Day(day: CalendarDay, isSelected: Boolean, onClick: (CalendarDay) -> Unit) {
     Box(
         modifier = Modifier
-            .padding(4.dp) // Se quita aspectRatio para que la celda se adapte
+            .aspectRatio(1f) // Ensure the cell is square, taking full column width
+            .padding(4.dp)   // Padding for the circular visual, applied after aspectRatio
             .clip(CircleShape)
             .background(color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
             .border(
@@ -162,11 +163,12 @@ fun Day(day: CalendarDay, isSelected: Boolean, onClick: (CalendarDay) -> Unit) {
                 shape = CircleShape
             )
             .clickable { onClick(day) },
-        contentAlignment = Alignment.Center
+        contentAlignment = Alignment.Center // Center the Text composable within this Box
     ) {
         Text(
             text = day.date.dayOfMonth.toString(),
-            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color.Unspecified
+            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color.Unspecified,
+            textAlign = TextAlign.Center // Explicitly center the text within the Text composable
         )
     }
 }

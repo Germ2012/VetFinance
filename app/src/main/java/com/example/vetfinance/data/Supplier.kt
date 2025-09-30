@@ -6,10 +6,9 @@ import java.util.UUID
 
 @Entity(tableName = "suppliers")
 data class Supplier(
-    @PrimaryKey
-    val supplierId: String = UUID.randomUUID().toString(),
+    @PrimaryKey val supplierId: String = UUID.randomUUID().toString(),
     val name: String,
     val contactPerson: String?,
     val phone: String?,
-    val address: String?
+    val email: String?
 )

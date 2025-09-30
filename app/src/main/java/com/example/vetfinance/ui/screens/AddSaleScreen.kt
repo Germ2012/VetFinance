@@ -60,6 +60,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
+            allProducts = inventory, // Added this line
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.addProduct(

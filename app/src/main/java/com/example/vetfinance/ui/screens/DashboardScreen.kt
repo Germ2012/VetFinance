@@ -78,6 +78,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
+            allProducts = inventory, // Added this line
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.sellingMethod)

@@ -1,14 +1,23 @@
 package com.example.vetfinance.data
 
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
-import androidx.room.migration.AutoMigrationSpec // Added this import
+import androidx.room.migration.AutoMigrationSpec
 
 @Database(
-    entities = [Transaction::class, Pet::class, Treatment::class, Product::class, Sale::class, Client::class, SaleProductCrossRef::class, Payment::class, Appointment::class, Supplier::class, Purchase::class, PurchaseProductCrossRef::class],
-    version = 18,
-    exportSchema = false
+    entities = [
+        Transaction::class, Pet::class, Treatment::class, Product::class, 
+        Sale::class, Client::class, SaleProductCrossRef::class, Payment::class, 
+        Appointment::class, Supplier::class, Purchase::class, PurchaseProductCrossRef::class,
+        RestockOrder::class, RestockOrderItem::class // Added new entities
+    ],
+    version = 19, // Incremented version
+    exportSchema = true, // It's good practice to export schema for auto-migrations
+    autoMigrations = [
+        @AutoMigration(from = 18, to = 19) // Added auto-migration
+    ]
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -23,5 +32,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun appointmentDao(): AppointmentDao
     abstract fun supplierDao(): SupplierDao
     abstract fun purchaseDao(): PurchaseDao
+    abstract fun restockDao(): RestockDao // Added RestockDao
 
 }
