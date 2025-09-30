@@ -46,5 +46,7 @@ fun AppNavigation(navController: NavHostController, viewModel: VetViewModel) {
         // --- Pantallas para Añadir Entidades ---
         composable("add_client_screen") { AddClientScreen(viewModel, navController) }
         composable("add_pet_screen") { AddPetScreen(viewModel, navController) }
+        composable(Screen.Suppliers.route) { SuppliersScreen(viewModel, navController) }
+        composable(Screen.Restock.route) { RestockScreen(viewModel, navController) }
     }
 }

@@ -9,7 +9,7 @@ data class RestockOrder(
     @PrimaryKey val orderId: String = UUID.randomUUID().toString(),
     val supplierIdFk: String,
     val orderDate: Long,
-    val totalCost: Double
+    val totalAmount: Double
 )
 
 @Entity(tableName = "restock_order_items")

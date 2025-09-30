@@ -76,7 +76,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
-            allProducts = inventory, 
+            allProducts = inventory,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.addProduct(newProduct) // Pass the whole product object
@@ -140,6 +140,10 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             val formattedSales = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(salesToday)
             ReportSummaryCard(stringResource(R.string.dashboard_sales_today_title), formattedSales)
             Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { navController.navigate(Screen.Restock.route) }) {
+                Text(text = stringResource(R.string.restock_button))
+            }
+
 
             if (isLoading) {
                 Box(

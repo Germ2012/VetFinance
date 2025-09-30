@@ -37,6 +37,12 @@ fun ClientsMenuScreen(navController: NavController) {
                 onClick = { navController.navigate(Screen.Pets.route) }
             )
         }
+        item {
+            MenuItem(
+                title = stringResource(R.string.screen_title_suppliers),
+                onClick = { navController.navigate(Screen.Suppliers.route) }
+            )
+        }
     }
 }
 

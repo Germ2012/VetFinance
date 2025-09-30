@@ -24,4 +24,6 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object DebtClients : Screen("debt_clients", "Clientes con Deuda", Icons.Default.People)
     object Pets : Screen("pets", "Mascotas", Icons.Default.Pets)
     object PetDetail : Screen("pet_detail/{petId}", "Detalle de Mascota", Icons.Default.Pets)
+    object Suppliers : Screen("suppliers", "Proveedores", Icons.Default.LocalShipping)
+    object Restock : Screen("restock", "Reabastecer", Icons.Default.AddShoppingCart)
 }

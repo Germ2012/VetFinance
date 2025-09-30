@@ -3,6 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
+    id("androidx.room") // Added Room Gradle plugin
 }
 
 android {
@@ -55,6 +56,11 @@ android {
             excludes += "META-INF/versions/9/module-info.class"
         }
     }
+}
+
+// Added Room schema location configuration
+room {
+    schemaDirectory("$projectDir/schemas")
 }
 
 dependencies {

@@ -22,14 +22,14 @@ object AppModule {
             context,
             AppDatabase::class.java,
             "vet_database"
-        ).fallbackToDestructiveMigration().build() // fallbackToDestructiveMigration para evitar problemas de migración durante el desarrollo
+        ).fallbackToDestructiveMigration().build()
     }
 
     @Provides
     @Singleton
     fun provideRepository(db: AppDatabase, @ApplicationContext context: Context): VetRepository {
         return VetRepository(
-            db = db, // <-- LÍNEA AÑADIDA
+            db = db,
             productDao = db.productDao(),
             saleDao = db.saleDao(),
             transactionDao = db.transactionDao(),
@@ -38,6 +38,9 @@ object AppModule {
             petDao = db.petDao(),
             treatmentDao = db.treatmentDao(),
             appointmentDao = db.appointmentDao(),
+            supplierDao = db.supplierDao(), // Added supplierDao
+            // Assuming VetRepository constructor also expects restockDao
+            restockDao = db.restockDao(), // Added restockDao
             context = context
         )
     }
