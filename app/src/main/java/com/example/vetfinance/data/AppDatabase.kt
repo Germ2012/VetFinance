@@ -7,7 +7,7 @@ import androidx.room.migration.AutoMigrationSpec // Added this import
 
 @Database(
     entities = [Transaction::class, Pet::class, Treatment::class, Product::class, Sale::class, Client::class, SaleProductCrossRef::class, Payment::class, Appointment::class],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

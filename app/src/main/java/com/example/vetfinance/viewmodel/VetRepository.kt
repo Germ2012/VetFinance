@@ -158,7 +158,7 @@ class VetRepository @Inject constructor(
 
                 val product = productDao.getProductById(productId)
                 if (product != null) {
-                    if (product.sellingMethod == SELLING_METHOD_BY_UNIT && !product.isService) {
+                    if (product.sellingMethod != SELLING_METHOD_DOSE_ONLY && !product.isService) {
                         val updatedStock = product.stock - quantity
                         updateProduct(product.copy(stock = updatedStock))
                     }
@@ -178,7 +178,10 @@ class VetRepository @Inject constructor(
             return writer.toString()
         }
     }
-
+    // AÑADIDO: Nueva función para exponer la consulta del DAO
+    fun getAppointmentsForDate(startDate: Long, endDate: Long): Flow<List<AppointmentWithDetails>> {
+        return appointmentDao.getAppointmentsForDateRange(startDate, endDate)
+    }
     suspend fun exportarDatosCompletos(): Map<String, String> = withContext(Dispatchers.IO) {
         val csvMap = mutableMapOf<String, String>()
 

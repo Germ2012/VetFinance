@@ -46,6 +46,7 @@ fun ProductDialog(
     var cost by remember { mutableStateOf(product?.cost?.toLong()?.toString() ?: "") }
     var isService by remember { mutableStateOf(product?.isService ?: false) }
     var selectedSellingMethod by remember { mutableStateOf(product?.sellingMethod ?: SELLING_METHOD_BY_UNIT) }
+    var lowStockThreshold by remember { mutableStateOf(product?.lowStockThreshold?.toString() ?: "") }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -160,6 +161,16 @@ fun ProductDialog(
                         onMethodSelected = { selectedSellingMethod = it }
                     )
                 }
+
+                if (selectedSellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) {
+                    OutlinedTextField(
+                        value = lowStockThreshold,
+                        onValueChange = { lowStockThreshold = it.filter { char -> char.isDigit() || char == '.' } },
+                        label = { Text(stringResource(R.string.low_stock_threshold_label)) }, // <-- CORRECCIÓN APLICADA
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
         },
         confirmButton = {
@@ -173,7 +184,8 @@ fun ProductDialog(
                         stock = if (isService || selectedSellingMethod == SELLING_METHOD_DOSE_ONLY) 0.0 else stock.toDoubleOrNull() ?: 0.0,
                         cost = cost.replace(".", "").toDoubleOrNull() ?: 0.0,
                         isService = isService,
-                        sellingMethod = if (isService) SELLING_METHOD_DOSE_ONLY else selectedSellingMethod
+                        sellingMethod = if (isService) SELLING_METHOD_DOSE_ONLY else selectedSellingMethod,
+                        lowStockThreshold = if (selectedSellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) lowStockThreshold.toDoubleOrNull() else null
                     )
                     onConfirm(newOrUpdatedProduct)
                 },

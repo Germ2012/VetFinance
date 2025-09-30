@@ -17,5 +17,6 @@ data class Product(
     var cost: Double,
     var stock: Double,
     val isService: Boolean,
-    var sellingMethod: String = SELLING_METHOD_BY_UNIT
+    var sellingMethod: String = SELLING_METHOD_BY_UNIT,
+    var lowStockThreshold: Double? = null
 )

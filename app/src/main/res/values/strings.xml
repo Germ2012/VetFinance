@@ -185,6 +185,7 @@
     <string name="filter_by_date_chip">Filtrar por fecha</string>
     <string name="no_sales_for_date">No hay ventas registradas para la fecha seleccionada.</string>
     <string name="no_sales_recorded">Aún no se han registrado ventas.</string>
+    <string name="low_stock_threshold_label">Umbral de Alerta de Stock (Opcional)</string>
     <string name="sale_item_title">Venta #%1$s</string>
     <string name="total_amount_label">Total: Gs. %1$s</string>
     <string name="period_day">Día</string>

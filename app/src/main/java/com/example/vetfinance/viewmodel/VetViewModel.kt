@@ -89,7 +89,11 @@ class VetViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val lowStockProducts: StateFlow<List<Product>> = inventory.map { products ->
-        products.filter { !it.isService && it.sellingMethod == SELLING_METHOD_BY_UNIT && it.stock < 4 }
+        products.filter {
+            !it.isService &&
+                    ((it.sellingMethod == SELLING_METHOD_BY_UNIT && it.stock < 4) ||
+                            (it.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT && it.lowStockThreshold != null && it.stock < it.lowStockThreshold!!))
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _selectedCalendarDate = MutableStateFlow(LocalDate.now())
@@ -312,6 +316,13 @@ class VetViewModel @Inject constructor(
             onFinished()
         }
     }
+    // AÑADIDO: Nuevo StateFlow para las citas próximas
+    val upcomingAppointments: StateFlow<List<AppointmentWithDetails>> = flow {
+        val zoneId = ZoneId.systemDefault()
+        val now = LocalDate.now().atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val twoDaysFromNow = LocalDate.now().plusDays(3).atStartOfDay(zoneId).toInstant().toEpochMilli() // Hasta el inicio del tercer día
+        emitAll(repository.getAppointmentsForDate(now, twoDaysFromNow))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // CORREGIDO: Las funciones ahora devuelven un Flow para ser compatibles con collectAsState.
     fun getSalesSummary(period: Period): Flow<Double> {

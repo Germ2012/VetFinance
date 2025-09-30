@@ -21,11 +21,19 @@ import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency
 import java.util.concurrent.TimeUnit
-
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import com.example.vetfinance.data.AppointmentWithDetails
 @Composable
 fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val salesToday by viewModel.salesSummaryToday.collectAsState()
     val upcomingTreatments by viewModel.upcomingTreatments.collectAsState()
+    // AÑADIDO: Recolectar el estado de las citas próximas
+    val upcomingAppointments by viewModel.upcomingAppointments.collectAsState()
+
     val petsWithOwners by viewModel.petsWithOwners.collectAsState()
     var treatmentForNextDialog by remember { mutableStateOf<Treatment?>(null) }
     val petForDialog = treatmentForNextDialog?.let { treatment ->
@@ -150,7 +158,15 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                             LowStockAlert(lowStockProducts = lowStockProducts)
                         }
                     }
-
+                    if (upcomingAppointments.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text("Próximas Citas", style = MaterialTheme.typography.headlineSmall)
+                        }
+                        items(upcomingAppointments) { appointmentDetails ->
+                            AppointmentReminderItem(details = appointmentDetails)
+                        }
+                    }
                     if (upcomingTreatments.isNotEmpty()) {
                         item {
                             Spacer(modifier = Modifier.height(16.dp))
@@ -172,7 +188,37 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         }
     }
 }
+// AÑADIDO: Nuevo Composable para mostrar la tarjeta de recordatorio de cita
+@Composable
+fun AppointmentReminderItem(details: AppointmentWithDetails) {
+    val appointmentDate = Instant.ofEpochMilli(details.appointment.appointmentDate)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+    val today = LocalDate.now()
+    val daysUntil = ChronoUnit.DAYS.between(today, appointmentDate)
 
+    val cardColor = when {
+        daysUntil < 0 -> MaterialTheme.colorScheme.errorContainer // Vencido
+        daysUntil == 0L -> MaterialTheme.colorScheme.tertiaryContainer // Hoy
+        daysUntil <= 2L -> MaterialTheme.colorScheme.secondaryContainer // Próximamente
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+
+    val dateText = when {
+        daysUntil < 0 -> "Vencida"
+        daysUntil == 0L -> "Hoy"
+        daysUntil == 1L -> "Mañana"
+        else -> "En $daysUntil días (${appointmentDate.format(DateTimeFormatter.ofPattern("dd/MM"))})"
+    }
+
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = "Cita: $dateText", fontWeight = FontWeight.Bold)
+            Text(text = "Mascota: ${details.pet.name} (Dueño: ${details.client.name})")
+            Text(text = "Motivo: ${details.appointment.description ?: "No especificado"}")
+        }
+    }
+}
 @Composable
 fun ReportSummaryCard(title: String, value: String) {
     Card(modifier = Modifier.fillMaxWidth()) {

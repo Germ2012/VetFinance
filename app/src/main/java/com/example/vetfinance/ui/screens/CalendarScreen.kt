@@ -1,5 +1,6 @@
-package com.example.vetfinance.ui.screens // Modificado el paquete
+package com.example.vetfinance.ui.screens
 
+import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -22,9 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.vetfinance.R
 import com.example.vetfinance.data.AppointmentWithDetails
-// No es necesario importar AddAppointmentDialog si está en el mismo paquete
 import com.example.vetfinance.viewmodel.VetViewModel
 import com.kizitonwose.calendar.compose.HorizontalCalendar
+import com.kizitonwose.calendar.compose.VerticalCalendar
 import com.kizitonwose.calendar.compose.rememberCalendarState
 import com.kizitonwose.calendar.core.CalendarDay
 import com.kizitonwose.calendar.core.firstDayOfWeekFromLocale
@@ -36,14 +38,12 @@ import java.util.Locale
 
 @Composable
 fun CalendarScreen(viewModel: VetViewModel) {
-    // --- Estados del ViewModel ---
     val selectedDate by viewModel.selectedCalendarDate.collectAsState()
     val appointments by viewModel.appointmentsOnSelectedDate.collectAsState()
     val showDialog by viewModel.showAddAppointmentDialog.collectAsState()
     val clients by viewModel.clients.collectAsState()
     val petsWithOwners by viewModel.petsWithOwners.collectAsState()
 
-    // --- Lógica del Diálogo ---
     if (showDialog) {
         AddAppointmentDialog(
             clients = clients,
@@ -57,7 +57,6 @@ fun CalendarScreen(viewModel: VetViewModel) {
         )
     }
 
-    // --- Configuración del Calendario ---
     val currentMonth = YearMonth.now()
     val startMonth = currentMonth.minusMonths(100)
     val endMonth = currentMonth.plusMonths(100)
@@ -70,6 +69,10 @@ fun CalendarScreen(viewModel: VetViewModel) {
         firstDayOfWeek = firstDayOfWeek
     )
 
+    // AÑADIDO: Detectar la orientación del dispositivo
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { viewModel.onShowAddAppointmentDialog() }) {
@@ -77,36 +80,44 @@ fun CalendarScreen(viewModel: VetViewModel) {
             }
         }
     ) { paddingValues ->
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            HorizontalCalendar(
-                state = state,
-                dayContent = { day ->
-                    Day(
-                        day = day,
-                        isSelected = selectedDate == day.date,
-                        hasAppointment = appointments.any { appointmentDetails ->
-                            val appointmentDate = java.time.Instant.ofEpochMilli(appointmentDetails.appointment.appointmentDate)
-                                .atZone(java.time.ZoneId.systemDefault())
-                                .toLocalDate()
-                            appointmentDate == day.date
-                        }
-                    ) { clickedDay ->
-                        viewModel.onCalendarDateSelected(clickedDay.date)
+            // CORREGIDO: Se elige el tipo de calendario según la orientación
+            if (isLandscape) {
+                // Calendario Vertical para modo horizontal
+                VerticalCalendar(
+                    modifier = Modifier.weight(1f),
+                    state = state,
+                    dayContent = { day -> Day(day, selectedDate == day.date) { viewModel.onCalendarDateSelected(it.date) } },
+                    monthHeader = { month ->
+                        val daysOfWeek = month.weekDays.first().map { it.date.dayOfWeek }
+                        val monthName = month.yearMonth.month.getDisplayName(TextStyle.FULL, Locale.forLanguageTag("es-ES")).replaceFirstChar { it.uppercase() }
+                        MonthHeader(daysOfWeek = daysOfWeek, monthName = "$monthName ${month.yearMonth.year}")
                     }
-                },
-                monthHeader = { month ->
-                    val daysOfWeek = month.weekDays.first().map { it.date.dayOfWeek }
-                    val monthName = month.yearMonth.month.getDisplayName(TextStyle.FULL, Locale.forLanguageTag("es-ES")).replaceFirstChar { it.uppercase() }
-                    val year = month.yearMonth.year
-                    MonthHeader(daysOfWeek = daysOfWeek, monthName = "$monthName $year")
+                )
+            } else {
+                // Calendario Horizontal para modo vertical
+                Column(modifier = Modifier.weight(1f)) {
+                    HorizontalCalendar(
+                        state = state,
+                        dayContent = { day -> Day(day, selectedDate == day.date) { viewModel.onCalendarDateSelected(it.date) } },
+                        monthHeader = { month ->
+                            val daysOfWeek = month.weekDays.first().map { it.date.dayOfWeek }
+                            val monthName = month.yearMonth.month.getDisplayName(TextStyle.FULL, Locale.forLanguageTag("es-ES")).replaceFirstChar { it.uppercase() }
+                            MonthHeader(daysOfWeek = daysOfWeek, monthName = "$monthName ${month.yearMonth.year}")
+                        }
+                    )
                 }
-            )
-            HorizontalDivider()
-            AppointmentList(appointments = appointments)
+            }
+
+            // La lista de citas ahora ocupa el espacio restante o toda la pantalla si es necesario
+            Column(modifier = Modifier.weight(1f)) {
+                HorizontalDivider()
+                AppointmentList(appointments = appointments)
+            }
         }
     }
 }
@@ -115,7 +126,7 @@ fun CalendarScreen(viewModel: VetViewModel) {
 fun MonthHeader(daysOfWeek: List<DayOfWeek>, monthName: String) {
     Column {
         Text(
-            text = monthName, // Month name and year are dynamic and formatted, should be fine.
+            text = monthName,
             style = MaterialTheme.typography.titleLarge,
             modifier = Modifier
                 .fillMaxWidth()
@@ -127,7 +138,7 @@ fun MonthHeader(daysOfWeek: List<DayOfWeek>, monthName: String) {
                 Text(
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
-                    text = dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("es-ES")), // Day of week short name, locale specific.
+                    text = dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.forLanguageTag("es-ES")),
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -136,10 +147,10 @@ fun MonthHeader(daysOfWeek: List<DayOfWeek>, monthName: String) {
 }
 
 @Composable
-fun Day(day: CalendarDay, isSelected: Boolean, hasAppointment: Boolean, onClick: (CalendarDay) -> Unit) {
+fun Day(day: CalendarDay, isSelected: Boolean, onClick: (CalendarDay) -> Unit) {
     Box(
         modifier = Modifier
-            .aspectRatio(1f) // Celda cuadrada
+            .aspectRatio(if (LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE) 0.7f else 1f) // Ajusta el aspect ratio en landscape
             .padding(4.dp)
             .clip(CircleShape)
             .background(color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
@@ -151,21 +162,10 @@ fun Day(day: CalendarDay, isSelected: Boolean, hasAppointment: Boolean, onClick:
             .clickable { onClick(day) },
         contentAlignment = Alignment.Center
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = day.date.dayOfMonth.toString(),
-                color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color.Unspecified
-            )
-            if (hasAppointment) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Box(
-                    modifier = Modifier
-                        .size(5.dp)
-                        .clip(CircleShape)
-                        .background(if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary)
-                )
-            }
-        }
+        Text(
+            text = day.date.dayOfMonth.toString(),
+            color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color.Unspecified
+        )
     }
 }
 
@@ -192,8 +192,6 @@ fun AppointmentList(appointments: List<AppointmentWithDetails>) {
     }
 }
 
-// ... (imports)
-
 @Composable
 fun AppointmentItem(details: AppointmentWithDetails) {
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -201,9 +199,7 @@ fun AppointmentItem(details: AppointmentWithDetails) {
             Text(details.pet.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(stringResource(R.string.owner_label, details.client.name), style = MaterialTheme.typography.bodyMedium)
             Spacer(modifier = Modifier.height(4.dp))
-            // CORREGIDO: Se maneja el caso en que la descripción sea nula.
             Text(details.appointment.description ?: "", style = MaterialTheme.typography.bodyLarge)
         }
     }
 }
-
