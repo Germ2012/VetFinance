@@ -78,13 +78,15 @@ class VetRepository @Inject constructor(
         clientDao.delete(client)
     }
 
+    // --- FUNCIÓN ACTUALIZADA ---
     suspend fun deleteSale(saleWithProducts: SaleWithProducts) {
         val sale = saleWithProducts.sale
         db.withTransaction {
             val saleDetails = saleDao.getSaleDetailsBySaleId(sale.saleId)
             for (detail in saleDetails) {
                 val product = productDao.getProductById(detail.productId)
-                if (product != null && product.sellingMethod == SELLING_METHOD_BY_UNIT && !product.isService) {
+                // Esta condición ahora cubre ambos tipos de venta (Unidad y Peso/Monto)
+                if (product != null && !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY) {
                     val newStock = product.stock + detail.quantitySold
                     productDao.update(product.copy(stock = newStock))
                 }
@@ -162,7 +164,7 @@ class VetRepository @Inject constructor(
         clientDao.updateDebt(client.clientId, if (newDebt < 0.01) 0.0 else newDebt)
     }
 
-    // --- FUNCTION REPLACED WITH INTEGRATED VERSION ---
+    // --- FUNCIÓN ACTUALIZADA ---
     suspend fun insertSale(sale: Sale, items: List<CartItem>) {
         db.withTransaction {
             saleDao.insertSale(sale)
@@ -172,17 +174,31 @@ class VetRepository @Inject constructor(
                     saleId = sale.saleId,
                     productId = product.productId,
                     quantitySold = cartItem.quantity,
-                    // Use the manual price if it exists, otherwise use the product's price.
                     priceAtTimeOfSale = cartItem.overridePrice ?: product.price,
                     notes = cartItem.notes,
                     overridePrice = cartItem.overridePrice
                 )
                 saleDao.insertSaleProductCrossRef(crossRef)
 
-                // The logic to discount stock remains the same
                 if (product.sellingMethod != SELLING_METHOD_DOSE_ONLY && !product.isService) {
-                    val updatedStock = product.stock - cartItem.quantity
-                    updateProduct(product.copy(stock = updatedStock))
+                    // Si el producto que se vende es a granel y no hay stock suficiente, abre un contenedor.
+                    if (product.stock < cartItem.quantity) {
+                        // Nota: Esta consulta puede ser ineficiente. Considerar un método DAO más directo.
+                        val container = productDao.getAllProducts().first()
+                            .find { it.isContainer && it.containedProductId == product.productId }
+
+                        if (container != null) {
+                            performInventoryTransfer(container.productId, product.productId, container.containerSize ?: 0.0)
+                        }
+                    }
+
+                    // Ahora, con el stock potencialmente actualizado, descuenta la cantidad vendida.
+                    // Es crucial volver a obtener el producto para tener el stock más reciente.
+                    val currentProduct = productDao.getProductById(product.productId)
+                    if (currentProduct != null) {
+                        val updatedStock = currentProduct.stock - cartItem.quantity
+                        updateProduct(currentProduct.copy(stock = updatedStock))
+                    }
                 }
             }
         }
@@ -196,7 +212,7 @@ class VetRepository @Inject constructor(
             items.forEach { item ->
                 val product = productDao.getProductById(item.productIdFk)
                 // Only update stock for non-service products
-                if (product != null && !product.isService) { 
+                if (product != null && !product.isService) {
                     val updatedStock = product.stock + item.quantity
                     val updatedProduct = product.copy(
                         stock = updatedStock,
