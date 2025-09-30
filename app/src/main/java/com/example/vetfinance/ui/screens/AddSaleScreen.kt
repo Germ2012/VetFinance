@@ -39,6 +39,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     val total by viewModel.saleTotal.collectAsState()
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     val inventory by viewModel.filteredInventory.collectAsState()
+    val allProductsList by viewModel.inventory.collectAsState() // To get all products for the dialog
+    val suppliers by viewModel.suppliers.collectAsState() // Collect suppliers
     val searchQuery by viewModel.productSearchQuery.collectAsState()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
 
@@ -60,16 +62,14 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
-            allProducts = inventory, // Added this line
+            allProducts = allProductsList, // Pass the full list of products
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(
-                    newProduct.name, newProduct.price, newProduct.stock,
-                    newProduct.cost, newProduct.isService, newProduct.sellingMethod
-                )
+                viewModel.addProduct(newProduct) // Pass the whole product object
             },
             productNameSuggestions = productNameSuggestions,
-            onProductNameChange = { viewModel.onProductNameChange(it) }
+            onProductNameChange = { viewModel.onProductNameChange(it) },
+            suppliers = suppliers // Pass suppliers
         )
     }
 

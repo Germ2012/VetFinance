@@ -44,6 +44,43 @@ class VetViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    // Supplier related states and functions
+    private val _suppliers = MutableStateFlow<List<Supplier>>(emptyList())
+    val suppliers: StateFlow<List<Supplier>> = _suppliers.asStateFlow()
+
+    private val _showSupplierDialog = MutableStateFlow(false)
+    val showSupplierDialog: StateFlow<Boolean> = _showSupplierDialog.asStateFlow()
+
+    private val _editingSupplier = MutableStateFlow<Supplier?>(null)
+    val editingSupplier: StateFlow<Supplier?> = _editingSupplier.asStateFlow()
+
+    fun onShowSupplierDialog(supplier: Supplier? = null) {
+        _editingSupplier.value = supplier
+        _showSupplierDialog.value = true
+    }
+
+    fun onDismissSupplierDialog() {
+        _editingSupplier.value = null
+        _showSupplierDialog.value = false
+    }
+
+    fun addOrUpdateSupplier(supplier: Supplier) = viewModelScope.launch {
+        if (_editingSupplier.value == null) {
+            repository.insertSupplier(supplier)
+        } else {
+            repository.updateSupplier(supplier)
+        }
+        onDismissSupplierDialog()
+    }
+
+    fun executeRestock(supplierId: String, totalCost: Double, itemsToRestock: List<RestockOrderItem>) = viewModelScope.launch {
+        val orderId = UUID.randomUUID().toString()
+        val order = RestockOrder(orderId = orderId, supplierIdFk = supplierId, orderDate = System.currentTimeMillis(), totalAmount = totalCost)
+        val updatedItems = itemsToRestock.map { it.copy(orderIdFk = orderId) }
+        repository.performRestock(order, updatedItems)
+    }
+    // End of supplier related states and functions
+
     fun deleteProduct(product: Product) = viewModelScope.launch { repository.deleteProduct(product) }
     fun deleteSale(sale: SaleWithProducts) = viewModelScope.launch { repository.deleteSale(sale) }
     fun deleteClient(client: Client) = viewModelScope.launch { repository.deleteClient(client) }
@@ -194,6 +231,9 @@ class VetViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
+            repository.getAllSuppliers().collect { _suppliers.value = it } // Initialize suppliers
+        }
+        viewModelScope.launch {
             combine(petsWithOwners, upcomingTreatments, inventory) { _, _, _ -> Unit }
                 .first()
             _isLoading.value = false
@@ -236,7 +276,7 @@ class VetViewModel @Inject constructor(
     fun dismissDoseSaleDialog() { _productForDoseSale.value = null; _showDoseSaleDialog.value = false }
 
     private fun executeWithLoading(action: suspend () -> Unit) = viewModelScope.launch { _isLoading.value = true; try { action() } finally { _isLoading.value = false } }
-    fun addProduct(name: String, price: Double, stock: Double, cost: Double, isService: Boolean, sellingMethod: String) = executeWithLoading { repository.insertProduct(Product(name = name, price = price, stock = stock, cost = cost, isService = isService, sellingMethod = sellingMethod)); onDismissAddProductDialog() }
+    fun addProduct(product: Product) = executeWithLoading { repository.insertProduct(product); onDismissAddProductDialog() } // Modified addProduct
     fun updateProduct(product: Product) = executeWithLoading { repository.updateProduct(product) }
     fun addClient(name: String, phone: String, debt: Double) = executeWithLoading { repository.insertClient(Client(name = name, phone = phone.ifBlank { null }, address = null, debtAmount = debt)); onDismissAddClientDialog() }
     fun updateClient(client: Client) = executeWithLoading { repository.updateClient(client) }

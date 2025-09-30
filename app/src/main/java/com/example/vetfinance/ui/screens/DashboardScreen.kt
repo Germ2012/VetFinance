@@ -32,15 +32,14 @@ import com.example.vetfinance.data.AppointmentWithDetails
 fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val salesToday by viewModel.salesSummaryToday.collectAsState()
     val upcomingTreatments by viewModel.upcomingTreatments.collectAsState()
-    // AÑADIDO: Recolectar el estado de las citas próximas
     val upcomingAppointments by viewModel.upcomingAppointments.collectAsState()
-
     val petsWithOwners by viewModel.petsWithOwners.collectAsState()
     var treatmentForNextDialog by remember { mutableStateOf<Treatment?>(null) }
     val petForDialog = treatmentForNextDialog?.let { treatment ->
         petsWithOwners.find { it.pet.petId == treatment.petIdFk }
     }
     val inventory by viewModel.inventory.collectAsState()
+    val suppliers by viewModel.suppliers.collectAsState() // Collect suppliers
     val services = remember(inventory) { inventory.filter { it.isService } }
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     var showManagementDialog by remember { mutableStateOf(false) }
@@ -54,7 +53,6 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         AddTreatmentDialog(
             services = services,
             onDismiss = { treatmentForNextDialog = null },
-            // INTEGRADO: Se convierten los valores de String a los tipos correctos.
             onConfirm = { description, weight, temperature, symptoms, diagnosis, treatmentPlan, nextDateMillis ->
                 viewModel.addTreatment(
                     pet = petForDialog.pet,
@@ -78,13 +76,14 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
-            allProducts = inventory, // Added this line
+            allProducts = inventory, 
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.sellingMethod)
+                viewModel.addProduct(newProduct) // Pass the whole product object
             },
             productNameSuggestions = productNameSuggestions,
-            onProductNameChange = { viewModel.onProductNameChange(it) }
+            onProductNameChange = { viewModel.onProductNameChange(it) },
+            suppliers = suppliers // Pass suppliers
         )
     }
 
@@ -190,7 +189,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         }
     }
 }
-// AÑADIDO: Nuevo Composable para mostrar la tarjeta de recordatorio de cita
+
 @Composable
 fun AppointmentReminderItem(details: AppointmentWithDetails) {
     val appointmentDate = Instant.ofEpochMilli(details.appointment.appointmentDate)

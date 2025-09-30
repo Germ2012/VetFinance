@@ -24,6 +24,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
     val showDialog by viewModel.showAddProductDialog.collectAsState()
     val filter by viewModel.inventoryFilter.collectAsState()
     val inventory by viewModel.inventory.collectAsState()
+    val suppliers by viewModel.suppliers.collectAsState() // Collect suppliers
     var productToEdit by remember { mutableStateOf<Product?>(null) }
     var productToDelete by remember { mutableStateOf<Product?>(null) }
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
@@ -45,11 +46,12 @@ fun InventoryScreen(viewModel: VetViewModel) {
             product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.sellingMethod)
+                viewModel.addProduct(newProduct) // Pass the whole product object
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
-            allProducts = inventory // CORREGIDO: Se pasa la lista completa de productos
+            allProducts = inventory,
+            suppliers = suppliers // Pass suppliers
         )
     }
 
@@ -66,7 +68,8 @@ fun InventoryScreen(viewModel: VetViewModel) {
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
-            allProducts = inventory // CORREGIDO: Se pasa la lista completa de productos
+            allProducts = inventory,
+            suppliers = suppliers // Pass suppliers
         )
     }
 

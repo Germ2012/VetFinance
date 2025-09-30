@@ -14,6 +14,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
+import com.example.vetfinance.data.Product // Ensure Product is imported if not already
 import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.viewmodel.VetViewModel
 import java.text.SimpleDateFormat
@@ -31,6 +32,7 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     val history by viewModel.treatmentHistory.collectAsState()
     var showTreatmentDialog by remember { mutableStateOf(false) }
     val inventory by viewModel.inventory.collectAsState()
+    val suppliers by viewModel.suppliers.collectAsState() // Collect suppliers
     val services = remember(inventory) { inventory.filter { it.isService } }
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
@@ -40,8 +42,6 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
             services = services,
             onDismiss = { showTreatmentDialog = false },
             onConfirm = { description, weight, temperature, symptoms, diagnosis, treatmentPlan, nextDateMillis ->
-                // INTEGRADO: Se convierten los Strings a los tipos de datos correctos
-                // y se manejan los campos opcionales que pueden venir en blanco.
                 viewModel.addTreatment(
                     pet = petWithOwner.pet,
                     description = description,
@@ -64,13 +64,14 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
-            allProducts = inventory, // Added this line
+            allProducts = inventory, 
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct.name, newProduct.price, newProduct.stock, newProduct.cost, newProduct.isService, newProduct.sellingMethod)
+                viewModel.addProduct(newProduct) // Pass the whole product object
             },
             productNameSuggestions = productNameSuggestions,
-            onProductNameChange = { viewModel.onProductNameChange(it) }
+            onProductNameChange = { viewModel.onProductNameChange(it) },
+            suppliers = suppliers // Pass suppliers
         )
     }
 
@@ -121,12 +122,10 @@ fun TreatmentHistoryItem(treatment: Treatment) {
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold
             )
-            // INTEGRADO: Se maneja la posible nulabilidad de la descripción.
             Text(text = stringResource(R.string.treatment_item_description_prefix, treatment.description ?: ""))
             treatment.symptoms?.takeIf { it.isNotBlank() }?.let { Text(text = stringResource(R.string.treatment_item_symptoms_prefix, it)) }
             treatment.diagnosis?.takeIf { it.isNotBlank() }?.let { Text(text = stringResource(R.string.treatment_item_diagnosis_prefix, it)) }
             treatment.treatmentPlan?.takeIf { it.isNotBlank() }?.let { Text(text = stringResource(R.string.treatment_item_plan_prefix, it)) }
-            // INTEGRADO: Se usa 'let' para seguridad con nulos.
             treatment.weight?.let { Text(text = stringResource(R.string.treatment_item_weight_prefix, it.toString())) }
             treatment.temperature?.let { Text(text = stringResource(R.string.treatment_item_temperature_prefix, it)) }
             Text(text = nextDateString, style = MaterialTheme.typography.bodySmall)
