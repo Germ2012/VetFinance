@@ -68,15 +68,6 @@ fun ProductDialog(
         suppliers.find { it.supplierId == selectedSupplierId }
     }
 
-    LaunchedEffect(product) {
-        if (isEditing) {
-            selectedContainedProductId = product?.containedProductId
-            selectedSupplierId = product?.supplierIdFk
-        } else {
-            onProductNameChange(name)
-        }
-    }
-
     if (showDeleteConfirmation && product != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
