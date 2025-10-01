@@ -31,6 +31,7 @@ import com.example.vetfinance.data.Supplier // Added import
 import ui.utils.ThousandsSeparatorTransformation
 import ui.utils.formatCurrency
 import java.util.Locale
+import android.util.Log
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -274,6 +275,8 @@ fun ProductDialog(
             Button(
                 onClick = {
                     val currentProductData = product ?: Product(productId = "", name = "", price = 0.0, stock = 0.0, cost = 0.0, sellingMethod = SELLING_METHOD_BY_UNIT, isService = false)
+                    Log.d("DEBUG_GUARDAR", "ID del Producto Actual: ${currentProductData.productId}")
+                    Log.d("DEBUG_GUARDAR", "ID del Contenido Seleccionado: $selectedContainedProductId")
 
                     val newOrUpdatedProduct = currentProductData.copy(
                         name = name,
@@ -288,6 +291,9 @@ fun ProductDialog(
                         containedProductId = if (isContainer) selectedContainedProductId else null,
                         supplierIdFk = selectedSupplierId // Save selected supplier ID
                     )
+                    Log.d("DEBUG_GUARDAR", "Producto a Guardar (ID): ${newOrUpdatedProduct.productId}")
+                    Log.d("DEBUG_GUARDAR", "Producto a Guardar (Contenido ID): ${newOrUpdatedProduct.containedProductId}")
+
                     onConfirm(newOrUpdatedProduct)
                 },
                 enabled = name.isNotBlank() && price.isNotBlank() && cost.isNotBlank() && (isService || selectedSellingMethod != SELLING_METHOD_BY_UNIT || stock.isNotBlank())

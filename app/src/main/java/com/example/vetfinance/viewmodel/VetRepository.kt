@@ -19,6 +19,7 @@ import org.apache.commons.csv.CSVPrinter
 import java.io.StringWriter
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.UUID
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -136,8 +137,26 @@ class VetRepository @Inject constructor(
     suspend fun getSaleDetailsBySaleId(saleId: String): List<SaleProductCrossRef> = saleDao.getSaleDetailsBySaleId(saleId)
     suspend fun getProductById(productId: String): Product? = productDao.getProductById(productId)
 
-    suspend fun insertProduct(product: Product) = productDao.insertAll(listOf(product))
-    suspend fun updateProduct(product: Product) = productDao.update(product)
+    /**
+ * Inserta un producto si es nuevo o lo actualiza si ya existe.
+ * Esta función es la ÚNICA responsable de asignar un nuevo ID a los productos nuevos.
+ */
+suspend fun insertOrUpdateProduct(product: Product) {
+    // Intenta encontrar un producto existente con el ID proporcionado.
+    val existingProduct = productDao.getProductById(product.productId)
+
+    if (existingProduct == null) {
+        // --- LÓGICA PARA PRODUCTOS NUEVOS ---
+        // Si no se encuentra, es un producto 100% nuevo.
+        // Se crea una copia y se le asigna un ID único y aleatorio AHORA.
+        val productToInsert = product.copy(productId = UUID.randomUUID().toString())
+        productDao.insertProduct(productToInsert) // Llama a la función del DAO
+    } else {
+        // --- LÓGICA PARA ACTUALIZACIONES ---
+        // Si se encuentra, es una actualización. Se guarda con sus nuevos datos.
+        productDao.update(product)
+    }
+}
     suspend fun insertClient(client: Client) = clientDao.insertAll(listOf(client))
     suspend fun updateClient(client: Client) = clientDao.update(client)
     suspend fun insertSupplier(supplier: Supplier) = supplierDao.insert(supplier) // Added supplier function
@@ -197,7 +216,7 @@ class VetRepository @Inject constructor(
                     val currentProduct = productDao.getProductById(product.productId)
                     if (currentProduct != null) {
                         val updatedStock = currentProduct.stock - cartItem.quantity
-                        updateProduct(currentProduct.copy(stock = updatedStock))
+                        productDao.update(currentProduct.copy(stock = updatedStock))
                     }
                 }
             }
@@ -248,7 +267,8 @@ class VetRepository @Inject constructor(
         }
 
         // Products
-        val productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod", "lowStockThreshold", "supplierIdFk") // Added supplierIdFk
+        val
+productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod", "lowStockThreshold", "supplierIdFk") // Added supplierIdFk
         val products = productDao.getAllProducts().first()
         if (products.isNotEmpty()) {
             csvMap["products.csv"] = listToCsvString(products, productHeaders) { product ->
