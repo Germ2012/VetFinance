@@ -15,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -23,11 +22,11 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavHostController
 import com.example.vetfinance.R
-import com.example.vetfinance.data.Product
-import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
-import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
-import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
 import com.example.vetfinance.data.CartItem
+import com.example.vetfinance.data.Product
+import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
+import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
+import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency
 import java.util.Locale
@@ -39,8 +38,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     val total by viewModel.saleTotal.collectAsState()
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     val inventory by viewModel.filteredInventory.collectAsState()
-    val allProductsList by viewModel.inventory.collectAsState() // To get all products for the dialog
-    val suppliers by viewModel.suppliers.collectAsState() // Collect suppliers
+    val allProductsList by viewModel.inventory.collectAsState()
+    val suppliers by viewModel.suppliers.collectAsState()
     val searchQuery by viewModel.productSearchQuery.collectAsState()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
 
@@ -50,7 +49,6 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     val showDoseDialog by viewModel.showDoseSaleDialog.collectAsState()
     val productForDoseSale by viewModel.productForDoseSale.collectAsState()
 
-    // --- CÓDIGO AÑADIDO ---
     val saleTypeDialogProduct by viewModel.saleTypeDialogProduct.collectAsState()
 
     DisposableEffect(Unit) {
@@ -65,14 +63,15 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
-            allProducts = allProductsList, // Pass the full list of products
+            allProducts = allProductsList,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.insertOrUpdateProduct(newProduct) // Pass the whole product object
+                viewModel.insertOrUpdateProduct(newProduct)
+                viewModel.onDismissAddProductDialog() // Asegurarse de cerrar el diálogo
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
-            suppliers = suppliers // Pass suppliers
+            suppliers = suppliers
         )
     }
 
@@ -95,19 +94,18 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             onDismiss = { viewModel.dismissDoseSaleDialog() },
             onConfirm = { product, notes, price ->
                 viewModel.addOrUpdateDoseInCart(product, notes, price)
+                viewModel.dismissDoseSaleDialog() // Asegurarse de cerrar el diálogo
             }
         )
     }
 
-    // --- CÓDIGO AÑADIDO: Lógica para mostrar el nuevo diálogo ---
-    if (saleTypeDialogProduct != null) {
+    saleTypeDialogProduct?.let { product ->
         SaleTypeDialog(
-            product = saleTypeDialogProduct!!,
+            product = product,
             viewModel = viewModel,
             allProducts = allProductsList
         )
     }
-
 
     Scaffold(
         topBar = {
@@ -168,7 +166,6 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 singleLine = true
             )
 
-            // --- SECCIÓN DEL CARRITO ---
             if (cart.isNotEmpty()) {
                 Text(
                     text = stringResource(R.string.shopping_cart_title),
@@ -176,7 +173,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
                 LazyColumn(
-                    modifier = Modifier.weight(1f), // Ocupa el espacio disponible
+                    modifier = Modifier.heightIn(max = 150.dp), // Altura máxima para el carrito
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -191,8 +188,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             }
 
-            // --- SECCIÓN DE INVENTARIO ---
             LazyColumn(
+                modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -200,12 +197,9 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                     ProductSelectionItem(
                         product = product,
                         quantityInCart = cart.filter { it.product.productId == product.productId }.sumOf { it.quantity },
-                        // --- LÓGICA MODIFICADA ---
                         onAdd = {
                             when {
-                                product.isContainer -> {
-                                    viewModel.openSaleTypeDialog(product)
-                                }
+                                product.isContainer -> viewModel.openSaleTypeDialog(product)
                                 product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> viewModel.openFractionalSaleDialog(product)
                                 product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> viewModel.openDoseSaleDialog(product)
                                 else -> viewModel.addToCart(product)
@@ -228,12 +222,55 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
 }
 
 @Composable
+fun CartItemRow(
+    cartItem: CartItem,
+    onRemove: () -> Unit,
+    onAdd: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(cartItem.product.name, fontWeight = FontWeight.Bold)
+                val priceText = cartItem.overridePrice?.let {
+                    "${formatCurrency(it)} (Dosis)"
+                } ?: formatCurrency(cartItem.product.price * cartItem.quantity)
+                Text(priceText, style = MaterialTheme.typography.bodyMedium)
+            }
+
+            if (cartItem.product.sellingMethod != SELLING_METHOD_DOSE_ONLY) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Remove, contentDescription = "Remove")
+                    }
+                    Text(
+                        text = formatCurrency(cartItem.quantity).removeSuffix(",00"),
+                        modifier = Modifier.padding(horizontal = 8.dp)
+                    )
+                    IconButton(onClick = onAdd, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Add, contentDescription = "Add")
+                    }
+                }
+            } else {
+                IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
+                    Icon(Icons.Default.Clear, contentDescription = "Remove Dose")
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
 fun FractionalSaleDialog(
     product: Product,
     onDismiss: () -> Unit,
     onConfirm: (product: Product, quantity: Double) -> Unit
 ) {
-    var inputMode by remember { mutableStateOf(if (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) "amount" else "quantity") }
+    var inputMode by remember { mutableStateOf("amount") }
     var amountString by remember { mutableStateOf("") }
     var quantityString by remember { mutableStateOf("") }
     var calculatedValue by remember { mutableStateOf("") }
@@ -243,7 +280,6 @@ fun FractionalSaleDialog(
     val unitName = when (product.sellingMethod) {
         SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> stringResource(R.string.unit_kg)
         SELLING_METHOD_BY_UNIT -> stringResource(R.string.unit_unit)
-        SELLING_METHOD_DOSE_ONLY -> stringResource(R.string.unit_dose)
         else -> ""
     }
 
@@ -304,4 +340,32 @@ fun FractionalSaleDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true
                     )
-                    Text(stringResource(R.string.text_
+                    Text(stringResource(R.string.text_equivalent_to, calculatedValue), style = MaterialTheme.typography.bodySmall)
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.cancel_button))
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Button(onClick = {
+                        val quantity = if (inputMode == "amount") {
+                            val amount = amountString.toDoubleOrNull() ?: 0.0
+                            if (product.price > 0) amount / product.price else 0.0
+                        } else {
+                            quantityString.toDoubleOrNull() ?: 0.0
+                        }
+                        if (quantity > 0) {
+                            onConfirm(product, quantity)
+                        }
+                    }) {
+                        Text(stringResource(R.string.confirm_button))
+                    }
+                }
+            }
+        }
+    }
+}
