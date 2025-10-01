@@ -172,9 +172,9 @@ class VetRepository @Inject constructor(
                 val product = cartItem.product
                 val crossRef = SaleProductCrossRef(
                     saleId = sale.saleId,
-                    productId = product.productId,
+                    productId = cartItem.product.productId,
                     quantitySold = cartItem.quantity,
-                    priceAtTimeOfSale = cartItem.overridePrice ?: product.price,
+                    priceAtTimeOfSale = cartItem.product.price,
                     notes = cartItem.notes,
                     overridePrice = cartItem.overridePrice
                 )
@@ -407,6 +407,13 @@ class VetRepository @Inject constructor(
     private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["date"].toLong(), r["totalAmount"].toDouble(), r["clientIdFk"]?.ifEmpty { null })
     private fun parseTransaction(r: org.apache.commons.csv.CSVRecord) = Transaction(r["transactionId"], r["saleIdFk"].ifEmpty { null }, r["date"].toLong(), r["type"], r["amount"].toDouble(), r["description"].ifEmpty { null })
     private fun parsePayment(r: org.apache.commons.csv.CSVRecord) = Payment(r["paymentId"], r["clientIdFk"], r["amount"].toDouble(), r["paymentDate"].toLong())
-    private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(r["saleId"], r["productId"], r["quantitySold"].toDouble(), r["priceAtTimeOfSale"].toDouble(), r.get("notes")?.ifEmpty { null }, r.get("overridePrice")?.toDoubleOrNull())
+    private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(
+        saleId = r["saleId"],
+        productId = r["productId"],
+        quantitySold = r["quantitySold"].toDouble(),
+        priceAtTimeOfSale = r["priceAtTimeOfSale"].toDouble(),
+        notes = r.get("notes")?.ifEmpty { null },
+        overridePrice = r.get("overridePrice")?.toDoubleOrNull()
+    )
     private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], r["appointmentDate"].toLong(), r["description"]?.ifEmpty { null })
 }

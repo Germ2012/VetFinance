@@ -32,15 +32,16 @@ data class Sale(
 
 @Entity(
     tableName = "sales_products_cross_ref",
-    primaryKeys = ["saleId", "productId"],
+    // SE ELIMINA: primaryKeys = ["saleId", "productId"],
     foreignKeys = [
         ForeignKey(entity = Sale::class, parentColumns = ["saleId"], childColumns = ["saleId"]),
         ForeignKey(entity = Product::class, parentColumns = ["productId"], childColumns = ["productId"])
     ],
-    // AÑADIDO: Índice para la columna de la relación
-    indices = [Index("productId")]
+    indices = [Index("productId"), Index("saleId")] // Añadimos índice en saleId
 )
 data class SaleProductCrossRef(
+    @PrimaryKey
+    val crossRefId: String = UUID.randomUUID().toString(), // ¡NUEVA CLAVE PRIMARIA!
     val saleId: String,
     val productId: String,
     val quantitySold: Double,

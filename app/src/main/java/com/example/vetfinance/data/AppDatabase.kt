@@ -11,7 +11,7 @@ import androidx.room.TypeConverters
         Appointment::class, Supplier::class, Purchase::class, PurchaseProductCrossRef::class,
         RestockOrder::class, RestockOrderItem::class // Added new entities
     ],
-    version = 19, // Incremented version
+    version = 20, // Incremented version
     exportSchema = true // It's good practice to export schema
     // Removed AutoMigration(from = 18, to = 19) to resolve build error due to missing 18.json
 )
