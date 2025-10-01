@@ -45,36 +45,35 @@ fun ProductDialog(
     suppliers: List<Supplier> // Added suppliers parameter
 ) {
     val isEditing = product != null
-    var name by remember { mutableStateOf(product?.name ?: "") }
-    var price by remember { mutableStateOf(product?.price?.toLong()?.toString() ?: "") }
-    var stock by remember { mutableStateOf(product?.stock?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() } ?: "") }
-    var cost by remember { mutableStateOf(product?.cost?.toLong()?.toString() ?: "") }
-    var isService by remember { mutableStateOf(product?.isService ?: false) }
-    var selectedSellingMethod by remember { mutableStateOf(product?.sellingMethod ?: SELLING_METHOD_BY_UNIT) }
-    var lowStockThreshold by remember { mutableStateOf(product?.lowStockThreshold?.toString() ?: "") }
+    var name by remember(product) { mutableStateOf(product?.name ?: "") }
+    var price by remember(product) { mutableStateOf(product?.price?.toLong()?.toString() ?: "") }
+    var stock by remember(product) { mutableStateOf(product?.stock?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() } ?: "") }
+    var cost by remember(product) { mutableStateOf(product?.cost?.toLong()?.toString() ?: "") }
+    var isService by remember(product) { mutableStateOf(product?.isService ?: false) }
+    var selectedSellingMethod by remember(product) { mutableStateOf(product?.sellingMethod ?: SELLING_METHOD_BY_UNIT) }
+    var lowStockThreshold by remember(product) { mutableStateOf(product?.lowStockThreshold?.toString() ?: "") }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     // Estados para la funcionalidad de contenedor
-    var isContainer by remember { mutableStateOf(product?.isContainer ?: false) }
-    var containerSize by remember { mutableStateOf(product?.containerSize?.toString() ?: "") }
-    var selectedContainedProduct by remember { mutableStateOf<Product?>(null) }
+    var isContainer by remember(product) { mutableStateOf(product?.isContainer ?: false) }
+    var containerSize by remember(product) { mutableStateOf(product?.containerSize?.toString() ?: "") }
+    var selectedContainedProductId by remember(product) { mutableStateOf(product?.containedProductId) }
+    val selectedContainedProduct = remember(selectedContainedProductId, allProducts) {
+        allProducts.find { it.productId == selectedContainedProductId }
+    }
 
     // State for supplier selection
-    var selectedSupplierId by remember { mutableStateOf(product?.supplierIdFk) }
+    var selectedSupplierId by remember(product) { mutableStateOf(product?.supplierIdFk) }
     val selectedSupplier = remember(selectedSupplierId, suppliers) {
         suppliers.find { it.supplierId == selectedSupplierId }
     }
 
     LaunchedEffect(product) {
-        if (product?.isContainer == true && product.containedProductId != null) {
-            selectedContainedProduct = allProducts.find { it.productId == product.containedProductId }
-        }
-        if (!isEditing) {
-            onProductNameChange(name)
-        }
-        // Initialize selectedSupplierId if editing an existing product
         if (isEditing) {
+            selectedContainedProductId = product?.containedProductId
             selectedSupplierId = product?.supplierIdFk
+        } else {
+            onProductNameChange(name)
         }
     }
 
@@ -270,7 +269,7 @@ fun ProductDialog(
                                 DropdownMenuItem(
                                     text = { Text(prod.name) },
                                     onClick = {
-                                        selectedContainedProduct = prod
+                                        selectedContainedProductId = prod.productId
                                         expanded = false
                                     }
                                 )
@@ -295,7 +294,7 @@ fun ProductDialog(
                         lowStockThreshold = if (selectedSellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) lowStockThreshold.toDoubleOrNull() else null,
                         isContainer = isContainer,
                         containerSize = if (isContainer) containerSize.toDoubleOrNull() else null,
-                        containedProductId = if (isContainer) selectedContainedProduct?.productId else null,
+                        containedProductId = if (isContainer) selectedContainedProductId else null,
                         supplierIdFk = selectedSupplierId // Save selected supplier ID
                     )
                     onConfirm(newOrUpdatedProduct)
