@@ -46,7 +46,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
             product = null,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct) // Pass the whole product object
+                viewModel.insertOrUpdateProduct(newProduct) // Pass the whole product object
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
@@ -63,7 +63,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
                 viewModel.clearProductNameSuggestions()
             },
             onConfirm = { updatedProduct ->
-                viewModel.updateProduct(updatedProduct)
+                viewModel.insertOrUpdateProduct(updatedProduct)
                 productToEdit = null
             },
             productNameSuggestions = productNameSuggestions,

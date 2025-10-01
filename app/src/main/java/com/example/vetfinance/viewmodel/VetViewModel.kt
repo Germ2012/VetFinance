@@ -295,8 +295,15 @@ class VetViewModel @Inject constructor(
     }
 
     private fun executeWithLoading(action: suspend () -> Unit) = viewModelScope.launch { _isLoading.value = true; try { action() } finally { _isLoading.value = false } }
-    fun addProduct(product: Product) = executeWithLoading { repository.insertProduct(product); onDismissAddProductDialog() } // Modified addProduct
-    fun updateProduct(product: Product) = executeWithLoading { repository.updateProduct(product) }
+
+    fun insertOrUpdateProduct(product: Product) {
+        viewModelScope.launch {
+            // ANTES: Tenía una lógica compleja para decidir si insertar o actualizar.
+            // AHORA: Simplemente le pasa el trabajo al Repository, que es el experto.
+            repository.insertOrUpdateProduct(product)
+        }
+    }
+
     fun addClient(name: String, phone: String, debt: Double) = executeWithLoading { repository.insertClient(Client(name = name, phone = phone.ifBlank { null }, address = null, debtAmount = debt)); onDismissAddClientDialog() }
     fun updateClient(client: Client) = executeWithLoading { repository.updateClient(client) }
     fun addPet(pet: Pet) = executeWithLoading { repository.insertPet(pet) }

@@ -79,7 +79,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             allProducts = inventory,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.addProduct(newProduct) // Pass the whole product object
+                viewModel.insertOrUpdateProduct(newProduct) // Pass the whole product object
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
