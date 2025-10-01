@@ -28,6 +28,7 @@ import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
 import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
 import com.example.vetfinance.viewmodel.VetViewModel
+import ui.utils.ThousandsSeparatorTransformation
 import ui.utils.formatCurrency
 import java.util.Locale
 
@@ -67,7 +68,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.insertOrUpdateProduct(newProduct)
-                viewModel.onDismissAddProductDialog() // Asegurarse de cerrar el diálogo
+                viewModel.onDismissAddProductDialog()
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
@@ -93,8 +94,9 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             product = currentProductForDoseSale,
             onDismiss = { viewModel.dismissDoseSaleDialog() },
             onConfirm = { product, notes, price ->
+                // Corrección de tipos: Aseguramos que no se pasen nulos si no son opcionales en el ViewModel
                 viewModel.addOrUpdateDoseInCart(product, notes, price)
-                viewModel.dismissDoseSaleDialog() // Asegurarse de cerrar el diálogo
+                viewModel.dismissDoseSaleDialog()
             }
         )
     }
@@ -173,7 +175,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
                 LazyColumn(
-                    modifier = Modifier.heightIn(max = 150.dp), // Altura máxima para el carrito
+                    modifier = Modifier.heightIn(max = 150.dp),
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -222,11 +224,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
 }
 
 @Composable
-fun CartItemRow(
-    cartItem: CartItem,
-    onRemove: () -> Unit,
-    onAdd: () -> Unit
-) {
+fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(8.dp),
@@ -262,7 +260,6 @@ fun CartItemRow(
         }
     }
 }
-
 
 @Composable
 fun FractionalSaleDialog(
@@ -368,4 +365,100 @@ fun FractionalSaleDialog(
             }
         }
     }
+}
+
+@Composable
+fun DoseSaleDialog(
+    product: Product,
+    onDismiss: () -> Unit,
+    onConfirm: (product: Product, notes: String?, price: Double?) -> Unit
+) {
+    var notes by remember { mutableStateOf("") }
+    var priceString by remember { mutableStateOf(product.price.toLong().toString()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dialog_title_add_dose, product.name)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = notes,
+                    onValueChange = { notes = it },
+                    label = { Text(stringResource(R.string.label_notes_optional)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = priceString,
+                    onValueChange = { priceString = it.filter { char -> char.isDigit() } },
+                    label = { Text(stringResource(R.string.label_price_optional_override)) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = ThousandsSeparatorTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    prefix = { Text(stringResource(R.string.text_prefix_gs)) }
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = {
+                val overridePrice = priceString.toDoubleOrNull()
+                onConfirm(product, notes.ifBlank { null }, overridePrice)
+            }) {
+                Text(stringResource(R.string.add_button))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel_button))
+            }
+        }
+    )
+}
+
+@Composable
+fun SaleTypeDialog(
+    product: Product,
+    viewModel: VetViewModel,
+    allProducts: List<Product>
+) {
+    val bulkProduct = remember(product, allProducts) {
+        allProducts.find { it.productId == product.containedProductId }
+    }
+
+    AlertDialog(
+        onDismissRequest = { viewModel.closeSaleTypeDialog() },
+        title = { Text(stringResource(R.string.dialog_title_select_sale_type)) },
+        text = { Text(stringResource(R.string.dialog_message_select_sale_type, product.name)) },
+        confirmButton = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = {
+                        viewModel.addToCart(product)
+                        viewModel.closeSaleTypeDialog()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.button_sell_by_unit, formatCurrency(product.price)))
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(
+                    onClick = {
+                        if (bulkProduct != null) {
+                            viewModel.openFractionalSaleDialog(bulkProduct)
+                        }
+                        viewModel.closeSaleTypeDialog()
+                    },
+                    enabled = bulkProduct != null,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.button_sell_bulk))
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = { viewModel.closeSaleTypeDialog() }) {
+                Text(stringResource(R.string.cancel_button))
+            }
+        }
+    )
 }

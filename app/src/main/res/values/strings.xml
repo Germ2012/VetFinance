@@ -233,6 +233,15 @@
     <string name="restock_success_message">Reabastecimiento registrado con éxito.</string>
     <string name="button_confirm_restock">Confirmar Reabastecimiento</string>
     <string name="label_select_supplier">Seleccionar Proveedor</string>
+    <string name="confirm_button">Confirmar</string>
+    <string name="add_button">Añadir</string>
+    <string name="dialog_title_add_dose">Añadir %1$s</string>
+    <string name="label_notes_optional">Notas (opcional)</string>
+    <string name="label_price_optional_override">Precio (opcional)</string>
+    <string name="dialog_title_select_sale_type">Seleccionar Tipo de Venta</string>
+    <string name="dialog_message_select_sale_type">¿Cómo deseas vender %1$s?</string>
+    <string name="button_sell_by_unit">Vender por unidad (Gs. %1$s)</string>
+    <string name="button_sell_bulk">Vender a granel</string>
     <string name="products_from_supplier_empty">Este proveedor no tiene productos asociados.</string>
     <string name="current_stock_label">Stock actual: %1$s</string>
     <string name="current_cost_label">Costo actual: %1$s</string>
