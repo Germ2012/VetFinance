@@ -28,7 +28,7 @@ import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
 import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
 import com.example.vetfinance.viewmodel.VetViewModel
-import ui.utils.ThousandsSeparatorTransformation
+import ui.utils.NumberTransformation
 import ui.utils.formatCurrency
 import java.util.Locale
 
@@ -94,8 +94,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             product = currentProductForDoseSale,
             onDismiss = { viewModel.dismissDoseSaleDialog() },
             onConfirm = { product, notes, price ->
-                // Corrección de tipos: Aseguramos que no se pasen nulos si no son opcionales en el ViewModel
-                viewModel.addOrUpdateDoseInCart(product, notes, price)
+                viewModel.addOrUpdateDoseInCart(product, notes ?: "", price ?: product.price)
                 viewModel.dismissDoseSaleDialog()
             }
         )
@@ -393,7 +392,7 @@ fun DoseSaleDialog(
                     onValueChange = { priceString = it.filter { char -> char.isDigit() } },
                     label = { Text(stringResource(R.string.label_price_optional_override)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    visualTransformation = ThousandsSeparatorTransformation(),
+                    visualTransformation = NumberTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     prefix = { Text(stringResource(R.string.text_prefix_gs)) }
                 )

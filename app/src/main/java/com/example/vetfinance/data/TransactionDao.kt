@@ -3,6 +3,7 @@ package com.example.vetfinance.data
 import androidx.paging.PagingSource
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
+import java.util.UUID
 
 // --- CLASES DE RELACIÓN ---
 data class AppointmentWithDetails(
@@ -225,3 +226,23 @@ interface AppointmentDao {
     @Query("SELECT * FROM appointments")
     fun getAllAppointmentsSimple(): Flow<List<Appointment>>
 }
+@Entity(tableName = "appointment_logs")
+data class AppointmentLog(
+    @PrimaryKey
+    val logId: String = UUID.randomUUID().toString(),
+    val originalAppointmentDate: Long,
+    val clientName: String,
+    val petName: String,
+    val cancellationReason: String,
+    val cancelledOnDate: Long = System.currentTimeMillis()
+)
+
+@Dao
+interface AppointmentLogDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(log: AppointmentLog)
+
+    @Query("SELECT * FROM appointment_logs WHERE originalAppointmentDate >= :startDate AND originalAppointmentDate < :endDate ORDER BY originalAppointmentDate DESC")
+    fun getLogsForDateRange(startDate: Long, endDate: Long): Flow<List<AppointmentLog>>
+}
+

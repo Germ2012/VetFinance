@@ -13,7 +13,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
-import ui.utils.ThousandsSeparatorTransformation
+import ui.utils.NumberTransformation
 import ui.utils.formatCurrency
 
 /**
@@ -64,7 +64,7 @@ fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> 
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number
                 ),
-                visualTransformation = ThousandsSeparatorTransformation()
+                visualTransformation = NumberTransformation()
             )
         },
         confirmButton = {

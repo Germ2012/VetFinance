@@ -24,6 +24,8 @@ import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
+import com.example.vetfinance.data.AppointmentLogDao // <-- Añadir importación
+import com.example.vetfinance.data.AppointmentLog
 
 private data class ParsedBackupData(
     val clients: List<Client>,

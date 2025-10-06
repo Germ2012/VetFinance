@@ -124,11 +124,9 @@
     <string name="title_debt_details">Detalle de Deudas</string>
     <string name="title_total_inventory_value">Valor Total del Inventario</string>
     <string name="title_stock_details_products">Detalle de Stock por Producto</string>
-    <string name="confirm_deletion_sale_message">¿Estás seguro de que deseas eliminar esta venta? El stock de los productos vendidos por unidad será restaurado.</string>
     <string name="register_sale_fab">Registrar Venta</string>
     <string name="date_filter_label">Fecha: %1$s</string>
     <string name="clear_filter_content_description">Limpiar filtro</string>
-    <string name="sale_item_product_detail">%1$s x %2$s (Gs. %3$s c/u)</string>
     <string name="unknown_product">Producto desconocido</string>
     <string name="manual_sale_no_details">Venta manual (sin detalles)</string>
     <string name="import_error_zip_empty_or_invalid">El archivo ZIP está vacío o no es válido.</string>
@@ -233,6 +231,23 @@
     <string name="restock_success_message">Reabastecimiento registrado con éxito.</string>
     <string name="button_confirm_restock">Confirmar Reabastecimiento</string>
     <string name="label_select_supplier">Seleccionar Proveedor</string>
+    <string name="products_from_supplier_empty">Este proveedor no tiene productos asociados.</string>
+    <string name="current_stock_label">Stock actual: %1$s</string>
+    <string name="current_cost_label">Costo actual: %1$s</string>
+    <string name="label_quantity_to_add">Cantidad a añadir</string>
+    <string name="label_new_unit_cost">Nuevo costo unitario</string>
+    <string name="search_product_hint">Buscar producto...</string>
+    <string name="invoice_date_label">Fecha de la factura:</string>
+    <string name="select_date_content_description">Seleccionar fecha</string>
+
+    <string name="sales_screen_title">Ventas</string>
+    <string name="confirm_delete_sale_message">¿Estás seguro de que deseas eliminar esta venta? Esta acción no se puede deshacer.</string>
+    <string name="sale_item_date_prefix">Fecha: %1$s</string>
+    <string name="sale_item_total_prefix">Total: Gs. %1$s</string>
+    <string name="content_description_delete_sale">Eliminar Venta</string>
+    <string name="sale_detail_dialog_title">Detalle de la Venta</string>
+    <string name="sale_detail_item_quantity_prefix">Cantidad: %1$s</string>
+
     <string name="confirm_button">Confirmar</string>
     <string name="add_button">Añadir</string>
     <string name="dialog_title_add_dose">Añadir %1$s</string>
@@ -242,12 +257,21 @@
     <string name="dialog_message_select_sale_type">¿Cómo deseas vender %1$s?</string>
     <string name="button_sell_by_unit">Vender por unidad (Gs. %1$s)</string>
     <string name="button_sell_bulk">Vender a granel</string>
-    <string name="products_from_supplier_empty">Este proveedor no tiene productos asociados.</string>
-    <string name="current_stock_label">Stock actual: %1$s</string>
-    <string name="current_cost_label">Costo actual: %1$s</string>
-    <string name="label_quantity_to_add">Cantidad a añadir</string>
-    <string name="label_new_unit_cost">Nuevo costo unitario</string>
-    <string name="search_product_hint">Buscar producto...</string>
-    <string name="invoice_date_label">Fecha de la factura:</string>
-    <string name="select_date_content_description">Seleccionar fecha</string>
+    <string name="appointment_completed_toast">Cita marcada como completada.</string>
+    <string name="appointment_cancelled_title">Cancelar Cita</string>
+    <string name="appointment_reschedule_question">¿Deseas reagendar esta cita para otra fecha?</string>
+    <string name="appointment_reschedule_yes">Sí, Reagendar</string>
+    <string name="appointment_reschedule_no">No, Cancelar Cita</string>
+    <string name="appointment_cancellation_reason_title">Motivo de Cancelación</string>
+    <string name="appointment_cancellation_reason_label">Escribe un breve motivo (opcional)</string>
+    <string name="appointment_cancelled_log_prefix">Cancelada:</string>
+    <string name="appointment_cancelled_reason_prefix">Motivo:</string>
+    <string name="no_cancelled_appointments">No hay citas canceladas para este día.</string>
+    <string name="cancelled_appointments_title">Citas Canceladas</string>
+    <string name="content_description_delete_appointment">Eliminar cita</string>
+    <string name="content_description_complete_appointment">Marcar cita como completada</string>
+    <string name="content_description_cancel_appointment">Cancelar cita</string>
+    <string name="sale_item_products_title">Productos:</string>
+    <string name="sale_item_no_details">No hay detalles de productos para esta venta.</string>
+    <string name="no_details_available">No posee notas</string>
 </resources>

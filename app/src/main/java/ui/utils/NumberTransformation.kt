@@ -7,32 +7,30 @@ import androidx.compose.ui.text.input.VisualTransformation
 import java.text.DecimalFormat
 import kotlin.math.max
 
-class ThousandsSeparatorTransformation : VisualTransformation {
+class NumberTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
-        val originalText = text.text
-        if (originalText.isEmpty()) {
-            return TransformedText(text, OffsetMapping.Identity)
+        val originalText = text.text.replace(".", "").replace(",", "")
+        val formattedText = if (originalText.isNotEmpty()) {
+            val number = originalText.toLongOrNull()
+            if (number != null) {
+                val formatter = DecimalFormat("#,###")
+                formatter.format(number)
+            } else {
+                originalText
+            }
+        } else {
+            ""
         }
-
-        val longValue = originalText.toLongOrNull()
-        if (longValue == null) {
-            return TransformedText(text, OffsetMapping.Identity)
-        }
-
-        val formattedText = DecimalFormat("#,###").format(longValue).replace(",", ".")
 
         val offsetMapping = object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
-                val digitsToRight = originalText.length - offset
-                val separatorsToRight = max(0, (digitsToRight - 1) / 3)
-                val totalSeparators = max(0, (originalText.length - 1) / 3)
-                val separatorsToLeft = totalSeparators - separatorsToRight
-                return offset + separatorsToLeft
+                val transformedOffset = offset + formattedText.count { it == '.' || it == ',' }
+                return transformedOffset.coerceIn(0, formattedText.length)
             }
 
             override fun transformedToOriginal(offset: Int): Int {
-                val separatorsBefore = formattedText.take(offset).count { it == '.' }
-                return offset - separatorsBefore
+                val originalOffset = offset - formattedText.substring(0, offset).count { it == '.' || it == ',' }
+                return originalOffset.coerceIn(0, originalText.length)
             }
         }
 
@@ -43,14 +41,9 @@ class ThousandsSeparatorTransformation : VisualTransformation {
     }
 }
 
-/**
- * Función de utilidad para formatear un número Double a una cadena de moneda en guaraníes.
- * ¡CORREGIDO! Ahora está fuera de la clase.
- */
 fun formatCurrency(value: Double): String {
-    return try {
-        String.format("%,.0f", value).replace(",", ".")
-    } catch (e: Exception) {
-        "0"
-    }
+    val formatter = DecimalFormat("#,###.##")
+    return formatter.format(value)
 }
+
+val ThousandsSeparatorTransformation = NumberTransformation()

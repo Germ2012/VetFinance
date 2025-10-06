@@ -9,9 +9,10 @@ import androidx.room.TypeConverters
         Transaction::class, Pet::class, Treatment::class, Product::class,
         Sale::class, Client::class, SaleProductCrossRef::class, Payment::class,
         Appointment::class, Supplier::class, Purchase::class, PurchaseProductCrossRef::class,
-        RestockOrder::class, RestockOrderItem::class // Added new entities
+        RestockOrder::class, RestockOrderItem::class,
+        AppointmentLog::class// Added new entities
     ],
-    version = 20, // Incremented version
+    version = 21, // Incremented version
     exportSchema = true // It's good practice to export schema
     // Removed AutoMigration(from = 18, to = 19) to resolve build error due to missing 18.json
 )
@@ -29,5 +30,6 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun supplierDao(): SupplierDao
     abstract fun purchaseDao(): PurchaseDao
     abstract fun restockDao(): RestockDao // Added RestockDao
+    abstract fun appointmentLogDao(): AppointmentLogDao
 
 }

@@ -24,7 +24,7 @@ import com.example.vetfinance.viewmodel.VetViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat // Added for Tarea 2
 import java.util.* // Added for Tarea 2
-import ui.utils.ThousandsSeparatorTransformation
+import ui.utils.NumberTransformation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -262,7 +262,7 @@ fun RestockProductItem(
                     onValueChange = onCostChange,
                     label = { Text(stringResource(R.string.label_new_unit_cost)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    visualTransformation = ThousandsSeparatorTransformation(), // This was Tarea 1
+                    visualTransformation = NumberTransformation(), // This was Tarea 1
                     modifier = Modifier.weight(1f)
                 )
             }

@@ -6,27 +6,25 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
+import com.example.vetfinance.data.Product
+import com.example.vetfinance.data.SaleProductCrossRef
 import com.example.vetfinance.data.SaleWithProducts
 import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency
 import java.text.SimpleDateFormat
-import java.time.Instant
-import java.time.LocalDateTime
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Date
-import java.util.Locale
+import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,11 +37,12 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
     val datePickerState = rememberDatePickerState()
     var saleToDelete by remember { mutableStateOf<SaleWithProducts?>(null) }
 
+    // --- DIÁLOGOS ---
     if (saleToDelete != null) {
         AlertDialog(
             onDismissRequest = { saleToDelete = null },
             title = { Text(stringResource(R.string.confirm_deletion_title)) },
-            text = { Text(stringResource(R.string.confirm_deletion_sale_message)) },
+            text = { Text(stringResource(R.string.confirm_delete_sale_message)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -51,14 +50,10 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                         saleToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text(stringResource(R.string.delete_button))
-                }
+                ) { Text(stringResource(R.string.delete_button)) }
             },
             dismissButton = {
-                TextButton(onClick = { saleToDelete = null }) {
-                    Text(stringResource(R.string.cancel_button))
-                }
+                TextButton(onClick = { saleToDelete = null }) { Text(stringResource(R.string.cancel_button)) }
             }
         )
     }
@@ -82,23 +77,22 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
         }
     }
 
+    // --- PANTALLA PRINCIPAL ---
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(onClick = {
-                navController.navigate(Screen.AddSale.route)
-            }) {
+            FloatingActionButton(onClick = { navController.navigate(Screen.AddSale.route) }) {
                 Icon(Icons.Default.Add, contentDescription = stringResource(R.string.register_sale_fab))
             }
         }
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues).padding(16.dp)) {
+            // --- BARRA DE FILTRO ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(stringResource(R.string.sales_history_title), style = MaterialTheme.typography.headlineMedium)
-
                 FilterChip(
                     selected = selectedDate != null,
                     onClick = { showDatePicker = true },
@@ -122,28 +116,24 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
             }
             Spacer(modifier = Modifier.height(16.dp))
 
+            // --- LISTA DE VENTAS ---
             if (isLoading && filteredSales.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
+            } else if (filteredSales.isEmpty()) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    val message = if (selectedDate != null) stringResource(R.string.no_sales_for_date)
+                    else stringResource(R.string.no_sales_recorded)
+                    Text(message)
+                }
             } else {
-                if (filteredSales.isEmpty()) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        val message = if (selectedDate != null) {
-                            stringResource(R.string.no_sales_for_date)
-                        } else {
-                            stringResource(R.string.no_sales_recorded)
-                        }
-                        Text(message)
-                    }
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(filteredSales, key = { it.sale.saleId }) { saleWithProducts ->
-                            SaleItem(
-                                saleWithProducts = saleWithProducts,
-                                onDeleteClick = { saleToDelete = saleWithProducts }
-                            )
-                        }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(filteredSales, key = { it.sale.saleId }) { sale ->
+                        SaleItem(
+                            saleWithProducts = sale,
+                            onDelete = { saleToDelete = sale }
+                        )
                     }
                 }
             }
@@ -152,78 +142,105 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
 }
 
 @Composable
-fun SaleItem(saleWithProducts: SaleWithProducts, onDeleteClick: () -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            val saleDateTime = LocalDateTime.ofInstant(
-                Instant.ofEpochMilli(saleWithProducts.sale.date),
-                ZoneId.systemDefault()
-            )
-            val formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
-
+fun SaleItem(
+    saleWithProducts: SaleWithProducts,
+    onDelete: () -> Unit
+) {
+    val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(4.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // --- ENCABEZADO DE LA TARJETA ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.sale_item_title, saleWithProducts.sale.saleId.take(8).uppercase()),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f)
+                    text = dateFormat.format(Date(saleWithProducts.sale.date)),
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold
                 )
-                Box {
-                    IconButton(onClick = { expanded = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options_content_description))
-                    }
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.delete_button)) },
-                            onClick = {
-                                onDeleteClick()
-                                expanded = false
-                            }
-                        )
-                    }
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.content_description_delete_sale))
                 }
             }
-            Text(
-                text = saleDateTime.format(formatter),
-                style = MaterialTheme.typography.bodySmall
-            )
-
+            Spacer(modifier = Modifier.height(8.dp))
+            HorizontalDivider()
             Spacer(modifier = Modifier.height(8.dp))
 
-            if (saleWithProducts.crossRefs.isNotEmpty()) {
-                saleWithProducts.crossRefs.forEach { crossRef ->
-                    val product = saleWithProducts.products.find { it.productId == crossRef.productId }
-                    val quantityFormatted = if (crossRef.quantitySold % 1.0 == 0.0) {
-                        crossRef.quantitySold.toInt().toString()
-                    } else {
-                        String.format(Locale.getDefault(), "%.2f", crossRef.quantitySold)
-                    }
-                    Text(stringResource(
-                        R.string.sale_item_product_detail,
-                        quantityFormatted,
-                        product?.name ?: stringResource(R.string.unknown_product),
-                        formatCurrency(crossRef.priceAtTimeOfSale))
-                    )
-                }
+            // --- DETALLES DE PRODUCTOS/SERVICIOS ---
+            if (saleWithProducts.crossRefs.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.no_details_available),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontStyle = FontStyle.Italic
+                )
             } else {
-                Text(stringResource(R.string.manual_sale_no_details), style = MaterialTheme.typography.bodySmall)
+                saleWithProducts.crossRefs.forEach { detail ->
+                    val product = saleWithProducts.products.find { it.productId == detail.productId }
+                    if (product != null) {
+                        SaleDetailItem(saleDetail = detail, product = product)
+                    }
+                }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
+            // --- TOTAL DE LA VENTA ---
             Text(
-                text = stringResource(R.string.total_amount_label, formatCurrency(saleWithProducts.sale.totalAmount)),
+                text = stringResource(R.string.sale_item_total_prefix, formatCurrency(saleWithProducts.sale.totalAmount)),
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.End)
             )
         }
+    }
+}
+
+@Composable
+fun SaleDetailItem(saleDetail: SaleProductCrossRef, product: Product) {
+    val isDoseSale = saleDetail.overridePrice != null
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(product.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+
+            // Lógica para mostrar las notas de cada ítem (servicio/dosis)
+            if (isDoseSale && !saleDetail.notes.isNullOrBlank()) {
+                Text(
+                    text = "\"${saleDetail.notes}\"",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontStyle = FontStyle.Italic
+                )
+            }
+
+            // Muestra la cantidad si no es una venta por dosis con precio manual
+            if (!isDoseSale) {
+                Text(
+                    text = stringResource(
+                        R.string.sale_detail_item_quantity_prefix,
+                        formatCurrency(saleDetail.quantitySold).removeSuffix(".00").removeSuffix(",00")
+                    ),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
+        val priceToShow = saleDetail.overridePrice ?: (saleDetail.priceAtTimeOfSale * saleDetail.quantitySold)
+        Text(
+            text = formatCurrency(priceToShow),
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(start = 8.dp),
+            style = MaterialTheme.typography.bodyMedium
+        )
     }
 }

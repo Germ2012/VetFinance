@@ -28,7 +28,7 @@ import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
 import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
 import com.example.vetfinance.data.Supplier // Added import
-import ui.utils.ThousandsSeparatorTransformation
+import ui.utils.NumberTransformation
 import ui.utils.formatCurrency
 import java.util.Locale
 import android.util.Log
@@ -135,7 +135,7 @@ fun ProductDialog(
                     onValueChange = { if (it.all { char -> char.isDigit() }) price = it },
                     label = { Text(stringResource(R.string.product_dialog_price_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    visualTransformation = ThousandsSeparatorTransformation(),
+                    visualTransformation = NumberTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     prefix = { Text(stringResource(R.string.text_prefix_gs)) },
                     isError = price.isBlank()
@@ -145,7 +145,7 @@ fun ProductDialog(
                     onValueChange = { if (it.all { char -> char.isDigit() }) cost = it },
                     label = { Text(stringResource(R.string.product_dialog_cost_label)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    visualTransformation = ThousandsSeparatorTransformation(),
+                    visualTransformation = NumberTransformation(),
                     modifier = Modifier.fillMaxWidth(),
                     prefix = { Text(stringResource(R.string.text_prefix_gs)) },
                     isError = cost.isBlank()
