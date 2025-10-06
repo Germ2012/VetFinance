@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
 import java.util.Locale
 import java.util.UUID
@@ -23,11 +24,20 @@ import javax.inject.Inject
 
 private const val GENERAL_CLIENT_ID = "00000000-0000-0000-0000-000000000001"
 
-enum class Period(@StringRes val displayResId: Int) {
+// MODIFICADO: Renombrado para mayor claridad
+enum class ReportPeriodType(@StringRes val displayResId: Int) {
     DAY(R.string.period_day),
     WEEK(R.string.period_week),
     MONTH(R.string.period_month)
 }
+
+// AÑADIDO: Data class para encapsular los períodos históricos
+data class HistoricalPeriod(
+    val id: String, // e.g., "2025-10-06", "2025-W41", "2025-10"
+    val displayName: String, // e.g., "06/10/2025", "Semana 41 (06/10 - 12/10)", "Octubre 2025"
+    val startDate: Long,
+    val endDate: Long
+)
 
 enum class TopProductsPeriod(@StringRes val displayResId: Int) {
     WEEK(R.string.topproducts_period_week),
@@ -209,6 +219,26 @@ class VetViewModel @Inject constructor(
         repository.getTopSellingProducts(startDate = start, endDate = end, limit = 10)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // --- Estados para la nueva funcionalidad de Reportes ---
+    private val _reportPeriodType = MutableStateFlow(ReportPeriodType.DAY)
+    val reportPeriodType: StateFlow<ReportPeriodType> = _reportPeriodType.asStateFlow()
+
+    private val _selectedHistoricalPeriod = MutableStateFlow<HistoricalPeriod?>(null)
+    val selectedHistoricalPeriod: StateFlow<HistoricalPeriod?> = _selectedHistoricalPeriod.asStateFlow()
+
+    val availableHistoricalPeriods: StateFlow<List<HistoricalPeriod>> = combine(_sales, reportPeriodType) { sales, type ->
+        generateHistoricalPeriods(sales, type)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val salesSummary: StateFlow<Double> = selectedHistoricalPeriod.map { period ->
+        calculateSalesSummary(period)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+    val grossProfitSummary: StateFlow<Double> = selectedHistoricalPeriod.map { period ->
+        calculateGrossProfitSummary(period)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+
     private val _showAddProductDialog = MutableStateFlow(false)
     val showAddProductDialog: StateFlow<Boolean> = _showAddProductDialog.asStateFlow()
     private val _showAddClientDialog = MutableStateFlow(false)
@@ -256,7 +286,104 @@ class VetViewModel @Inject constructor(
                 }
             }
         }
+        // AÑADIDO: Inicia el período histórico seleccionado
+        viewModelScope.launch {
+            availableHistoricalPeriods.collect { periods ->
+                if (_selectedHistoricalPeriod.value == null) {
+                    _selectedHistoricalPeriod.value = periods.firstOrNull()
+                }
+            }
+        }
     }
+
+    // --- Funciones para la nueva funcionalidad de Reportes ---
+    fun onReportPeriodTypeChanged(newType: ReportPeriodType) {
+        _reportPeriodType.value = newType
+        // Resetea el período seleccionado y deja que el colector lo actualice
+        _selectedHistoricalPeriod.value = availableHistoricalPeriods.value.firstOrNull()
+    }
+
+    fun onHistoricalPeriodSelected(period: HistoricalPeriod) {
+        _selectedHistoricalPeriod.value = period
+    }
+
+    private fun generateHistoricalPeriods(sales: List<SaleWithProducts>, type: ReportPeriodType): List<HistoricalPeriod> {
+        if (sales.isEmpty()) return emptyList()
+        val zoneId = ZoneId.systemDefault()
+        val locale = Locale("es", "ES")
+
+        return sales.map { Instant.ofEpochMilli(it.sale.date).atZone(zoneId).toLocalDate() }
+            .distinct()
+            .sortedDescending()
+            .groupBy {
+                when (type) {
+                    ReportPeriodType.DAY -> it
+                    ReportPeriodType.WEEK -> it.with(WeekFields.of(locale).dayOfWeek(), 1)
+                    ReportPeriodType.MONTH -> it.withDayOfMonth(1)
+                }
+            }
+            .map { (periodStart, dates) ->
+                val (startDate, endDate, displayName) = when (type) {
+                    ReportPeriodType.DAY -> {
+                        val date = periodStart
+                        Triple(
+                            date.atStartOfDay(zoneId).toInstant().toEpochMilli(),
+                            date.atTime(23, 59, 59).atZone(zoneId).toInstant().toEpochMilli(),
+                            date.format(DateTimeFormatter.ofPattern("dd/MM/yyyy", locale))
+                        )
+                    }
+                    ReportPeriodType.WEEK -> {
+                        val weekStart = periodStart
+                        val weekEnd = weekStart.plusDays(6)
+                        val weekOfYear = weekStart.get(WeekFields.of(locale).weekOfWeekBasedYear())
+                        val year = weekStart.year
+                        val formatter = DateTimeFormatter.ofPattern("dd/MM", locale)
+                        Triple(
+                            weekStart.atStartOfDay(zoneId).toInstant().toEpochMilli(),
+                            weekEnd.atTime(23, 59, 59).atZone(zoneId).toInstant().toEpochMilli(),
+                            "Semana $weekOfYear ($year, ${weekStart.format(formatter)} - ${weekEnd.format(formatter)})"
+                        )
+                    }
+                    ReportPeriodType.MONTH -> {
+                        val monthStart = periodStart
+                        val monthEnd = monthStart.withDayOfMonth(monthStart.lengthOfMonth())
+                        Triple(
+                            monthStart.atStartOfDay(zoneId).toInstant().toEpochMilli(),
+                            monthEnd.atTime(23, 59, 59).atZone(zoneId).toInstant().toEpochMilli(),
+                            monthStart.format(DateTimeFormatter.ofPattern("MMMM yyyy", locale)).replaceFirstChar { it.uppercase() }
+                        )
+                    }
+                }
+                HistoricalPeriod(
+                    id = periodStart.toString(),
+                    displayName = displayName,
+                    startDate = startDate,
+                    endDate = endDate
+                )
+            }.distinctBy { it.id }
+    }
+
+
+    private fun calculateSalesSummary(period: HistoricalPeriod?): Double {
+        if (period == null) return 0.0
+        return _sales.value
+            .filter { it.sale.date in period.startDate..period.endDate }
+            .sumOf { it.sale.totalAmount }
+    }
+
+    private fun calculateGrossProfitSummary(period: HistoricalPeriod?): Double {
+        if (period == null) return 0.0
+        val relevantSales = _sales.value.filter { it.sale.date in period.startDate..period.endDate }
+        val totalRevenue = relevantSales.sumOf { it.sale.totalAmount }
+        val totalCost = relevantSales.sumOf { sale ->
+            sale.crossRefs.sumOf { ref ->
+                val product = sale.products.find { it.productId == ref.productId }
+                (product?.cost ?: 0.0) * ref.quantitySold
+            }
+        }
+        return totalRevenue - totalCost
+    }
+
 
     fun onInventoryFilterChanged(newFilter: String) { _inventoryFilter.value = newFilter }
     fun onPetSearchQueryChange(query: String) { _petSearchQuery.value = query }
@@ -407,39 +534,9 @@ class VetViewModel @Inject constructor(
         }
     }
 
-    fun getSalesSummary(period: Period): Flow<Double> {
-        return _sales.map { sales ->
-            val now = LocalDate.now()
-            val startOfPeriod = when (period) {
-                Period.DAY -> now
-                Period.WEEK -> now.minusDays(now.dayOfWeek.value.toLong() - 1)
-                Period.MONTH -> now.withDayOfMonth(1)
-            }
-            val startEpoch = startOfPeriod.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            sales.filter { it.sale.date >= startEpoch }.sumOf { it.sale.totalAmount }
-        }
-    }
-
-    fun getGrossProfitSummary(period: Period): Flow<Double> {
-        return _sales.map { sales ->
-            val now = LocalDate.now()
-            val startOfPeriod = when (period) {
-                Period.DAY -> now
-                Period.WEEK -> now.minusDays(now.dayOfWeek.value.toLong() - 1)
-                Period.MONTH -> now.withDayOfMonth(1)
-            }
-            val startEpoch = startOfPeriod.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-            val relevantSales = sales.filter { it.sale.date >= startEpoch }
-            val totalRevenue = relevantSales.sumOf { it.sale.totalAmount }
-            val totalCost = relevantSales.sumOf { sale ->
-                sale.crossRefs.sumOf { ref ->
-                    val product = sale.products.find { it.productId == ref.productId }
-                    (product?.cost ?: 0.0) * ref.quantitySold
-                }
-            }
-            totalRevenue - totalCost
-        }
-    }
+    // ELIMINADO - Reemplazado por la nueva lógica
+    // fun getSalesSummary(period: Period): Flow<Double> { ... }
+    // fun getGrossProfitSummary(period: Period): Flow<Double> { ... }
 
     suspend fun exportarDatosCompletos(): Map<String, String> = repository.exportarDatosCompletos()
     suspend fun importarDatosDesdeZIP(uri: Uri, context: Context): String = repository.importarDatosDesdeZIP(uri, context)

@@ -37,7 +37,8 @@ import co.yml.charts.ui.barchart.models.BarData
 import co.yml.charts.ui.barchart.models.BarStyle
 import com.example.vetfinance.R
 import com.example.vetfinance.data.TopSellingProduct
-import com.example.vetfinance.viewmodel.Period
+import com.example.vetfinance.viewmodel.HistoricalPeriod
+import com.example.vetfinance.viewmodel.ReportPeriodType
 import com.example.vetfinance.viewmodel.TopProductsPeriod
 import com.example.vetfinance.viewmodel.VetViewModel
 import androidx.compose.runtime.collectAsState // Corrected import
@@ -87,11 +88,15 @@ fun ReportsScreen(viewModel: VetViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SalesAndBackupTab(viewModel: VetViewModel) {
-    var selectedPeriod by remember { mutableStateOf(Period.DAY) }
-    val salesSummary by viewModel.getSalesSummary(selectedPeriod).collectAsState(initial = 0.0)
-    val grossProfit by viewModel.getGrossProfitSummary(selectedPeriod).collectAsState(initial = 0.0)
+    val salesSummary by viewModel.salesSummary.collectAsState()
+    val grossProfit by viewModel.grossProfitSummary.collectAsState()
+    val selectedPeriodType by viewModel.reportPeriodType.collectAsState()
+    val historicalPeriods by viewModel.availableHistoricalPeriods.collectAsState()
+    val selectedHistoricalPeriod by viewModel.selectedHistoricalPeriod.collectAsState()
+
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -144,12 +149,16 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Top)
     ) {
-        SegmentedControl(selected = selectedPeriod, onPeriodSelected = { newPeriod -> selectedPeriod = newPeriod })
+        // MODIFICADO: Reemplazo del SegmentedControl por los nuevos menús desplegables
+        PeriodSelector(viewModel)
+
         val formattedSales = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(salesSummary)
         val formattedProfit = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(grossProfit)
+        val summaryTitle = selectedHistoricalPeriod?.displayName ?: stringResource(R.string.no_period_selected)
 
-        SummaryCard(title = stringResource(R.string.summary_total_sales, stringResource(selectedPeriod.displayResId)), value = formattedSales)
-        SummaryCard(title = stringResource(R.string.summary_gross_profit, stringResource(selectedPeriod.displayResId)), value = formattedProfit)
+
+        SummaryCard(title = stringResource(R.string.summary_total_sales, summaryTitle), value = formattedSales)
+        SummaryCard(title = stringResource(R.string.summary_gross_profit, summaryTitle), value = formattedProfit)
 
         Spacer(modifier = Modifier.weight(1f))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -162,6 +171,88 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PeriodSelector(viewModel: VetViewModel) {
+    val periodType by viewModel.reportPeriodType.collectAsState()
+    val availablePeriods by viewModel.availableHistoricalPeriods.collectAsState()
+    val selectedPeriod by viewModel.selectedHistoricalPeriod.collectAsState()
+    var periodTypeExpanded by remember { mutableStateOf(false) }
+    var historicalPeriodExpanded by remember { mutableStateOf(false) }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Menú para seleccionar el TIPO de período (Día, Semana, Mes)
+        ExposedDropdownMenuBox(
+            expanded = periodTypeExpanded,
+            onExpandedChange = { periodTypeExpanded = !periodTypeExpanded },
+            modifier = Modifier.weight(1.0f)
+        ) {
+            TextField(
+                value = stringResource(id = periodType.displayResId),
+                onValueChange = {},
+                readOnly = true,
+                label = { Text(stringResource(R.string.label_period_type)) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = periodTypeExpanded) },
+                modifier = Modifier.menuAnchor()
+            )
+            ExposedDropdownMenu(
+                expanded = periodTypeExpanded,
+                onDismissRequest = { periodTypeExpanded = false }
+            ) {
+                ReportPeriodType.values().forEach { type ->
+                    DropdownMenuItem(
+                        text = { Text(stringResource(id = type.displayResId)) },
+                        onClick = {
+                            viewModel.onReportPeriodTypeChanged(type)
+                            periodTypeExpanded = false
+                        }
+                    )
+                }
+            }
+        }
+
+        // Menú para seleccionar el período HISTÓRICO específico
+        ExposedDropdownMenuBox(
+            expanded = historicalPeriodExpanded,
+            onExpandedChange = { historicalPeriodExpanded = !historicalPeriodExpanded },
+            modifier = Modifier.weight(1.5f)
+        ) {
+            val selectionText = selectedPeriod?.displayName ?: stringResource(R.string.no_period_selected)
+            TextField(
+                value = selectionText,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text(stringResource(R.string.label_select_period)) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = historicalPeriodExpanded) },
+                modifier = Modifier.menuAnchor()
+            )
+            ExposedDropdownMenu(
+                expanded = historicalPeriodExpanded,
+                onDismissRequest = { historicalPeriodExpanded = false }
+            ) {
+                if (availablePeriods.isEmpty()) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.no_sales_data_period)) },
+                        onClick = { },
+                        enabled = false
+                    )
+                } else {
+                    availablePeriods.forEach { period ->
+                        DropdownMenuItem(
+                            text = { Text(period.displayName) },
+                            onClick = {
+                                viewModel.onHistoricalPeriodSelected(period)
+                                historicalPeriodExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -408,22 +499,10 @@ fun InventoryReportTab(viewModel: VetViewModel) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun SegmentedControl(selected: Period, onPeriodSelected: (Period) -> Unit) {
-    val options = Period.values()
-    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-        options.forEachIndexed { index, period ->
-            SegmentedButton(
-                onClick = { onPeriodSelected(period) },
-                selected = period == selected,
-                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
-            ) {
-                Text(stringResource(period.displayResId))
-            }
-        }
-    }
-}
+// ELIMINADO - Ya no se usa
+// @OptIn(ExperimentalMaterial3Api::class)
+// @Composable
+// fun SegmentedControl(selected: Period, onPeriodSelected: (Period) -> Unit) { ... }
 
 @Composable
 fun SummaryCard(title: String, value: String) {

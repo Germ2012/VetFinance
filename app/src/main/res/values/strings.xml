@@ -274,4 +274,8 @@
     <string name="sale_item_products_title">Productos:</string>
     <string name="sale_item_no_details">No hay detalles de productos para esta venta.</string>
     <string name="no_details_available">No posee notas</string>
+    <string name="label_period_type">Tipo de período</string>
+    <string name="label_select_period">Seleccionar período</string>
+    <string name="no_period_selected">Sin seleccionar</string>
+    <string name="no_sales_data_period">No existen ventas para el periodo seleccionado</string>
 </resources>
