@@ -68,7 +68,6 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                     onClick = {
                         val selectedMillis = datePickerState.selectedDateMillis
                         if (selectedMillis != null) {
-                            // --- INICIO DE LA CORRECCIÓN DEFINITIVA ---
                             // Convertir el millis UTC a una fecha local (LocalDate)
                             val localDate = Instant.ofEpochMilli(selectedMillis)
                                 .atZone(ZoneId.of("UTC")).toLocalDate()
@@ -77,7 +76,6 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                                 .toInstant().toEpochMilli()
 
                             viewModel.onSaleDateFilterSelected(startOfDayMillis)
-                            // --- FIN DE LA CORRECCIÓN DEFINITIVA ---
                         } else {
                             viewModel.onSaleDateFilterSelected(null)
                         }

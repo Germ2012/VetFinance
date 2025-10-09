@@ -1,7 +1,7 @@
-// En app/src/main/java/com/example/vetfinance/MainActivity.kt
+
 package com.example.vetfinance
 
-// Imports necesarios de ambos códigos
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -32,16 +32,12 @@ class MainActivity : ComponentActivity() {
 
     // --- Inicio del código de permisos ---
 
-    // 1. Se registra un "launcher" que manejará la respuesta del usuario al diálogo de permiso.
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted: Boolean ->
         if (isGranted) {
-            // Permiso concedido. Puedes continuar con la lógica que depende de notificaciones.
             println("Permiso de notificaciones CONCEDIDO")
         } else {
-            // Permiso denegado. Es una buena práctica informar al usuario que las
-            // notificaciones no funcionarán sin este permiso.
             println("Permiso de notificaciones DENEGADO")
         }
     }
@@ -59,10 +55,6 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-
-    // --- Fin del código de permisos ---
-
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -81,8 +73,6 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(viewModel: VetViewModel) {
     val navController = rememberNavController()
-    // Se definen los ítems que aparecerán en la barra de navegación inferior,
-    // incluyendo la pantalla de Calendario.
     val navItems = listOf(
         Screen.Dashboard,
         Screen.Calendar,
@@ -105,14 +95,11 @@ fun MainScreen(viewModel: VetViewModel) {
                         selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                         onClick = {
                             navController.navigate(screen.route) {
-                                // Evita acumular una gran pila de destinos
-                                popUpTo(navController.graph.findStartDestination().id) {
+                               popUpTo(navController.graph.findStartDestination().id) {
                                     saveState = true
                                 }
-                                // Evita volver a lanzar el mismo destino si ya está en la cima
-                                launchSingleTop = true
-                                // Restaura el estado al volver a seleccionar un ítem
-                                restoreState = true
+                               launchSingleTop = true
+                               restoreState = true
                             }
                         }
                     )
@@ -121,7 +108,6 @@ fun MainScreen(viewModel: VetViewModel) {
         }
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
-            // AppNavigation contiene el NavHost que renderiza la pantalla actual.
             AppNavigation(navController = navController, viewModel = viewModel)
         }
     }

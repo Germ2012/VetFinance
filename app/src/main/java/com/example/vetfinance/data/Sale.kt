@@ -19,7 +19,6 @@ import java.util.UUID
             onDelete = ForeignKey.SET_NULL
         )
     ],
-    // AÑADIDO: Índice para la llave foránea
     indices = [Index("clientIdFk")]
 )
 data class Sale(
@@ -32,16 +31,15 @@ data class Sale(
 
 @Entity(
     tableName = "sales_products_cross_ref",
-    // SE ELIMINA: primaryKeys = ["saleId", "productId"],
     foreignKeys = [
         ForeignKey(entity = Sale::class, parentColumns = ["saleId"], childColumns = ["saleId"]),
         ForeignKey(entity = Product::class, parentColumns = ["productId"], childColumns = ["productId"])
     ],
-    indices = [Index("productId"), Index("saleId")] // Añadimos índice en saleId
+    indices = [Index("productId"), Index("saleId")]
 )
 data class SaleProductCrossRef(
     @PrimaryKey
-    val crossRefId: String = UUID.randomUUID().toString(), // ¡NUEVA CLAVE PRIMARIA!
+    val crossRefId: String = UUID.randomUUID().toString(),
     val saleId: String,
     val productId: String,
     val quantitySold: Double,

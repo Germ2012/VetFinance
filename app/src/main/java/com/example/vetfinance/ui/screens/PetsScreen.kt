@@ -101,9 +101,6 @@ fun PetsScreen(
     }
 }
 
-/**
- * Un elemento visual que representa una mascota y su dueño en una tarjeta.
- */
 @Composable
 fun PetItem(petWithOwner: PetWithOwner, onItemClick: () -> Unit) {
     Card(

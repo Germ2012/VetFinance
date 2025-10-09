@@ -55,7 +55,7 @@ fun MenuItem(title: String, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(text = title, style = MaterialTheme.typography.titleMedium)
-            Icon(Icons.Default.ChevronRight, contentDescription = null) // Content description is null as per original code
+            Icon(Icons.Default.ChevronRight, contentDescription = null)
         }
     }
 }

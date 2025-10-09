@@ -80,7 +80,6 @@ fun CalendarScreen(viewModel: VetViewModel) {
         }
     ) { paddingValues ->
         // --- LÓGICA DE DISEÑO INTEGRADA ---
-        // Se decide el layout principal (Row o Column) según la orientación
         if (isLandscape) {
             Row(
                 modifier = Modifier
@@ -97,7 +96,7 @@ fun CalendarScreen(viewModel: VetViewModel) {
                         MonthHeader(daysOfWeek = daysOfWeek, monthName = "$monthName ${month.yearMonth.year}")
                     }
                 )
-                Column(modifier = Modifier.weight(1f)) { // Ocupa la otra mitad del ancho
+                Column(modifier = Modifier.weight(1f)) {
                     AppointmentList(appointments = appointments)
                 }
             }
@@ -108,7 +107,7 @@ fun CalendarScreen(viewModel: VetViewModel) {
                     .padding(paddingValues)
             ) {
                 HorizontalCalendar(
-                    modifier = Modifier.weight(1f), // Ocupa la mitad de la altura
+                    modifier = Modifier.weight(1f),
                     state = state,
                     dayContent = { day -> Day(day, selectedDate == day.date) { viewModel.onCalendarDateSelected(it.date) } },
                     monthHeader = { month ->
@@ -117,7 +116,7 @@ fun CalendarScreen(viewModel: VetViewModel) {
                         MonthHeader(daysOfWeek = daysOfWeek, monthName = "$monthName ${month.yearMonth.year}")
                     }
                 )
-                Column(modifier = Modifier.weight(1f)) { // Ocupa la otra mitad de la altura
+                Column(modifier = Modifier.weight(1f)) {
                     AppointmentList(appointments = appointments)
                 }
             }
@@ -153,8 +152,8 @@ fun MonthHeader(daysOfWeek: List<DayOfWeek>, monthName: String) {
 fun Day(day: CalendarDay, isSelected: Boolean, onClick: (CalendarDay) -> Unit) {
     Box(
         modifier = Modifier
-            .aspectRatio(1f) // Ensure the cell is square, taking full column width
-            .padding(4.dp)   // Padding for the circular visual, applied after aspectRatio
+            .aspectRatio(1f)
+            .padding(4.dp)
             .clip(CircleShape)
             .background(color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent)
             .border(
@@ -163,12 +162,12 @@ fun Day(day: CalendarDay, isSelected: Boolean, onClick: (CalendarDay) -> Unit) {
                 shape = CircleShape
             )
             .clickable { onClick(day) },
-        contentAlignment = Alignment.Center // Center the Text composable within this Box
+        contentAlignment = Alignment.Center
     ) {
         Text(
             text = day.date.dayOfMonth.toString(),
             color = if (isSelected) MaterialTheme.colorScheme.onPrimary else Color.Unspecified,
-            textAlign = TextAlign.Center // Explicitly center the text within the Text composable
+            textAlign = TextAlign.Center
         )
     }
 }
@@ -190,7 +189,7 @@ fun AppointmentList(appointments: List<AppointmentWithDetails>) {
             LazyColumn(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxSize() // Asegura que la lista ocupe todo el espacio
+                modifier = Modifier.fillMaxSize()
             ) {
                 items(appointments) { appointmentDetails ->
                     AppointmentItem(appointmentDetails)

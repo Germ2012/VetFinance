@@ -24,7 +24,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
     val showDialog by viewModel.showAddProductDialog.collectAsState()
     val filter by viewModel.inventoryFilter.collectAsState()
     val inventory by viewModel.inventory.collectAsState()
-    val suppliers by viewModel.suppliers.collectAsState() // Collect suppliers
+    val suppliers by viewModel.suppliers.collectAsState()
     var productToEdit by remember { mutableStateOf<Product?>(null) }
     var productToDelete by remember { mutableStateOf<Product?>(null) }
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
@@ -52,7 +52,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
             allProducts = inventory,
-            suppliers = suppliers // Pass suppliers
+            suppliers = suppliers
         )
     }
 
@@ -70,7 +70,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
             allProducts = inventory,
-            suppliers = suppliers // Pass suppliers
+            suppliers = suppliers
         )
     }
 
@@ -178,7 +178,6 @@ fun InventoryItem(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // CORREGIDO: Estructura de Columnas anidadas arreglada
             Column(modifier = Modifier.weight(1f)) {
                 Text(product.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                 Text(

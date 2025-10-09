@@ -34,16 +34,14 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     val history by viewModel.treatmentHistory.collectAsState()
     var showTreatmentDialog by remember { mutableStateOf(false) }
     val inventory by viewModel.inventory.collectAsState()
-    val suppliers by viewModel.suppliers.collectAsState() // Collect suppliers
+    val suppliers by viewModel.suppliers.collectAsState()
     val services = remember(inventory) { inventory.filter { it.isService } }
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
 
-    // --- INICIO CÓDIGO A MODIFICAR ---
     // Estados para manejar el diálogo de edición y eliminación
     var treatmentToEdit by remember { mutableStateOf<Treatment?>(null) }
     var treatmentToDelete by remember { mutableStateOf<Treatment?>(null) }
-    // --- FIN CÓDIGO A MODIFICAR ---
 
     if (showTreatmentDialog && petWithOwner != null) {
         AddTreatmentDialog(
@@ -123,11 +121,11 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
             allProducts = inventory, 
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.insertOrUpdateProduct(newProduct) // Pass the whole product object
+                viewModel.insertOrUpdateProduct(newProduct)
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
-            suppliers = suppliers // Pass suppliers
+            suppliers = suppliers
         )
     }
 

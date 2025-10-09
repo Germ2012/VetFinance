@@ -8,7 +8,7 @@ import androidx.room.Transaction
 data class RestockHistoryItem(
     val productName: String,
     val costAtTime: Double,
-    val quantity: Double // Corregido: de Int a Double
+    val quantity: Double
 )
 
 @Dao
@@ -23,12 +23,12 @@ interface RestockDao {
     @Query("""
         SELECT
             p.name as productName,
-            roi.costPerUnit as costAtTime, -- Corregido: costAtTime -> costPerUnit
+            roi.costPerUnit as costAtTime, 
             roi.quantity as quantity
         FROM restock_order_items AS roi
-        INNER JOIN restock_orders AS ro ON roi.orderIdFk = ro.orderId -- Corregido: JOIN en orderIdFk
-        INNER JOIN products AS p ON roi.productIdFk = p.productId -- Corregido: JOIN en productIdFk
-        WHERE ro.orderDate >= :startDate AND ro.orderDate <= :endDate -- Corregido: date -> orderDate
+        INNER JOIN restock_orders AS ro ON roi.orderIdFk = ro.orderId 
+        INNER JOIN products AS p ON roi.productIdFk = p.productId 
+        WHERE ro.orderDate >= :startDate AND ro.orderDate <= :endDate 
     """)
     suspend fun getRestockHistoryForDateRange(startDate: Long, endDate: Long): List<RestockHistoryItem>
 }

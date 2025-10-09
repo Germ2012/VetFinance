@@ -1,9 +1,6 @@
 package com.example.vetfinance.data
 
-// Constants from Product.kt for reference:
-// const val SELLING_METHOD_BY_UNIT = "Por Unidad"
-// const val SELLING_METHOD_BY_WEIGHT_OR_AMOUNT = "Por Peso/Monto"
-// const val SELLING_METHOD_DOSE_ONLY = "Solo Dosis"
+
 
 enum class SellingMethod(val stringValue: String) {
     BY_UNIT(SELLING_METHOD_BY_UNIT),

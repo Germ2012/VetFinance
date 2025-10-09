@@ -5,10 +5,7 @@ import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.ui.graphics.vector.ImageVector
 
-/**
- * Define todas las rutas de navegación de la aplicación.
- * Se usa una sealed class para asegurar que solo se puedan usar las rutas aquí definidas.
- */
+
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
     // Pantallas principales que aparecen en la barra de navegación inferior
     object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Dashboard)

@@ -211,9 +211,6 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                             if (itemToRemove != null) {
                                 viewModel.removeFromCart(itemToRemove)
                             }
-                        },
-                        onQuantityChange = { qty ->
-                            viewModel.addOrUpdateProductInCart(product, qty)
                         }
                     )
                 }

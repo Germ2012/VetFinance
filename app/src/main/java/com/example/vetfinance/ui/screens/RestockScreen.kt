@@ -35,7 +35,6 @@ fun RestockScreen(
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var showDatePicker by remember { mutableStateOf(false) }
 
-    // Fetch history whenever selectedDate changes, and initially.
     LaunchedEffect(selectedDate) {
         viewModel.fetchRestockHistory(selectedDate)
     }

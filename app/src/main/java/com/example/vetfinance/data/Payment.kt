@@ -11,7 +11,6 @@ import java.util.UUID
     foreignKeys = [
         ForeignKey(entity = Client::class, parentColumns = ["clientId"], childColumns = ["clientIdFk"])
     ],
-    // AÑADIDO: Índice para la llave foránea
     indices = [Index("clientIdFk")]
 )
 data class Payment(

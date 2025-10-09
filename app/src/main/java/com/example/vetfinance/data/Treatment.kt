@@ -12,7 +12,6 @@ import java.util.UUID
         ForeignKey(entity = Pet::class, parentColumns = ["petId"], childColumns = ["petIdFk"]),
         ForeignKey(entity = Product::class, parentColumns = ["productId"], childColumns = ["serviceId"])
     ],
-    // AÑADIDO: Índices para las llaves foráneas
     indices = [Index("petIdFk"), Index("serviceId")]
 )
 data class Treatment(

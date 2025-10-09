@@ -99,7 +99,6 @@ interface SaleDao {
     """)
     fun getTopSellingProducts(startDate: Long, endDate: Long, limit: Int = 10): Flow<List<TopSellingProduct>>
 
-    // AÑADIDO: Funciones para exportación
     @Query("SELECT * FROM sales")
     fun getAllSalesSimple(): Flow<List<Sale>>
     @Query("SELECT * FROM sales_products_cross_ref")
@@ -141,7 +140,6 @@ interface PaymentDao {
     @Query("SELECT * FROM payments WHERE clientIdFk = :clientId ORDER BY paymentDate DESC")
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>>
 
-    // AÑADIDO: Función para exportación
     @Query("SELECT * FROM payments")
     fun getAllPaymentsSimple(): Flow<List<Payment>>
 }
@@ -161,7 +159,6 @@ interface PetDao {
     @Query("SELECT * FROM pets ORDER BY name ASC")
     fun getAllPetsWithOwners(): Flow<List<PetWithOwner>>
 
-    // AÑADIDO: Función para exportación
     @Query("SELECT * FROM pets")
     fun getAllPetsSimple(): Flow<List<Pet>>
 }
@@ -170,14 +167,11 @@ interface PetDao {
 interface TreatmentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(treatment: Treatment)
-    
-    // --- INICIO CÓDIGO A AÑADIR ---
     @Update
     suspend fun update(treatment: Treatment)
 
     @Delete
     suspend fun delete(treatment: Treatment)
-    // --- FIN CÓDIGO A AÑADIR ---
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(treatments: List<Treatment>)
@@ -188,10 +182,12 @@ interface TreatmentDao {
     @Query("SELECT * FROM treatments WHERE nextTreatmentDate IS NOT NULL AND isNextTreatmentCompleted = 0 ORDER BY nextTreatmentDate ASC")
     fun getUpcomingTreatments(): Flow<List<Treatment>>
 
+    @Query("SELECT * FROM treatments WHERE nextTreatmentDate BETWEEN :startDate AND :endDate AND isNextTreatmentCompleted = 0 ORDER BY nextTreatmentDate ASC")
+    suspend fun getUpcomingTreatmentsForRange(startDate: Long, endDate: Long): List<Treatment>
+
     @Query("UPDATE treatments SET isNextTreatmentCompleted = 1 WHERE treatmentId = :treatmentId")
     suspend fun markAsCompleted(treatmentId: String)
 
-    // AÑADIDO: Función para exportación
     @Query("SELECT * FROM treatments")
     fun getAllTreatmentsSimple(): Flow<List<Treatment>>
 }
@@ -230,7 +226,6 @@ interface AppointmentDao {
     @Query("DELETE FROM appointments")
     suspend fun deleteAllAppointments()
 
-    // AÑADIDO: Función para exportación
     @Query("SELECT * FROM appointments")
     fun getAllAppointmentsSimple(): Flow<List<Appointment>>
 }

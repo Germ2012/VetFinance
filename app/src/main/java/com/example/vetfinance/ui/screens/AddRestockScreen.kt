@@ -45,7 +45,6 @@ fun AddRestockScreen( // Renamed
         suppliers.find { it.supplierId == selectedSupplierId }
     }
 
-    // Reset search query when composable is first launched or re-launched
     LaunchedEffect(Unit) {
         viewModel.onRestockSearchQueryChange("")
     }
@@ -100,7 +99,7 @@ fun AddRestockScreen( // Renamed
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Registrar Reabastecimiento") }, // Changed title
+                title = { Text("Registrar Reabastecimiento") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.content_description_back))
@@ -126,7 +125,7 @@ fun AddRestockScreen( // Renamed
                         if (quantity != null && quantity > 0 && cost != null && cost >= 0) {
                             itemsToRestock.add(
                                 RestockOrderItem(
-                                    orderIdFk = "", // This will be set in ViewModel
+                                    orderIdFk = "",
                                     productIdFk = productId,
                                     quantity = quantity,
                                     costPerUnit = cost
@@ -150,7 +149,7 @@ fun AddRestockScreen( // Renamed
 
                     scope.launch {
                         snackbarHostState.showSnackbar(context.getString(R.string.restock_success_message))
-                        navController.popBackStack() // Go back after success
+                        navController.popBackStack()
                     }
                     restockQuantitiesAndCosts.clear()
                 },
@@ -169,7 +168,6 @@ fun AddRestockScreen( // Renamed
                 .padding(horizontal = 16.dp)
                 .fillMaxSize()
         ) {
-            // Supplier Dropdown
             var supplierDropdownExpanded by remember { mutableStateOf(false) }
             ExposedDropdownMenuBox(
                 expanded = supplierDropdownExpanded,
@@ -199,16 +197,12 @@ fun AddRestockScreen( // Renamed
                     }
                 }
             }
-
-            // Search Bar
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.onRestockSearchQueryChange(it) },
                 label = { Text(stringResource(R.string.search_product_hint)) },
                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
             )
-
-            // Date Picker Row
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
                 Text(stringResource(R.string.invoice_date_label), modifier = Modifier.weight(1f))
                 Text(SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(selectedDate)))
@@ -225,7 +219,7 @@ fun AddRestockScreen( // Renamed
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f) // Takes remaining space
+                    modifier = Modifier.weight(1f)
                 ) {
                     items(productsToShow, key = { it.productId }) { product ->
                         RestockProductItem(

@@ -16,7 +16,7 @@ import com.example.vetfinance.data.Supplier
 
 @Composable
 fun SupplierDialog(
-    supplier: Supplier?, // Null when adding a new supplier
+    supplier: Supplier?,
     onDismiss: () -> Unit,
     onConfirm: (Supplier) -> Unit
 ) {
@@ -104,7 +104,6 @@ fun SupplierDialog(
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(onClick = {
                         if (name.isBlank()) {
-                            // Usar la variable que contiene el string
                             nameError = nameRequiredError
                         } else {
                             val newOrUpdatedSupplier = supplier?.copy(

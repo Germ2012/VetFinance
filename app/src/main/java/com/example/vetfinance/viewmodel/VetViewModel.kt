@@ -24,14 +24,13 @@ import javax.inject.Inject
 
 private const val GENERAL_CLIENT_ID = "00000000-0000-0000-0000-000000000001"
 
-// MODIFICADO: Renombrado para mayor claridad
+
 enum class ReportPeriodType(@StringRes val displayResId: Int) {
     DAY(R.string.period_day),
     WEEK(R.string.period_week),
     MONTH(R.string.period_month)
 }
 
-// AÑADIDO: Data class para encapsular los períodos históricos
 data class HistoricalPeriod(
     val id: String, // e.g., "2025-10-06", "2025-W41", "2025-10"
     val displayName: String, // e.g., "06/10/2025", "Semana 41 (06/10 - 12/10)", "Octubre 2025"
@@ -54,7 +53,6 @@ class VetViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    // Supplier related states and functions
     private val _suppliers = MutableStateFlow<List<Supplier>>(emptyList())
     val suppliers: StateFlow<List<Supplier>> = _suppliers.asStateFlow()
 
@@ -107,7 +105,6 @@ class VetViewModel @Inject constructor(
         val updatedItems = itemsToRestock.map { it.copy(orderIdFk = orderId) }
         repository.performRestock(order, updatedItems)
     }
-    // End of supplier related states and functions
 
     fun deleteProduct(product: Product) = viewModelScope.launch { repository.deleteProduct(product) }
     fun deleteSale(sale: SaleWithProducts) = viewModelScope.launch { repository.deleteSale(sale) }
@@ -116,8 +113,8 @@ class VetViewModel @Inject constructor(
         if (containerProduct.containedProductId != null && containerProduct.containerSize != null) {
             repository.performInventoryTransfer(
                 containerId = containerProduct.productId,
-                containedId = containerProduct.containedProductId!!,
-                amountToTransfer = containerProduct.containerSize!!
+                containedId = containerProduct.containedProductId,
+                amountToTransfer = containerProduct.containerSize
             )
         }
     }
@@ -230,7 +227,7 @@ class VetViewModel @Inject constructor(
         repository.getTopSellingProducts(startDate = start, endDate = end, limit = 10)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // --- Estados para la nueva funcionalidad de Reportes ---
+    // --- Estados para la funcionalidad de Reportes ---
     private val _reportPeriodType = MutableStateFlow(ReportPeriodType.DAY)
     val reportPeriodType: StateFlow<ReportPeriodType> = _reportPeriodType.asStateFlow()
 
@@ -276,7 +273,6 @@ class VetViewModel @Inject constructor(
     private val _productForDoseSale = MutableStateFlow<Product?>(null)
     val productForDoseSale: StateFlow<Product?> = _productForDoseSale.asStateFlow()
 
-    // --- CÓDIGO AÑADIDO: Estado para el nuevo diálogo ---
     private val _saleTypeDialogProduct = MutableStateFlow<Product?>(null)
     val saleTypeDialogProduct: StateFlow<Product?> = _saleTypeDialogProduct.asStateFlow()
 
@@ -297,7 +293,6 @@ class VetViewModel @Inject constructor(
                 }
             }
         }
-        // AÑADIDO: Inicia el período histórico seleccionado
         viewModelScope.launch {
             availableHistoricalPeriods.collect { periods ->
                 if (_selectedHistoricalPeriod.value == null) {
@@ -306,8 +301,6 @@ class VetViewModel @Inject constructor(
             }
         }
     }
-
-    // --- Funciones para la nueva funcionalidad de Reportes ---
     fun onReportPeriodTypeChanged(newType: ReportPeriodType) {
         _reportPeriodType.value = newType
         // Resetea el período seleccionado y deja que el colector lo actualice
@@ -333,7 +326,7 @@ class VetViewModel @Inject constructor(
                     ReportPeriodType.MONTH -> it.withDayOfMonth(1)
                 }
             }
-            .map { (periodStart, dates) ->
+            .map { (periodStart, _) ->
                 val (startDate, endDate, displayName) = when (type) {
                     ReportPeriodType.DAY -> {
                         val date = periodStart
@@ -424,7 +417,6 @@ class VetViewModel @Inject constructor(
     fun openDoseSaleDialog(product: Product) { _productForDoseSale.value = product; _showDoseSaleDialog.value = true }
     fun dismissDoseSaleDialog() { _productForDoseSale.value = null; _showDoseSaleDialog.value = false }
 
-    // --- CÓDIGO AÑADIDO: Funciones para el nuevo diálogo ---
     fun openSaleTypeDialog(product: Product) {
         _saleTypeDialogProduct.value = product
     }
@@ -436,8 +428,6 @@ class VetViewModel @Inject constructor(
 
     fun insertOrUpdateProduct(product: Product) {
         viewModelScope.launch {
-            // ANTES: Tenía una lógica compleja para decidir si insertar o actualizar.
-            // AHORA: Simplemente le pasa el trabajo al Repository, que es el experto.
             repository.insertOrUpdateProduct(product)
         }
     }
@@ -454,10 +444,8 @@ class VetViewModel @Inject constructor(
     }
     fun markTreatmentAsCompleted(treatment: Treatment) = executeWithLoading { repository.markTreatmentAsCompleted(treatment.treatmentId) }
 
-    // --- INICIO CÓDIGO A AÑADIR ---
     fun updateTreatment(treatment: Treatment) = executeWithLoading { repository.updateTreatment(treatment) }
     fun deleteTreatment(treatment: Treatment) = executeWithLoading { repository.deleteTreatment(treatment) }
-    // --- FIN CÓDIGO A AÑADIR ---
 
     fun makePayment(amount: Double) = executeWithLoading { _clientForPayment.value?.let { repository.makePayment(it, amount); onDismissPaymentDialog() } }
     fun addAppointment(appointment: Appointment) = executeWithLoading { repository.insertAppointment(appointment) }
@@ -477,7 +465,6 @@ class VetViewModel @Inject constructor(
             }
         } else {
             // Para "Dosis" o "Peso/Monto", o si es un item nuevo, siempre se abre diálogo o se añade
-            // La lógica para abrir el diálogo ya está en la UI, aquí solo añadimos uno por defecto
             if (product.sellingMethod == SELLING_METHOD_BY_UNIT) {
                 currentCart.add(CartItem(product = product, quantity = 1.0))
             }
@@ -550,11 +537,6 @@ class VetViewModel @Inject constructor(
             onFinished()
         }
     }
-
-    // ELIMINADO - Reemplazado por la nueva lógica
-    // fun getSalesSummary(period: Period): Flow<Double> { ... }
-    // fun getGrossProfitSummary(period: Period): Flow<Double> { ... }
-
     suspend fun exportarDatosCompletos(): Map<String, String> = repository.exportarDatosCompletos()
     suspend fun importarDatosDesdeZIP(uri: Uri, context: Context): String = repository.importarDatosDesdeZIP(uri, context)
 

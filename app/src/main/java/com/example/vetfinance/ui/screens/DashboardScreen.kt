@@ -39,7 +39,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         petsWithOwners.find { it.pet.petId == treatment.petIdFk }
     }
     val inventory by viewModel.inventory.collectAsState()
-    val suppliers by viewModel.suppliers.collectAsState() // Collect suppliers
+    val suppliers by viewModel.suppliers.collectAsState()
     val services = remember(inventory) { inventory.filter { it.isService } }
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     var showManagementDialog by remember { mutableStateOf(false) }
@@ -79,11 +79,11 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             allProducts = inventory,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.insertOrUpdateProduct(newProduct) // Pass the whole product object
+                viewModel.insertOrUpdateProduct(newProduct)
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
-            suppliers = suppliers // Pass suppliers
+            suppliers = suppliers
         )
     }
 

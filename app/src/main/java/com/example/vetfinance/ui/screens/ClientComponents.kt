@@ -16,9 +16,6 @@ import com.example.vetfinance.data.Client
 import ui.utils.NumberTransformation
 import ui.utils.formatCurrency
 
-/**
- * Componente que muestra la informaciÃ³n de un cliente en una tarjeta.
- */
 @Composable
 fun ClientItem(client: Client, onPayClick: () -> Unit, onItemClick: () -> Unit) {
     Card(
@@ -44,10 +41,6 @@ fun ClientItem(client: Client, onPayClick: () -> Unit, onItemClick: () -> Unit) 
         }
     }
 }
-
-/**
- * DiÃ¡logo para registrar un pago para un cliente especÃ­fico.
- */
 @Composable
 fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
     var amount by remember { mutableStateOf("") }
@@ -60,7 +53,7 @@ fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> 
                 value = amount,
                 onValueChange = { amount = it.filter { char -> char.isDigit() } },
                 label = { Text(stringResource(R.string.payment_dialog_amount_label)) },
-                prefix = { Text(stringResource(R.string.text_prefix_gs)) }, // Prefijo Gs.
+                prefix = { Text(stringResource(R.string.text_prefix_gs)) },
                 keyboardOptions = KeyboardOptions(
                     keyboardType = KeyboardType.Number
                 ),

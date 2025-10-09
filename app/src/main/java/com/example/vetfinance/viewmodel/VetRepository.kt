@@ -140,6 +140,7 @@ class VetRepository @Inject constructor(
     fun getAllPetsWithOwners(): Flow<List<PetWithOwner>> = petDao.getAllPetsWithOwners()
     fun getTreatmentsForPet(petId: String): Flow<List<Treatment>> = treatmentDao.getTreatmentsForPet(petId)
     fun getUpcomingTreatments(): Flow<List<Treatment>> = treatmentDao.getUpcomingTreatments()
+    suspend fun getUpcomingTreatmentsForRange(startDate: Long, endDate: Long): List<Treatment> = treatmentDao.getUpcomingTreatmentsForRange(startDate, endDate)
     suspend fun getSaleDetailsBySaleId(saleId: String): List<SaleProductCrossRef> = saleDao.getSaleDetailsBySaleId(saleId)
     suspend fun getProductById(productId: String): Product? = productDao.getProductById(productId)
 
@@ -257,7 +258,8 @@ suspend fun insertOrUpdateProduct(product: Product) {
 
     private fun <T> listToCsvString(data: List<T>, headers: Array<String>, recordToStringArray: (T) -> Array<String>): String {
         StringWriter().use { writer ->
-            CSVPrinter(writer, CSVFormat.DEFAULT.withHeader(*headers)).use { csvPrinter ->
+            val csvFormat = CSVFormat.Builder.create(CSVFormat.DEFAULT).setHeader(*headers).build()
+            CSVPrinter(writer, csvFormat).use { csvPrinter ->
                 data.forEach { record ->
                     csvPrinter.printRecord(*recordToStringArray(record))
                 }

@@ -41,7 +41,7 @@ import com.example.vetfinance.viewmodel.HistoricalPeriod
 import com.example.vetfinance.viewmodel.ReportPeriodType
 import com.example.vetfinance.viewmodel.TopProductsPeriod
 import com.example.vetfinance.viewmodel.VetViewModel
-import androidx.compose.runtime.collectAsState // Corrected import
+import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.launch
 import ui.utils.formatCurrency
 import java.text.SimpleDateFormat
@@ -93,8 +93,6 @@ fun ReportsScreen(viewModel: VetViewModel) {
 fun SalesAndBackupTab(viewModel: VetViewModel) {
     val salesSummary by viewModel.salesSummary.collectAsState()
     val grossProfit by viewModel.grossProfitSummary.collectAsState()
-    val selectedPeriodType by viewModel.reportPeriodType.collectAsState()
-    val historicalPeriods by viewModel.availableHistoricalPeriods.collectAsState()
     val selectedHistoricalPeriod by viewModel.selectedHistoricalPeriod.collectAsState()
 
     val context = LocalContext.current
@@ -149,7 +147,6 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.Top)
     ) {
-        // MODIFICADO: Reemplazo del SegmentedControl por los nuevos menús desplegables
         PeriodSelector(viewModel)
 
         val formattedSales = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(salesSummary)
@@ -498,12 +495,6 @@ fun InventoryReportTab(viewModel: VetViewModel) {
         }
     }
 }
-
-// ELIMINADO - Ya no se usa
-// @OptIn(ExperimentalMaterial3Api::class)
-// @Composable
-// fun SegmentedControl(selected: Period, onPeriodSelected: (Period) -> Unit) { ... }
-
 @Composable
 fun SummaryCard(title: String, value: String) {
     Card(modifier = Modifier.fillMaxWidth(), elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)) {

@@ -53,7 +53,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
     val currentClientForPayment = clientForPayment
     if (showPaymentDialog && currentClientForPayment != null) {
         PaymentDialog(
-            client = currentClientForPayment, // Smart-cast to non-null
+            client = currentClientForPayment,
             onDismiss = { viewModel.onDismissPaymentDialog() },
             onConfirm = { amount -> viewModel.makePayment(amount) }
         )

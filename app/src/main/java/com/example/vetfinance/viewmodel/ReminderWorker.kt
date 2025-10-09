@@ -1,7 +1,10 @@
 package com.example.vetfinance.viewmodel
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.util.Log
+import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.hilt.work.HiltWorker
@@ -15,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Calendar
 
 @HiltWorker
 class ReminderWorker @AssistedInject constructor(
@@ -25,7 +29,15 @@ class ReminderWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
-            val upcomingTreatments = repository.getUpcomingTreatments().first()
+            val now = Calendar.getInstance()
+            val startOfDay = now.timeInMillis
+
+            val endOfDay = Calendar.getInstance().apply {
+                add(Calendar.DAY_OF_YEAR, 1)
+            }.timeInMillis
+
+            val upcomingTreatments = repository.getUpcomingTreatmentsForRange(startOfDay, endOfDay)
+
             if (upcomingTreatments.isEmpty()) {
                 return Result.success()
             }
@@ -55,13 +67,27 @@ class ReminderWorker @AssistedInject constructor(
         val contentText = "Recordatorio para $petName: ${treatment.description} el $date."
 
         val builder = NotificationCompat.Builder(appContext, "TREATMENT_REMINDERS")
-            .setSmallIcon(R.drawable.ic_launcher_foreground) // Reemplazar con un ícono adecuado
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Recordatorio de Tratamiento")
             .setContentText(contentText)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
 
         with(NotificationManagerCompat.from(appContext)) {
+            if (ActivityCompat.checkSelfPermission(
+                    appContext,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                // TODO: Consider calling
+                //    ActivityCompat#requestPermissions
+                // here to request the missing permissions, and then overriding
+                //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                //                                          int[] grantResults)
+                // to handle the case where the user grants the permission. See the documentation
+                // for ActivityCompat#requestPermissions for more details.
+                return
+            }
             notify(notificationId, builder.build())
         }
     }

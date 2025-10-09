@@ -10,13 +10,12 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.R
 import ui.utils.NumberTransformation
-// Importar formatCurrency si se usa directamente aquí, aunque parece que no.
 
 @Composable
 fun AddOrEditClientDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, phone: String, debt: Double) -> Unit,
-    showDebtField: Boolean = true // Parámetro para controlar la visibilidad del campo de deuda
+    showDebtField: Boolean = true
 ) {
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
@@ -56,7 +55,7 @@ fun AddOrEditClientDialog(
                         value = debt,
                         onValueChange = { debt = it.filter { char -> char.isDigit() } },
                         label = { Text(stringResource(R.string.client_initial_debt_label)) },
-                        prefix = { Text(stringResource(R.string.text_prefix_gs)) }, // Prefijo Gs.
+                        prefix = { Text(stringResource(R.string.text_prefix_gs)) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         visualTransformation = NumberTransformation(),
                         modifier = Modifier.fillMaxWidth()

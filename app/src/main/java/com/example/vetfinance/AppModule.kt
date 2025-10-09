@@ -38,9 +38,8 @@ object AppModule {
             petDao = db.petDao(),
             treatmentDao = db.treatmentDao(),
             appointmentDao = db.appointmentDao(),
-            supplierDao = db.supplierDao(), // Added supplierDao
-            // Assuming VetRepository constructor also expects restockDao
-            restockDao = db.restockDao(), // Added restockDao
+            supplierDao = db.supplierDao(),
+            restockDao = db.restockDao(),
             context = context
         )
     }

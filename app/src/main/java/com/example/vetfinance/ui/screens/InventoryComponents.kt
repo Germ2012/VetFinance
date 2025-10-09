@@ -43,7 +43,7 @@ fun ProductDialog(
     productNameSuggestions: List<Product>,
     onProductNameChange: (String) -> Unit,
     allProducts: List<Product>,
-    suppliers: List<Supplier> // Added suppliers parameter
+    suppliers: List<Supplier>
 ) {
     val isEditing = product != null
     var name by remember(product) { mutableStateOf(product?.name ?: "") }
@@ -62,8 +62,6 @@ fun ProductDialog(
     val selectedContainedProduct = remember(selectedContainedProductId, allProducts) {
         allProducts.find { it.productId == selectedContainedProductId }
     }
-
-    // State for supplier selection
     var selectedSupplierId by remember(product) { mutableStateOf(product?.supplierIdFk) }
     val selectedSupplier = remember(selectedSupplierId, suppliers) {
         suppliers.find { it.supplierId == selectedSupplierId }
@@ -183,7 +181,6 @@ fun ProductDialog(
                     )
                 }
 
-                // Supplier Dropdown
                 var supplierDropdownExpanded by remember { mutableStateOf(false) }
                 ExposedDropdownMenuBox(
                     expanded = supplierDropdownExpanded,
@@ -368,8 +365,7 @@ fun ProductSelectionItem(
     product: Product,
     quantityInCart: Double,
     onAdd: () -> Unit,
-    onRemove: () -> Unit,
-    onQuantityChange: (Double) -> Unit
+    onRemove: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(

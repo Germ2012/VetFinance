@@ -24,14 +24,13 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTreatmentDialog(
-    initialTreatment: Treatment? = null, // <- AÑADIR: Parámetro opcional
+    initialTreatment: Treatment? = null,
     services: List<Product>,
     onDismiss: () -> Unit,
     onConfirm: (description: String, weight: String, temperature: String, symptoms: String, diagnosis: String, treatmentPlan: String, nextDate: Long?) -> Unit,
     onAddNewServiceClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    // --- INICIO CÓDIGO A MODIFICAR ---
     // Si hay un tratamiento inicial, usa sus datos, si no, usa valores vacíos.
     var selectedServiceText by remember(initialTreatment) { mutableStateOf(initialTreatment?.description ?: "") }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -43,7 +42,6 @@ fun AddTreatmentDialog(
     var symptoms by remember(initialTreatment) { mutableStateOf(initialTreatment?.symptoms ?: "") }
     var diagnosis by remember(initialTreatment) { mutableStateOf(initialTreatment?.diagnosis ?: "") }
     var treatmentPlan by remember(initialTreatment) { mutableStateOf(initialTreatment?.treatmentPlan ?: "") }
-    // --- FIN CÓDIGO A MODIFICAR ---
 
     if (showDatePicker) {
         DatePickerDialog(
@@ -52,12 +50,10 @@ fun AddTreatmentDialog(
                 TextButton(onClick = {
                     val selectedMillis = datePickerState.selectedDateMillis
                     if (selectedMillis != null) {
-                        // --- INICIO DE LA CORRECCIÓN DEFINITIVA ---
                         val localDate = Instant.ofEpochMilli(selectedMillis)
                             .atZone(ZoneId.of("UTC")).toLocalDate()
                         selectedDateMillis = localDate.atStartOfDay(ZoneId.systemDefault())
                             .toInstant().toEpochMilli()
-                        // --- FIN DE LA CORRECCIÓN DEFINITIVA ---
                     } else {
                         selectedDateMillis = null
                     }
