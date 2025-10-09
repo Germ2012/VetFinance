@@ -16,6 +16,8 @@ import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.Treatment
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
 
@@ -48,7 +50,17 @@ fun AddTreatmentDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    selectedDateMillis = datePickerState.selectedDateMillis
+                    val selectedMillis = datePickerState.selectedDateMillis
+                    if (selectedMillis != null) {
+                        // --- INICIO DE LA CORRECCIÓN DEFINITIVA ---
+                        val localDate = Instant.ofEpochMilli(selectedMillis)
+                            .atZone(ZoneId.of("UTC")).toLocalDate()
+                        selectedDateMillis = localDate.atStartOfDay(ZoneId.systemDefault())
+                            .toInstant().toEpochMilli()
+                        // --- FIN DE LA CORRECCIÓN DEFINITIVA ---
+                    } else {
+                        selectedDateMillis = null
+                    }
                     showDatePicker = false
                 }) { Text(stringResource(id = R.string.accept_button)) }
             },
@@ -57,6 +69,7 @@ fun AddTreatmentDialog(
             DatePicker(state = datePickerState)
         }
     }
+
 
     AlertDialog(
         onDismissRequest = onDismiss,

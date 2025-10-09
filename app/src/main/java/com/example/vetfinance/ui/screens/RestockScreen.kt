@@ -23,6 +23,8 @@ import com.example.vetfinance.data.Supplier
 import com.example.vetfinance.viewmodel.VetViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat // Added for Tarea 2
+import java.time.Instant
+import java.time.ZoneId
 import java.util.* // Added for Tarea 2
 import ui.utils.NumberTransformation
 
@@ -71,7 +73,17 @@ fun RestockScreen(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(onClick = {
-                    selectedDate = datePickerState.selectedDateMillis ?: System.currentTimeMillis()
+                    val selectedMillis = datePickerState.selectedDateMillis
+                    if (selectedMillis != null) {
+                        // --- INICIO DE LA CORRECCIÓN DEFINITIVA ---
+                        val localDate = Instant.ofEpochMilli(selectedMillis)
+                            .atZone(ZoneId.of("UTC")).toLocalDate()
+                        selectedDate = localDate.atStartOfDay(ZoneId.systemDefault())
+                            .toInstant().toEpochMilli()
+                        // --- FIN DE LA CORRECCIÓN DEFINITIVA ---
+                    } else {
+                        selectedDate = System.currentTimeMillis()
+                    }
                     showDatePicker = false
                 }) { Text(stringResource(id = R.string.accept_button)) }
             },
@@ -80,6 +92,7 @@ fun RestockScreen(
             DatePicker(state = datePickerState)
         }
     }
+
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },

@@ -24,6 +24,8 @@ import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.ZoneId
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -66,13 +68,16 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                     onClick = {
                         val selectedMillis = datePickerState.selectedDateMillis
                         if (selectedMillis != null) {
-                            // --- INICIO DE LA CORRECCIÓN ---
-                            // Ajusta la marca de tiempo UTC a la zona horaria del dispositivo
-                            val tz = TimeZone.getDefault()
-                            val offset = tz.getOffset(selectedMillis)
-                            val adjustedMillis = selectedMillis + offset
-                            viewModel.onSaleDateFilterSelected(adjustedMillis)
-                            // --- FIN DE LA CORRECCIÓN ---
+                            // --- INICIO DE LA CORRECCIÓN DEFINITIVA ---
+                            // Convertir el millis UTC a una fecha local (LocalDate)
+                            val localDate = Instant.ofEpochMilli(selectedMillis)
+                                .atZone(ZoneId.of("UTC")).toLocalDate()
+                            // Convertir esa fecha local al inicio del día en la zona horaria del dispositivo
+                            val startOfDayMillis = localDate.atStartOfDay(ZoneId.systemDefault())
+                                .toInstant().toEpochMilli()
+
+                            viewModel.onSaleDateFilterSelected(startOfDayMillis)
+                            // --- FIN DE LA CORRECCIÓN DEFINITIVA ---
                         } else {
                             viewModel.onSaleDateFilterSelected(null)
                         }
@@ -87,6 +92,7 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
             DatePicker(state = datePickerState)
         }
     }
+
 
     // --- PANTALLA PRINCIPAL ---
     Scaffold(
