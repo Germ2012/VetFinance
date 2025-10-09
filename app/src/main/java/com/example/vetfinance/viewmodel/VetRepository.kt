@@ -167,6 +167,12 @@ suspend fun insertOrUpdateProduct(product: Product) {
     suspend fun insertPet(pet: Pet) = petDao.insert(pet)
     suspend fun updatePet(pet: Pet) = petDao.update(pet)
     suspend fun insertTreatment(treatment: Treatment) = treatmentDao.insert(treatment)
+
+    // --- INICIO CÓDIGO A AÑADIR ---
+    suspend fun updateTreatment(treatment: Treatment) = treatmentDao.update(treatment)
+    suspend fun deleteTreatment(treatment: Treatment) = treatmentDao.delete(treatment)
+    // --- FIN CÓDIGO A AÑADIR ---
+    
     suspend fun insertAppointment(appointment: Appointment) = appointmentDao.insert(appointment)
     suspend fun updateAppointment(appointment: Appointment) = appointmentDao.update(appointment)
     suspend fun deleteAppointment(appointment: Appointment) = appointmentDao.delete(appointment)

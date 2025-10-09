@@ -170,6 +170,14 @@ interface PetDao {
 interface TreatmentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(treatment: Treatment)
+    
+    // --- INICIO CÓDIGO A AÑADIR ---
+    @Update
+    suspend fun update(treatment: Treatment)
+
+    @Delete
+    suspend fun delete(treatment: Treatment)
+    // --- FIN CÓDIGO A AÑADIR ---
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(treatments: List<Treatment>)

@@ -14,6 +14,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
+import com.example.vetfinance.data.Treatment
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -21,23 +22,26 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddTreatmentDialog(
+    initialTreatment: Treatment? = null, // <- AÑADIR: Parámetro opcional
     services: List<Product>,
     onDismiss: () -> Unit,
-    // INTEGRADO: La firma ahora espera Strings para peso y temperatura.
     onConfirm: (description: String, weight: String, temperature: String, symptoms: String, diagnosis: String, treatmentPlan: String, nextDate: Long?) -> Unit,
     onAddNewServiceClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    var selectedServiceText by remember { mutableStateOf("") }
+    // --- INICIO CÓDIGO A MODIFICAR ---
+    // Si hay un tratamiento inicial, usa sus datos, si no, usa valores vacíos.
+    var selectedServiceText by remember(initialTreatment) { mutableStateOf(initialTreatment?.description ?: "") }
     var showDatePicker by remember { mutableStateOf(false) }
-    val datePickerState = rememberDatePickerState()
-    var selectedDateMillis by remember { mutableStateOf<Long?>(null) }
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialTreatment?.nextTreatmentDate)
+    var selectedDateMillis by remember(initialTreatment) { mutableStateOf(initialTreatment?.nextTreatmentDate) }
 
-    var weight by remember { mutableStateOf("") }
-    var temperature by remember { mutableStateOf("") }
-    var symptoms by remember { mutableStateOf("") }
-    var diagnosis by remember { mutableStateOf("") }
-    var treatmentPlan by remember { mutableStateOf("") }
+    var weight by remember(initialTreatment) { mutableStateOf(initialTreatment?.weight?.toString() ?: "") }
+    var temperature by remember(initialTreatment) { mutableStateOf(initialTreatment?.temperature ?: "") }
+    var symptoms by remember(initialTreatment) { mutableStateOf(initialTreatment?.symptoms ?: "") }
+    var diagnosis by remember(initialTreatment) { mutableStateOf(initialTreatment?.diagnosis ?: "") }
+    var treatmentPlan by remember(initialTreatment) { mutableStateOf(initialTreatment?.treatmentPlan ?: "") }
+    // --- FIN CÓDIGO A MODIFICAR ---
 
     if (showDatePicker) {
         DatePickerDialog(
@@ -97,7 +101,6 @@ fun AddTreatmentDialog(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 OutlinedTextField(value = weight, onValueChange = { weight = it }, label = { Text(stringResource(id = R.string.add_treatment_weight_label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                // INTEGRADO: El tipo de teclado para temperatura ahora es de texto.
                 OutlinedTextField(value = temperature, onValueChange = { temperature = it }, label = { Text(stringResource(id = R.string.add_treatment_temperature_label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text))
                 OutlinedTextField(value = symptoms, onValueChange = { symptoms = it }, label = { Text(stringResource(id = R.string.add_treatment_symptoms_label)) })
                 OutlinedTextField(value = diagnosis, onValueChange = { diagnosis = it }, label = { Text(stringResource(id = R.string.add_treatment_diagnosis_label)) })
@@ -119,7 +122,6 @@ fun AddTreatmentDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    // INTEGRADO: Se pasan los valores como String directamente.
                     onConfirm(
                         selectedServiceText,
                         weight,

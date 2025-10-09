@@ -442,6 +442,12 @@ class VetViewModel @Inject constructor(
         repository.insertTreatment(newTreatment)
     }
     fun markTreatmentAsCompleted(treatment: Treatment) = executeWithLoading { repository.markTreatmentAsCompleted(treatment.treatmentId) }
+
+    // --- INICIO CÓDIGO A AÑADIR ---
+    fun updateTreatment(treatment: Treatment) = executeWithLoading { repository.updateTreatment(treatment) }
+    fun deleteTreatment(treatment: Treatment) = executeWithLoading { repository.deleteTreatment(treatment) }
+    // --- FIN CÓDIGO A AÑADIR ---
+
     fun makePayment(amount: Double) = executeWithLoading { _clientForPayment.value?.let { repository.makePayment(it, amount); onDismissPaymentDialog() } }
     fun addAppointment(appointment: Appointment) = executeWithLoading { repository.insertAppointment(appointment) }
     fun updateAppointment(appointment: Appointment) = executeWithLoading { repository.updateAppointment(appointment) }

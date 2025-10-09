@@ -64,7 +64,18 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
             confirmButton = {
                 TextButton(
                     onClick = {
-                        viewModel.onSaleDateFilterSelected(datePickerState.selectedDateMillis)
+                        val selectedMillis = datePickerState.selectedDateMillis
+                        if (selectedMillis != null) {
+                            // --- INICIO DE LA CORRECCIÓN ---
+                            // Ajusta la marca de tiempo UTC a la zona horaria del dispositivo
+                            val tz = TimeZone.getDefault()
+                            val offset = tz.getOffset(selectedMillis)
+                            val adjustedMillis = selectedMillis + offset
+                            viewModel.onSaleDateFilterSelected(adjustedMillis)
+                            // --- FIN DE LA CORRECCIÓN ---
+                        } else {
+                            viewModel.onSaleDateFilterSelected(null)
+                        }
                         showDatePicker = false
                     }
                 ) { Text(stringResource(R.string.accept_button)) }
