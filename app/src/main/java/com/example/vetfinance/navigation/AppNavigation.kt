@@ -48,5 +48,6 @@ fun AppNavigation(navController: NavHostController, viewModel: VetViewModel) {
         composable("add_pet_screen") { AddPetScreen(viewModel, navController) }
         composable(Screen.Suppliers.route) { SuppliersScreen(viewModel, navController) }
         composable(Screen.Restock.route) { RestockScreen(viewModel, navController) }
+        composable(Screen.AddRestock.route) { AddRestockScreen(viewModel, navController) } // Added
     }
 }

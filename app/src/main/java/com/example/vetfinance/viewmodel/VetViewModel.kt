@@ -90,6 +90,17 @@ class VetViewModel @Inject constructor(
         _restockSearchQuery.value = query
     }
 
+    private val _restockHistory = MutableStateFlow<List<RestockHistoryItem>>(emptyList())
+    val restockHistory: StateFlow<List<RestockHistoryItem>> = _restockHistory.asStateFlow()
+
+    fun fetchRestockHistory(date: LocalDate) {
+        viewModelScope.launch {
+            val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli() - 1
+            _restockHistory.value = repository.getRestockHistoryForDateRange(startOfDay, endOfDay)
+        }
+    }
+
     fun executeRestock(supplierId: String, totalCost: Double, itemsToRestock: List<RestockOrderItem>, orderDate: Long) = viewModelScope.launch {
         val orderId = UUID.randomUUID().toString()
         val order = RestockOrder(orderId = orderId, supplierIdFk = supplierId, orderDate = orderDate, totalAmount = totalCost)

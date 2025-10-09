@@ -55,6 +55,10 @@ class VetRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
+    suspend fun getRestockHistoryForDateRange(startDate: Long, endDate: Long): List<RestockHistoryItem> {
+        return restockDao.getRestockHistoryForDateRange(startDate, endDate)
+    }
+
     suspend fun deleteProduct(product: Product) {
         productDao.delete(product)
     }

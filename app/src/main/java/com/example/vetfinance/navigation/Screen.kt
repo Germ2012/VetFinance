@@ -26,4 +26,5 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object PetDetail : Screen("pet_detail/{petId}", "Detalle de Mascota", Icons.Default.Pets)
     object Suppliers : Screen("suppliers", "Proveedores", Icons.Default.LocalShipping)
     object Restock : Screen("restock", "Reabastecer", Icons.Default.AddShoppingCart)
+    object AddRestock : Screen("add_restock", "Añadir Reabastecimiento", Icons.Default.Add) // Added
 }
