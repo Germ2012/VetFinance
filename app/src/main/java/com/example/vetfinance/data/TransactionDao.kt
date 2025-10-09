@@ -108,6 +108,9 @@ interface SaleDao {
 @Dao
 interface ClientDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(client: Client)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(clients: List<Client>)
 
     @Update

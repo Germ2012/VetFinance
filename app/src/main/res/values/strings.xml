@@ -278,4 +278,5 @@
     <string name="label_select_period">Seleccionar período</string>
     <string name="no_period_selected">Sin seleccionar</string>
     <string name="no_sales_data_period">No existen ventas para el periodo seleccionado</string>
+    <string name="backup_validation_error_product_invalid_supplier">Error al validar proveedores</string>
 </resources>

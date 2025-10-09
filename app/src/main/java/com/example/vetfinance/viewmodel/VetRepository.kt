@@ -36,7 +36,8 @@ private data class ParsedBackupData(
     val transactions: List<Transaction>,
     val payments: List<Payment>,
     val saleProductCrossRefs: List<SaleProductCrossRef>,
-    val appointments: List<Appointment>
+    val appointments: List<Appointment>,
+    val suppliers: List<Supplier> // Added suppliers
 )
 
 @Singleton
@@ -280,13 +281,21 @@ suspend fun insertOrUpdateProduct(product: Product) {
             }
         }
 
+        // Suppliers
+        val supplierHeaders = arrayOf("supplierId", "name", "contactPerson", "phone", "email")
+        val suppliers = supplierDao.getAllSuppliers().first()
+        if (suppliers.isNotEmpty()) {
+            csvMap["suppliers.csv"] = listToCsvString(suppliers, supplierHeaders) { supplier ->
+                arrayOf(supplier.supplierId, supplier.name, supplier.contactPerson ?: "", supplier.phone ?: "", supplier.email ?: "")
+            }
+        }
+
         // Products
-        val
-productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod", "lowStockThreshold", "supplierIdFk") // Added supplierIdFk
+        val productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod", "lowStockThreshold", "isContainer", "containedProductId", "containerSize", "supplierIdFk") // Added isContainer and other fields
         val products = productDao.getAllProducts().first()
         if (products.isNotEmpty()) {
             csvMap["products.csv"] = listToCsvString(products, productHeaders) { product ->
-                arrayOf(product.productId, product.name, product.price.toString(), product.cost.toString(), product.stock.toString(), product.isService.toString(), product.sellingMethod, product.lowStockThreshold?.toString() ?: "", product.supplierIdFk ?: "")
+                arrayOf(product.productId, product.name, product.price.toString(), product.cost.toString(), product.stock.toString(), product.isService.toString(), product.sellingMethod, product.lowStockThreshold?.toString() ?: "", product.isContainer.toString(), product.containedProductId ?: "", product.containerSize?.toString() ?: "", product.supplierIdFk ?: "")
             }
         }
 
@@ -392,6 +401,7 @@ productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isServi
         val payments = parseCSV(archivos["payments.csv"], ::parsePayment)
         val saleProductCrossRefs = parseCSV(archivos["sale_product_cross_refs.csv"], ::parseSaleProductCrossRef)
         val appointments = parseCSV(archivos["appointments.csv"], ::parseAppointment)
+        val suppliers = parseCSV(archivos["suppliers.csv"], ::parseSupplier)
 
         val clientIds = clients.map { it.clientId }.toSet()
         val petIds = pets.map { it.petId }.toSet()
@@ -411,12 +421,22 @@ productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isServi
             if (it.petIdFk !in petIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_appointment_invalid_pet, it.appointmentId))
         }
 
-        return ParsedBackupData(clients, products, pets, treatments, sales, transactions, payments, saleProductCrossRefs, appointments)
+        if (suppliers.isNotEmpty()) {
+            val supplierIds = suppliers.map { it.supplierId }.toSet()
+            products.forEach { product ->
+                if (product.supplierIdFk != null && product.supplierIdFk !in supplierIds) {
+                    throw BackupValidationException(context.getString(R.string.backup_validation_error_product_invalid_supplier, product.name))
+                }
+            }
+        }
+
+        return ParsedBackupData(clients, products, pets, treatments, sales, transactions, payments, saleProductCrossRefs, appointments, suppliers)
     }
 
     private suspend fun performMergeImport(data: ParsedBackupData) {
         db.withTransaction {
             if (data.clients.isNotEmpty()) clientDao.insertAll(data.clients)
+            if (data.suppliers.isNotEmpty()) supplierDao.insertAll(data.suppliers) // Added suppliers
             if (data.products.isNotEmpty()) productDao.insertAll(data.products)
             if (data.pets.isNotEmpty()) petDao.insertAll(data.pets)
             if (data.sales.isNotEmpty()) saleDao.insertAllSales(data.sales)
@@ -435,7 +455,20 @@ productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isServi
     }
 
     private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r["phone"].ifEmpty { null }, r.get("address")?.ifEmpty { null }, r["debtAmount"].toDouble())
-    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(r["productId"], r["name"], r["price"].toDouble(), r["cost"].toDouble(), r["stock"].toDouble(), r["isService"].toBoolean(), r.get("sellingMethod") ?: SELLING_METHOD_BY_UNIT, r.get("lowStockThreshold")?.toDoubleOrNull(), supplierIdFk = r.get("supplierIdFk")?.ifEmpty { null }) // Added supplierIdFk
+    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(
+        productId = r["productId"],
+        name = r["name"],
+        price = r["price"].toDouble(),
+        cost = r["cost"].toDouble(),
+        stock = r["stock"].toDouble(),
+        isService = r["isService"].toBoolean(),
+        sellingMethod = r.get("sellingMethod") ?: SELLING_METHOD_BY_UNIT,
+        lowStockThreshold = r.get("lowStockThreshold")?.toDoubleOrNull(),
+        isContainer = if (r.isMapped("isContainer")) r.get("isContainer").toBoolean() else false,
+        containedProductId = if (r.isMapped("containedProductId")) r.get("containedProductId").ifEmpty { null } else null,
+        containerSize = if (r.isMapped("containerSize")) r.get("containerSize").toDoubleOrNull() else null,
+        supplierIdFk = r.get("supplierIdFk")?.ifEmpty { null }
+    )
     private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r["birthDate"].toLongOrNull(), r["breed"].ifEmpty { null }, r["allergies"].ifEmpty { null })
     private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r["serviceId"].ifEmpty { null }, r["treatmentDate"].toLong(), r["description"]?.ifEmpty { null }, r["nextTreatmentDate"].toLongOrNull(), r["isNextTreatmentCompleted"].toBoolean(), r["symptoms"].ifEmpty { null }, r["diagnosis"].ifEmpty { null }, r["treatmentPlan"].ifEmpty { null }, r["weight"].toDoubleOrNull(), r["temperature"]?.ifEmpty { null })
     private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["date"].toLong(), r["totalAmount"].toDouble(), r["clientIdFk"]?.ifEmpty { null })
@@ -450,4 +483,5 @@ productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isServi
         overridePrice = r.get("overridePrice")?.toDoubleOrNull()
     )
     private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], r["appointmentDate"].toLong(), r["description"]?.ifEmpty { null })
+    private fun parseSupplier(r: org.apache.commons.csv.CSVRecord) = Supplier(r["supplierId"], r["name"], r["contactPerson"].ifEmpty { null }, r["phone"].ifEmpty { null }, r["email"].ifEmpty { null })
 }

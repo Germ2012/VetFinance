@@ -161,7 +161,7 @@ class VetViewModel @Inject constructor(
 
     val lowStockProducts: StateFlow<List<Product>> = inventory.map { products ->
         products.filter { product ->
-            !product.isService && (
+            !product.isService && !product.isContainer && (
                     (product.sellingMethod == SELLING_METHOD_BY_UNIT && product.stock < 4) ||
                             (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT && product.lowStockThreshold != null && product.stock < product.lowStockThreshold!!)
                     )
