@@ -1,5 +1,3 @@
-package com.example.vetfinance.data
-
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -9,10 +7,9 @@ import java.util.UUID
 @Entity(
     tableName = "appointments",
     foreignKeys = [
-        ForeignKey(entity = Client::class, parentColumns = ["clientId"], childColumns = ["clientIdFk"]),
-        ForeignKey(entity = Pet::class, parentColumns = ["petId"], childColumns = ["petIdFk"])
+        ForeignKey(entity = Client::class, parentColumns = ["clientId"], childColumns = ["clientIdFk"], onDelete = ForeignKey.CASCADE),
+        ForeignKey(entity = Pet::class, parentColumns = ["petId"], childColumns = ["petIdFk"], onDelete = ForeignKey.CASCADE)
     ],
-    // AÑADIDO: Índices para las llaves foráneas
     indices = [Index("clientIdFk"), Index("petIdFk")]
 )
 data class Appointment(

@@ -88,7 +88,7 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.hilt.work)
-    ksp(libs.hilt.compiler.work)
+    ksp("androidx.hilt:hilt-compiler:1.2.0") // <--- CAMBIO IMPORTANTE
 
     // ---- Navigation y Componentes de UI ----
     implementation(libs.androidx.lifecycle.viewmodel.compose)
