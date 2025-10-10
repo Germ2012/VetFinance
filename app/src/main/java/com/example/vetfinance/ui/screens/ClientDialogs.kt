@@ -67,7 +67,8 @@ fun AddOrEditClientDialog(
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
-                        val debtAmount = debt.replace(".", "").toDoubleOrNull() ?: 0.0
+                        // CORRECCIÓN APLICADA: No se necesita .replace(".", "")
+                        val debtAmount = debt.toDoubleOrNull() ?: 0.0
                         onConfirm(name, phone, debtAmount)
                     } else {
                         nameError = true

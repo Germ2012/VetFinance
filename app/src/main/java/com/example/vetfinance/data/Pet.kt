@@ -1,11 +1,9 @@
 package com.example.vetfinance.data
 
-import androidx.room.Embedded
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import androidx.room.Relation
 import java.util.UUID
 
 @Entity(
@@ -28,13 +26,4 @@ data class Pet(
     val birthDate: Long? = null,
     val breed: String? = null,
     val allergies: String? = null
-)
-
-data class PetWithOwner(
-    @Embedded val pet: Pet,
-    @Relation(
-        parentColumn = "ownerIdFk",
-        entityColumn = "clientId"
-    )
-    val owner: Client
 )

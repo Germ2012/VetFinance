@@ -41,6 +41,7 @@ fun ClientItem(client: Client, onPayClick: () -> Unit, onItemClick: () -> Unit) 
         }
     }
 }
+
 @Composable
 fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
     var amount by remember { mutableStateOf("") }
@@ -63,7 +64,8 @@ fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> 
         confirmButton = {
             Button(
                 onClick = {
-                    val paymentAmount = amount.replace(".", "").toDoubleOrNull() ?: 0.0
+                    // CORRECCIÓN APLICADA: No se necesita .replace(".", "")
+                    val paymentAmount = amount.toDoubleOrNull() ?: 0.0
                     if (paymentAmount > 0) {
                         onConfirm(paymentAmount)
                     }

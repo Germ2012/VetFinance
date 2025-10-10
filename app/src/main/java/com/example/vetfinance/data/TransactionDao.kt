@@ -5,7 +5,7 @@ import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
-// --- CLASES DE RELACIÓN ---
+// --- RELATION CLASSES ---
 data class AppointmentWithDetails(
     @Embedded val appointment: Appointment,
     @Relation(
@@ -58,6 +58,10 @@ interface ProductDao {
 
     @Delete
     suspend fun delete(product: Product)
+
+    // --- FUNCTION ADDED ---
+    @Query("SELECT * FROM products WHERE isContainer = 1 AND containedProductId = :containedProductId LIMIT 1")
+    suspend fun findContainerForProduct(containedProductId: String): Product?
 }
 
 @Dao
@@ -143,6 +147,8 @@ interface PaymentDao {
     @Query("SELECT * FROM payments WHERE clientIdFk = :clientId ORDER BY paymentDate DESC")
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>>
 
+
+
     @Query("SELECT * FROM payments")
     fun getAllPaymentsSimple(): Flow<List<Payment>>
 }
@@ -194,6 +200,7 @@ interface TreatmentDao {
     @Query("SELECT * FROM treatments")
     fun getAllTreatmentsSimple(): Flow<List<Treatment>>
 }
+
 @Dao
 interface PurchaseDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -208,6 +215,7 @@ interface PurchaseDao {
     @Query("UPDATE purchases SET isPaid = 1 WHERE purchaseId = :purchaseId")
     suspend fun markPurchaseAsPaid(purchaseId: String)
 }
+
 @Dao
 interface AppointmentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -232,16 +240,6 @@ interface AppointmentDao {
     @Query("SELECT * FROM appointments")
     fun getAllAppointmentsSimple(): Flow<List<Appointment>>
 }
-@Entity(tableName = "appointment_logs")
-data class AppointmentLog(
-    @PrimaryKey
-    val logId: String = UUID.randomUUID().toString(),
-    val originalAppointmentDate: Long,
-    val clientName: String,
-    val petName: String,
-    val cancellationReason: String,
-    val cancelledOnDate: Long = System.currentTimeMillis()
-)
 
 @Dao
 interface AppointmentLogDao {
@@ -251,4 +249,3 @@ interface AppointmentLogDao {
     @Query("SELECT * FROM appointment_logs WHERE originalAppointmentDate >= :startDate AND originalAppointmentDate < :endDate ORDER BY originalAppointmentDate DESC")
     fun getLogsForDateRange(startDate: Long, endDate: Long): Flow<List<AppointmentLog>>
 }
-

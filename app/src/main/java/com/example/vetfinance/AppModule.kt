@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.example.vetfinance.data.AppDatabase
 import com.example.vetfinance.data.AppointmentDao
+import com.example.vetfinance.data.AppointmentLogDao // Importación añadida
 import com.example.vetfinance.data.ClientDao
 import com.example.vetfinance.data.PaymentDao
 import com.example.vetfinance.data.PetDao
@@ -36,6 +37,7 @@ object AppModule {
         ).fallbackToDestructiveMigration().build()
     }
 
+    // --- DAO Providers ---
     @Provides
     fun provideProductDao(db: AppDatabase): ProductDao = db.productDao()
 
@@ -69,7 +71,12 @@ object AppModule {
     @Provides
     fun provideRestockDao(db: AppDatabase): RestockDao = db.restockDao()
 
+    // DAO Provider añadido del segundo código
+    @Provides
+    fun provideAppointmentLogDao(db: AppDatabase): AppointmentLogDao = db.appointmentLogDao()
 
+
+    // --- Repository Provider (Actualizado) ---
     @Provides
     @Singleton
     fun provideRepository(
@@ -83,7 +90,9 @@ object AppModule {
         treatmentDao: TreatmentDao,
         appointmentDao: AppointmentDao,
         supplierDao: SupplierDao,
+        purchaseDao: PurchaseDao,
         restockDao: RestockDao,
+        appointmentLogDao: AppointmentLogDao, // Parámetro añadido
         @ApplicationContext context: Context
     ): VetRepository {
         return VetRepository(
@@ -97,7 +106,9 @@ object AppModule {
             treatmentDao,
             appointmentDao,
             supplierDao,
+            purchaseDao,
             restockDao,
+            appointmentLogDao, // Argumento añadido
             context
         )
     }

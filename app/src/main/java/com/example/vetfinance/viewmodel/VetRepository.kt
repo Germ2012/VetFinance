@@ -24,9 +24,8 @@ import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.min
-import com.example.vetfinance.data.AppointmentLogDao // <-- Añadir importación
-import com.example.vetfinance.data.AppointmentLog
 
+// Data class definition for backup
 private data class ParsedBackupData(
     val clients: List<Client>,
     val products: List<Product>,
@@ -37,7 +36,7 @@ private data class ParsedBackupData(
     val payments: List<Payment>,
     val saleProductCrossRefs: List<SaleProductCrossRef>,
     val appointments: List<Appointment>,
-    val suppliers: List<Supplier> // Added suppliers
+    val suppliers: List<Supplier>
 )
 
 @Singleton
@@ -51,8 +50,10 @@ class VetRepository @Inject constructor(
     private val petDao: PetDao,
     private val treatmentDao: TreatmentDao,
     private val appointmentDao: AppointmentDao,
-    private val supplierDao: SupplierDao, // Added SupplierDao
-    private val restockDao: RestockDao,   // Added RestockDao
+    private val supplierDao: SupplierDao,
+    private val purchaseDao: PurchaseDao,
+    private val restockDao: RestockDao,
+    private val appointmentLogDao: AppointmentLogDao,
     @ApplicationContext private val context: Context
 ) {
 
@@ -63,7 +64,7 @@ class VetRepository @Inject constructor(
     suspend fun deleteProduct(product: Product) {
         productDao.delete(product)
     }
-    // Reemplaza el método performInventoryTransfer con la lógica correcta.
+
     suspend fun performInventoryTransfer(containerId: String, containedId: String, amountToTransfer: Double) {
         db.withTransaction {
             val containerProduct = productDao.getProductById(containerId)
@@ -71,29 +72,28 @@ class VetRepository @Inject constructor(
 
             if (containerProduct != null && containedProduct != null) {
                 if (containerProduct.stock >= 1) {
-                    // Restar 1 del contenedor
+                    // Subtract 1 from the container
                     val updatedContainer = containerProduct.copy(stock = containerProduct.stock - 1)
                     productDao.update(updatedContainer)
 
-                    // Sumar la cantidad definida en 'containerSize' al producto a granel
+                    // Add the amount defined in 'containerSize' to the bulk product
                     val updatedContained = containedProduct.copy(stock = containedProduct.stock + amountToTransfer)
                     productDao.update(updatedContained)
                 }
             }
         }
     }
+
     suspend fun deleteClient(client: Client) {
         clientDao.delete(client)
     }
 
-    // --- FUNCIÓN ACTUALIZADA ---
     suspend fun deleteSale(saleWithProducts: SaleWithProducts) {
         val sale = saleWithProducts.sale
         db.withTransaction {
             val saleDetails = saleDao.getSaleDetailsBySaleId(sale.saleId)
             for (detail in saleDetails) {
                 val product = productDao.getProductById(detail.productId)
-                // Esta condición ahora cubre ambos tipos de venta (Unidad y Peso/Monto)
                 if (product != null && !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY) {
                     val newStock = product.stock + detail.quantitySold
                     productDao.update(product.copy(stock = newStock))
@@ -104,6 +104,7 @@ class VetRepository @Inject constructor(
         }
     }
 
+    // --- Pagination Methods ---
     fun getProductsPaginated(filterType: String): Flow<PagingData<Product>> {
         return Pager(
             config = PagingConfig(pageSize = 20, enablePlaceholders = false),
@@ -118,13 +119,13 @@ class VetRepository @Inject constructor(
         ).flow
     }
 
+    // --- Query Methods (Flows and suspend) ---
     fun getAppointmentsForDate(date: LocalDate): Flow<List<AppointmentWithDetails>> {
         val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         return appointmentDao.getAppointmentsForDateRange(startOfDay, endOfDay)
     }
 
-    // Exposes the DAO query for a date range
     fun getAppointmentsForDate(startDate: Long, endDate: Long): Flow<List<AppointmentWithDetails>> {
         return appointmentDao.getAppointmentsForDateRange(startDate, endDate)
     }
@@ -132,11 +133,10 @@ class VetRepository @Inject constructor(
     fun getTopSellingProducts(startDate: Long, endDate: Long, limit: Int): Flow<List<TopSellingProduct>> = saleDao.getTopSellingProducts(startDate, endDate, limit)
     fun getTotalDebt(): Flow<Double?> = clientDao.getTotalDebt()
     fun getTotalInventoryValue(): Flow<Double?> = productDao.getTotalInventoryValue()
-
     fun getAllProducts(): Flow<List<Product>> = productDao.getAllProducts()
     fun getAllSales(): Flow<List<SaleWithProducts>> = saleDao.getAllSalesWithProducts()
     fun getAllClients(): Flow<List<Client>> = clientDao.getAllClients()
-    fun getAllSuppliers(): Flow<List<Supplier>> = supplierDao.getAllSuppliers() // Added supplier function
+    fun getAllSuppliers(): Flow<List<Supplier>> = supplierDao.getAllSuppliers()
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>> = paymentDao.getPaymentsForClient(clientId)
     fun getAllPetsWithOwners(): Flow<List<PetWithOwner>> = petDao.getAllPetsWithOwners()
     fun getTreatmentsForPet(petId: String): Flow<List<Treatment>> = treatmentDao.getTreatmentsForPet(petId)
@@ -145,40 +145,31 @@ class VetRepository @Inject constructor(
     suspend fun getSaleDetailsBySaleId(saleId: String): List<SaleProductCrossRef> = saleDao.getSaleDetailsBySaleId(saleId)
     suspend fun getProductById(productId: String): Product? = productDao.getProductById(productId)
 
-    /**
- * Inserta un producto si es nuevo o lo actualiza si ya existe.
- * Esta función es la ÚNICA responsable de asignar un nuevo ID a los productos nuevos.
- */
-suspend fun insertOrUpdateProduct(product: Product) {
-    // Intenta encontrar un producto existente con el ID proporcionado.
-    val existingProduct = productDao.getProductById(product.productId)
-
-    if (existingProduct == null) {
-        // --- LÓGICA PARA PRODUCTOS NUEVOS ---
-        // Si no se encuentra, es un producto 100% nuevo.
-        // Se crea una copia y se le asigna un ID único y aleatorio AHORA.
-        val productToInsert = product.copy(productId = UUID.randomUUID().toString())
-        productDao.insertProduct(productToInsert) // Llama a la función del DAO
-    } else {
-        // --- LÓGICA PARA ACTUALIZACIONES ---
-        // Si se encuentra, es una actualización. Se guarda con sus nuevos datos.
-        productDao.update(product)
+    // --- Insertion and Update Methods (CRUD) ---
+    suspend fun insertOrUpdateProduct(product: Product) {
+        val existingProduct = productDao.getProductById(product.productId)
+        if (existingProduct == null) {
+            val productToInsert = product.copy(productId = UUID.randomUUID().toString())
+            productDao.insertProduct(productToInsert)
+        } else {
+            productDao.update(product)
+        }
     }
-}
+
     suspend fun insertClient(client: Client) = clientDao.insertAll(listOf(client))
     suspend fun updateClient(client: Client) = clientDao.update(client)
-    suspend fun insertSupplier(supplier: Supplier) = supplierDao.insert(supplier) // Added supplier function
-    suspend fun updateSupplier(supplier: Supplier) = supplierDao.update(supplier) // Added supplier function
-    suspend fun deleteSupplier(supplier: Supplier) = supplierDao.delete(supplier) // Added supplier function
+
+    suspend fun insertSupplier(supplier: Supplier) = supplierDao.insert(supplier)
+    suspend fun updateSupplier(supplier: Supplier) = supplierDao.update(supplier)
+    suspend fun deleteSupplier(supplier: Supplier) = supplierDao.delete(supplier)
+
     suspend fun insertPet(pet: Pet) = petDao.insert(pet)
     suspend fun updatePet(pet: Pet) = petDao.update(pet)
-    suspend fun insertTreatment(treatment: Treatment) = treatmentDao.insert(treatment)
 
-    // --- INICIO CÓDIGO A AÑADIR ---
+    suspend fun insertTreatment(treatment: Treatment) = treatmentDao.insert(treatment)
     suspend fun updateTreatment(treatment: Treatment) = treatmentDao.update(treatment)
     suspend fun deleteTreatment(treatment: Treatment) = treatmentDao.delete(treatment)
-    // --- FIN CÓDIGO A AÑADIR ---
-    
+
     suspend fun insertAppointment(appointment: Appointment) = appointmentDao.insert(appointment)
     suspend fun updateAppointment(appointment: Appointment) = appointmentDao.update(appointment)
     suspend fun deleteAppointment(appointment: Appointment) = appointmentDao.delete(appointment)
@@ -197,7 +188,6 @@ suspend fun insertOrUpdateProduct(product: Product) {
         clientDao.updateDebt(client.clientId, if (newDebt < 0.01) 0.0 else newDebt)
     }
 
-    // --- FUNCIÓN ACTUALIZADA ---
     suspend fun insertSale(sale: Sale, items: List<CartItem>) {
         db.withTransaction {
             saleDao.insertSale(sale)
@@ -214,19 +204,14 @@ suspend fun insertOrUpdateProduct(product: Product) {
                 saleDao.insertSaleProductCrossRef(crossRef)
 
                 if (product.sellingMethod != SELLING_METHOD_DOSE_ONLY && !product.isService) {
-                    // Si el producto que se vende es a granel y no hay stock suficiente, abre un contenedor.
                     if (product.stock < cartItem.quantity) {
-                        // Nota: Esta consulta puede ser ineficiente. Considerar un método DAO más directo.
-                        val container = productDao.getAllProducts().first()
-                            .find { it.isContainer && it.containedProductId == product.productId }
+                        // CORRECTION: Use the new efficient query
+                        val container = productDao.findContainerForProduct(product.productId)
 
                         if (container != null) {
                             performInventoryTransfer(container.productId, product.productId, container.containerSize ?: 0.0)
                         }
                     }
-
-                    // Ahora, con el stock potencialmente actualizado, descuenta la cantidad vendida.
-                    // Es crucial volver a obtener el producto para tener el stock más reciente.
                     val currentProduct = productDao.getProductById(product.productId)
                     if (currentProduct != null) {
                         val updatedStock = currentProduct.stock - cartItem.quantity
@@ -244,12 +229,11 @@ suspend fun insertOrUpdateProduct(product: Product) {
 
             items.forEach { item ->
                 val product = productDao.getProductById(item.productIdFk)
-                // Only update stock for non-service products
                 if (product != null && !product.isService) {
                     val updatedStock = product.stock + item.quantity
                     val updatedProduct = product.copy(
                         stock = updatedStock,
-                        cost = item.costPerUnit // Update product cost to the new cost per unit
+                        cost = item.costPerUnit
                     )
                     productDao.update(updatedProduct)
                 }
@@ -257,6 +241,7 @@ suspend fun insertOrUpdateProduct(product: Product) {
         }
     }
 
+    // --- Export and Import Logic ---
     private fun <T> listToCsvString(data: List<T>, headers: Array<String>, recordToStringArray: (T) -> Array<String>): String {
         StringWriter().use { writer ->
             val csvFormat = CSVFormat.Builder.create(CSVFormat.DEFAULT).setHeader(*headers).build()
@@ -272,7 +257,7 @@ suspend fun insertOrUpdateProduct(product: Product) {
     suspend fun exportarDatosCompletos(): Map<String, String> = withContext(Dispatchers.IO) {
         val csvMap = mutableMapOf<String, String>()
 
-        // Clients
+        // Clients, Suppliers, Products, Pets, Treatments, Sales, etc.
         val clientHeaders = arrayOf("clientId", "name", "phone", "address", "debtAmount")
         val clients = clientDao.getAllClients().first()
         if (clients.isNotEmpty()) {
@@ -281,7 +266,6 @@ suspend fun insertOrUpdateProduct(product: Product) {
             }
         }
 
-        // Suppliers
         val supplierHeaders = arrayOf("supplierId", "name", "contactPerson", "phone", "email")
         val suppliers = supplierDao.getAllSuppliers().first()
         if (suppliers.isNotEmpty()) {
@@ -290,8 +274,7 @@ suspend fun insertOrUpdateProduct(product: Product) {
             }
         }
 
-        // Products
-        val productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod", "lowStockThreshold", "isContainer", "containedProductId", "containerSize", "supplierIdFk") // Added isContainer and other fields
+        val productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod", "lowStockThreshold", "isContainer", "containedProductId", "containerSize", "supplierIdFk")
         val products = productDao.getAllProducts().first()
         if (products.isNotEmpty()) {
             csvMap["products.csv"] = listToCsvString(products, productHeaders) { product ->
@@ -299,7 +282,6 @@ suspend fun insertOrUpdateProduct(product: Product) {
             }
         }
 
-        // Pets
         val petHeaders = arrayOf("petId", "name", "ownerIdFk", "birthDate", "breed", "allergies")
         val pets = petDao.getAllPetsSimple().first()
         if (pets.isNotEmpty()){
@@ -308,7 +290,6 @@ suspend fun insertOrUpdateProduct(product: Product) {
             }
         }
 
-        // Treatments
         val treatmentHeaders = arrayOf("treatmentId", "petIdFk", "serviceId", "treatmentDate", "description", "nextTreatmentDate", "isNextTreatmentCompleted", "symptoms", "diagnosis", "treatmentPlan", "weight", "temperature")
         val treatments = treatmentDao.getAllTreatmentsSimple().first()
         if (treatments.isNotEmpty()){
@@ -317,7 +298,6 @@ suspend fun insertOrUpdateProduct(product: Product) {
             }
         }
 
-        // Sales
         val saleHeaders = arrayOf("saleId", "date", "totalAmount", "clientIdFk")
         val sales = saleDao.getAllSalesSimple().first()
         if (sales.isNotEmpty()){
@@ -326,7 +306,6 @@ suspend fun insertOrUpdateProduct(product: Product) {
             }
         }
 
-        // Transactions
         val transactionHeaders = arrayOf("transactionId", "saleIdFk", "date", "type", "amount", "description")
         val transactions = transactionDao.getAllTransactions().first()
         if (transactions.isNotEmpty()){
@@ -335,7 +314,6 @@ suspend fun insertOrUpdateProduct(product: Product) {
             }
         }
 
-        // Payments
         val paymentHeaders = arrayOf("paymentId", "clientIdFk", "amount", "paymentDate")
         val payments = paymentDao.getAllPaymentsSimple().first()
         if (payments.isNotEmpty()){
@@ -344,7 +322,6 @@ suspend fun insertOrUpdateProduct(product: Product) {
             }
         }
 
-        // SaleProductCrossRefs
         val saleProductCrossRefHeaders = arrayOf("saleId", "productId", "quantitySold", "priceAtTimeOfSale", "notes", "overridePrice")
         val saleProductCrossRefs = saleDao.getAllSaleProductCrossRefsSimple().first()
         if (saleProductCrossRefs.isNotEmpty()){
@@ -353,7 +330,6 @@ suspend fun insertOrUpdateProduct(product: Product) {
             }
         }
 
-        // Appointments
         val appointmentHeaders = arrayOf("appointmentId", "clientIdFk", "petIdFk", "appointmentDate", "description")
         val appointments = appointmentDao.getAllAppointmentsSimple().first()
         if (appointments.isNotEmpty()){
@@ -392,6 +368,7 @@ suspend fun insertOrUpdateProduct(product: Product) {
 
     @Throws(BackupValidationException::class)
     private fun validateAndParseBackupData(archivos: Map<String, String>): ParsedBackupData {
+        // Parsing
         val clients = parseCSV(archivos["clients.csv"], ::parseClient)
         val products = parseCSV(archivos["products.csv"], ::parseProduct)
         val pets = parseCSV(archivos["pets.csv"], ::parsePet)
@@ -403,6 +380,7 @@ suspend fun insertOrUpdateProduct(product: Product) {
         val appointments = parseCSV(archivos["appointments.csv"], ::parseAppointment)
         val suppliers = parseCSV(archivos["suppliers.csv"], ::parseSupplier)
 
+        // Validation
         val clientIds = clients.map { it.clientId }.toSet()
         val petIds = pets.map { it.petId }.toSet()
         val productIds = products.map { it.productId }.toSet()
@@ -420,7 +398,6 @@ suspend fun insertOrUpdateProduct(product: Product) {
             if (it.clientIdFk !in clientIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_appointment_invalid_client, it.appointmentId))
             if (it.petIdFk !in petIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_appointment_invalid_pet, it.appointmentId))
         }
-
         if (suppliers.isNotEmpty()) {
             val supplierIds = suppliers.map { it.supplierId }.toSet()
             products.forEach { product ->
@@ -436,7 +413,7 @@ suspend fun insertOrUpdateProduct(product: Product) {
     private suspend fun performMergeImport(data: ParsedBackupData) {
         db.withTransaction {
             if (data.clients.isNotEmpty()) clientDao.insertAll(data.clients)
-            if (data.suppliers.isNotEmpty()) supplierDao.insertAll(data.suppliers) // Added suppliers
+            if (data.suppliers.isNotEmpty()) supplierDao.insertAll(data.suppliers)
             if (data.products.isNotEmpty()) productDao.insertAll(data.products)
             if (data.pets.isNotEmpty()) petDao.insertAll(data.pets)
             if (data.sales.isNotEmpty()) saleDao.insertAllSales(data.sales)
@@ -448,6 +425,7 @@ suspend fun insertOrUpdateProduct(product: Product) {
         }
     }
 
+    // --- CSV Parsers ---
     private inline fun <T> parseCSV(content: String?, parser: (org.apache.commons.csv.CSVRecord) -> T): List<T> {
         if (content.isNullOrBlank()) return emptyList()
         val format = CSVFormat.Builder.create(CSVFormat.DEFAULT).setHeader().setSkipHeaderRecord(true).setIgnoreEmptyLines(true).build()
@@ -456,18 +434,9 @@ suspend fun insertOrUpdateProduct(product: Product) {
 
     private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r["phone"].ifEmpty { null }, r.get("address")?.ifEmpty { null }, r["debtAmount"].toDouble())
     private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(
-        productId = r["productId"],
-        name = r["name"],
-        price = r["price"].toDouble(),
-        cost = r["cost"].toDouble(),
-        stock = r["stock"].toDouble(),
-        isService = r["isService"].toBoolean(),
-        sellingMethod = r.get("sellingMethod") ?: SELLING_METHOD_BY_UNIT,
-        lowStockThreshold = r.get("lowStockThreshold")?.toDoubleOrNull(),
-        isContainer = if (r.isMapped("isContainer")) r.get("isContainer").toBoolean() else false,
-        containedProductId = if (r.isMapped("containedProductId")) r.get("containedProductId").ifEmpty { null } else null,
-        containerSize = if (r.isMapped("containerSize")) r.get("containerSize").toDoubleOrNull() else null,
-        supplierIdFk = r.get("supplierIdFk")?.ifEmpty { null }
+        productId = r["productId"], name = r["name"], price = r["price"].toDouble(), cost = r["cost"].toDouble(), stock = r["stock"].toDouble(), isService = r["isService"].toBoolean(),
+        sellingMethod = r.get("sellingMethod") ?: SELLING_METHOD_BY_UNIT, lowStockThreshold = r.get("lowStockThreshold")?.toDoubleOrNull(), isContainer = if (r.isMapped("isContainer")) r.get("isContainer").toBoolean() else false,
+        containedProductId = if (r.isMapped("containedProductId")) r.get("containedProductId").ifEmpty { null } else null, containerSize = if (r.isMapped("containerSize")) r.get("containerSize").toDoubleOrNull() else null, supplierIdFk = r.get("supplierIdFk")?.ifEmpty { null }
     )
     private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r["birthDate"].toLongOrNull(), r["breed"].ifEmpty { null }, r["allergies"].ifEmpty { null })
     private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r["serviceId"].ifEmpty { null }, r["treatmentDate"].toLong(), r["description"]?.ifEmpty { null }, r["nextTreatmentDate"].toLongOrNull(), r["isNextTreatmentCompleted"].toBoolean(), r["symptoms"].ifEmpty { null }, r["diagnosis"].ifEmpty { null }, r["treatmentPlan"].ifEmpty { null }, r["weight"].toDoubleOrNull(), r["temperature"]?.ifEmpty { null })
@@ -475,12 +444,8 @@ suspend fun insertOrUpdateProduct(product: Product) {
     private fun parseTransaction(r: org.apache.commons.csv.CSVRecord) = Transaction(r["transactionId"], r["saleIdFk"].ifEmpty { null }, r["date"].toLong(), r["type"], r["amount"].toDouble(), r["description"].ifEmpty { null })
     private fun parsePayment(r: org.apache.commons.csv.CSVRecord) = Payment(r["paymentId"], r["clientIdFk"], r["amount"].toDouble(), r["paymentDate"].toLong())
     private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(
-        saleId = r["saleId"],
-        productId = r["productId"],
-        quantitySold = r["quantitySold"].toDouble(),
-        priceAtTimeOfSale = r["priceAtTimeOfSale"].toDouble(),
-        notes = r.get("notes")?.ifEmpty { null },
-        overridePrice = r.get("overridePrice")?.toDoubleOrNull()
+        saleId = r["saleId"], productId = r["productId"], quantitySold = r["quantitySold"].toDouble(), priceAtTimeOfSale = r["priceAtTimeOfSale"].toDouble(),
+        notes = r.get("notes")?.ifEmpty { null }, overridePrice = r.get("overridePrice")?.toDoubleOrNull()
     )
     private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], r["appointmentDate"].toLong(), r["description"]?.ifEmpty { null })
     private fun parseSupplier(r: org.apache.commons.csv.CSVRecord) = Supplier(r["supplierId"], r["name"], r["contactPerson"].ifEmpty { null }, r["phone"].ifEmpty { null }, r["email"].ifEmpty { null })
