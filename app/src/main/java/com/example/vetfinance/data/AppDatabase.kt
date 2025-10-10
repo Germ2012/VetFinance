@@ -12,7 +12,7 @@ import androidx.room.TypeConverters
         RestockOrder::class, RestockOrderItem::class,
         AppointmentLog::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = true
 )
 @TypeConverters(Converters::class)

@@ -1,3 +1,5 @@
+package com.example.vetfinance.data
+
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
