@@ -46,7 +46,8 @@ private data class ParsedBackupData(
     val clientDebtHistory: List<ClientDebtHistory>,
     val supplierDebts: List<SupplierDebt>,
     val restockOrders: List<RestockOrder>,
-    val restockOrderItems: List<RestockOrderItem>
+    val restockOrderItems: List<RestockOrderItem>,
+    val stockMovements: List<StockMovement>
 )
 
 @Singleton
@@ -65,6 +66,7 @@ class VetRepository @Inject constructor(
     private val restockDao: RestockDao,
     private val clientDebtHistoryDao: ClientDebtHistoryDao,
     private val supplierDebtDao: SupplierDebtDao,
+    private val stockMovementDao: StockMovementDao,
     private val appointmentLogDao: AppointmentLogDao,
     @ApplicationContext private val context: Context
 ) {
@@ -72,6 +74,15 @@ class VetRepository @Inject constructor(
     private companion object {
         const val MAX_BACKUP_FILE_BYTES = 2_000_000
         const val MAX_BACKUP_TOTAL_BYTES = 10_000_000
+        const val SETTINGS_PREFS_NAME = "vetfinance_settings"
+        const val SETTINGS_CLINIC_NAME = "clinicName"
+        const val SETTINGS_CURRENCY = "currency"
+        const val SETTINGS_TREATMENT_ALERT_DAYS = "treatmentAlertDays"
+        const val SETTINGS_SUPPLIER_DEBT_ALERT_DAYS = "supplierDebtAlertDays"
+        const val SETTINGS_REMINDERS_ENABLED = "remindersEnabled"
+        const val SETTINGS_LARGE_TEXT = "largeText"
+        const val SETTINGS_BACKUP_FREQUENCY_DAYS = "backupFrequencyDays"
+        const val SETTINGS_LAST_BACKUP_AT = "lastBackupAt"
         val ALLOWED_BACKUP_FILES = setOf(
             "clients.csv",
             "suppliers.csv",
@@ -86,12 +97,70 @@ class VetRepository @Inject constructor(
             "client_debt_history.csv",
             "supplier_debts.csv",
             "restock_orders.csv",
-            "restock_order_items.csv"
+            "restock_order_items.csv",
+            "stock_movements.csv"
         )
     }
 
     suspend fun getRestockHistoryForDateRange(startDate: Long, endDate: Long): List<RestockHistoryItem> {
         return restockDao.getRestockHistoryForDateRange(startDate, endDate)
+    }
+
+    fun getAppSettings(): AppSettings {
+        val prefs = context.getSharedPreferences(SETTINGS_PREFS_NAME, Context.MODE_PRIVATE)
+        val lastBackup = prefs.getLong(SETTINGS_LAST_BACKUP_AT, 0L).takeIf { it > 0L }
+        return AppSettings(
+            clinicName = prefs.getString(SETTINGS_CLINIC_NAME, "") ?: "",
+            currency = prefs.getString(SETTINGS_CURRENCY, "Gs.") ?: "Gs.",
+            treatmentAlertDays = prefs.getInt(SETTINGS_TREATMENT_ALERT_DAYS, 3),
+            supplierDebtAlertDays = prefs.getInt(SETTINGS_SUPPLIER_DEBT_ALERT_DAYS, 7),
+            remindersEnabled = prefs.getBoolean(SETTINGS_REMINDERS_ENABLED, true),
+            largeText = prefs.getBoolean(SETTINGS_LARGE_TEXT, false),
+            backupFrequencyDays = prefs.getInt(SETTINGS_BACKUP_FREQUENCY_DAYS, 7),
+            lastBackupAt = lastBackup
+        )
+    }
+
+    fun saveAppSettings(settings: AppSettings) {
+        context.getSharedPreferences(SETTINGS_PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(SETTINGS_CLINIC_NAME, settings.clinicName)
+            .putString(SETTINGS_CURRENCY, settings.currency)
+            .putInt(SETTINGS_TREATMENT_ALERT_DAYS, settings.treatmentAlertDays.coerceAtLeast(1))
+            .putInt(SETTINGS_SUPPLIER_DEBT_ALERT_DAYS, settings.supplierDebtAlertDays.coerceAtLeast(1))
+            .putBoolean(SETTINGS_REMINDERS_ENABLED, settings.remindersEnabled)
+            .putBoolean(SETTINGS_LARGE_TEXT, settings.largeText)
+            .putInt(SETTINGS_BACKUP_FREQUENCY_DAYS, settings.backupFrequencyDays.coerceAtLeast(1))
+            .putLong(SETTINGS_LAST_BACKUP_AT, settings.lastBackupAt ?: 0L)
+            .apply()
+    }
+
+    fun markBackupCreated(): AppSettings {
+        val updated = getAppSettings().copy(lastBackupAt = System.currentTimeMillis())
+        saveAppSettings(updated)
+        return updated
+    }
+
+    private suspend fun recordStockMovement(
+        product: Product,
+        movementType: String,
+        quantityChange: Double,
+        stockAfter: Double,
+        note: String?,
+        unitCost: Double? = null
+    ) {
+        stockMovementDao.insert(
+            StockMovement(
+                productIdFk = product.productId,
+                productNameSnapshot = product.name,
+                movementDate = System.currentTimeMillis(),
+                movementType = movementType,
+                quantityChange = quantityChange,
+                stockAfter = stockAfter,
+                note = note?.ifBlank { null },
+                unitCost = unitCost
+            )
+        )
     }
 
     suspend fun deleteProduct(product: Product) {
@@ -120,8 +189,24 @@ class VetRepository @Inject constructor(
                 throw IllegalStateException("No hay stock disponible del contenedor ${containerProduct.name}.")
             }
 
-            productDao.update(containerProduct.copy(stock = containerProduct.stock - 1.0))
-            productDao.update(containedProduct.copy(stock = containedProduct.stock + amountToTransfer))
+            val updatedContainerStock = containerProduct.stock - 1.0
+            val updatedContainedStock = containedProduct.stock + amountToTransfer
+            productDao.update(containerProduct.copy(stock = updatedContainerStock))
+            productDao.update(containedProduct.copy(stock = updatedContainedStock))
+            recordStockMovement(
+                product = containerProduct,
+                movementType = STOCK_MOVEMENT_CONTAINER_OPEN,
+                quantityChange = -1.0,
+                stockAfter = updatedContainerStock,
+                note = "Apertura para venta a granel"
+            )
+            recordStockMovement(
+                product = containedProduct,
+                movementType = STOCK_MOVEMENT_CONTAINER_OPEN,
+                quantityChange = amountToTransfer,
+                stockAfter = updatedContainedStock,
+                note = "Ingreso desde ${containerProduct.name}"
+            )
         }
     }
 
@@ -150,6 +235,13 @@ class VetRepository @Inject constructor(
                 if (product != null && !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY) {
                     val newStock = product.stock + detail.quantitySold
                     productDao.update(product.copy(stock = newStock))
+                    recordStockMovement(
+                        product = product,
+                        movementType = STOCK_MOVEMENT_SALE_REVERSAL,
+                        quantityChange = detail.quantitySold,
+                        stockAfter = newStock,
+                        note = "Venta eliminada"
+                    )
                 }
             }
             saleDao.deleteSaleProductCrossRefs(sale.saleId)
@@ -193,6 +285,7 @@ class VetRepository @Inject constructor(
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>> = paymentDao.getPaymentsForClient(clientId)
     fun getDebtHistoryForClient(clientId: String): Flow<List<ClientDebtHistory>> = clientDebtHistoryDao.getHistoryForClient(clientId)
     fun getProductCostHistory(productId: String): Flow<List<ProductCostHistoryItem>> = restockDao.getProductCostHistory(productId)
+    fun getProductStockMovements(productId: String): Flow<List<StockMovement>> = stockMovementDao.getMovementsForProduct(productId)
     fun getSupplierDebtsForDate(date: LocalDate): Flow<List<SupplierDebtWithSupplier>> {
         val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -217,6 +310,30 @@ class VetRepository @Inject constructor(
             productDao.insertProduct(productToInsert)
         } else {
             productDao.update(product)
+        }
+    }
+
+    suspend fun adjustProductStock(product: Product, newStock: Double, note: String) {
+        require(newStock >= 0.0) { "El stock no puede ser negativo." }
+        require(note.isNotBlank()) { "Indica un motivo para ajustar el stock." }
+
+        db.withTransaction {
+            val currentProduct = productDao.getProductById(product.productId)
+                ?: throw IllegalStateException("Producto no encontrado.")
+            require(!currentProduct.isService && currentProduct.sellingMethod != SELLING_METHOD_DOSE_ONLY) {
+                "Este item no maneja stock."
+            }
+            val change = newStock - currentProduct.stock
+            if (kotlin.math.abs(change) < 0.0001) return@withTransaction
+
+            productDao.update(currentProduct.copy(stock = newStock))
+            recordStockMovement(
+                product = currentProduct,
+                movementType = STOCK_MOVEMENT_MANUAL_ADJUSTMENT,
+                quantityChange = change,
+                stockAfter = newStock,
+                note = note
+            )
         }
     }
 
@@ -344,7 +461,16 @@ class VetRepository @Inject constructor(
 
                 if (shouldDiscountStock(productForSale)) {
                     productForSale = ensureStockAvailable(productForSale, cartItem.quantity)
-                    productDao.update(productForSale.copy(stock = productForSale.stock - cartItem.quantity))
+                    val stockAfterSale = productForSale.stock - cartItem.quantity
+                    productDao.update(productForSale.copy(stock = stockAfterSale))
+                    recordStockMovement(
+                        product = productForSale,
+                        movementType = STOCK_MOVEMENT_SALE,
+                        quantityChange = -cartItem.quantity,
+                        stockAfter = stockAfterSale,
+                        note = "Venta registrada",
+                        unitCost = productForSale.cost
+                    )
                 }
 
                 val crossRef = SaleProductCrossRef(
@@ -380,9 +506,25 @@ class VetRepository @Inject constructor(
             val containersToOpen = min(containersNeeded, fullContainersAvailable)
 
             if (containersToOpen > 0) {
-                productDao.update(container.copy(stock = container.stock - containersToOpen))
-                currentProduct = currentProduct.copy(stock = currentProduct.stock + (containersToOpen * containerSize))
+                val updatedContainerStock = container.stock - containersToOpen
+                val addedQuantity = containersToOpen * containerSize
+                productDao.update(container.copy(stock = updatedContainerStock))
+                recordStockMovement(
+                    product = container,
+                    movementType = STOCK_MOVEMENT_CONTAINER_OPEN,
+                    quantityChange = -containersToOpen.toDouble(),
+                    stockAfter = updatedContainerStock,
+                    note = "Apertura automatica para venta fraccionada"
+                )
+                currentProduct = currentProduct.copy(stock = currentProduct.stock + addedQuantity)
                 productDao.update(currentProduct)
+                recordStockMovement(
+                    product = currentProduct,
+                    movementType = STOCK_MOVEMENT_CONTAINER_OPEN,
+                    quantityChange = addedQuantity,
+                    stockAfter = currentProduct.stock,
+                    note = "Ingreso automatico desde ${container.name}"
+                )
             }
         }
 
@@ -415,6 +557,14 @@ class VetRepository @Inject constructor(
                         cost = item.costPerUnit
                     )
                     productDao.update(updatedProduct)
+                    recordStockMovement(
+                        product = product,
+                        movementType = STOCK_MOVEMENT_RESTOCK,
+                        quantityChange = item.quantity,
+                        stockAfter = updatedStock,
+                        note = "Reabastecimiento",
+                        unitCost = item.costPerUnit
+                    )
                 }
             }
             if (supplierDebtDueDate != null) {
@@ -467,19 +617,19 @@ class VetRepository @Inject constructor(
             }
         }
 
-        val productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod", "lowStockThreshold", "isContainer", "containedProductId", "containerSize", "supplierIdFk")
+        val productHeaders = arrayOf("productId", "name", "price", "cost", "stock", "isService", "sellingMethod", "lowStockThreshold", "isContainer", "containedProductId", "containerSize", "supplierIdFk", "category", "unitMeasure")
         val products = productDao.getAllProducts().first()
         if (products.isNotEmpty()) {
             csvMap["products.csv"] = listToCsvString(products, productHeaders) { product ->
-                arrayOf(product.productId, product.name, product.price.toString(), product.cost.toString(), product.stock.toString(), product.isService.toString(), product.sellingMethod, product.lowStockThreshold?.toString() ?: "", product.isContainer.toString(), product.containedProductId ?: "", product.containerSize?.toString() ?: "", product.supplierIdFk ?: "")
+                arrayOf(product.productId, product.name, product.price.toString(), product.cost.toString(), product.stock.toString(), product.isService.toString(), product.sellingMethod, product.lowStockThreshold?.toString() ?: "", product.isContainer.toString(), product.containedProductId ?: "", product.containerSize?.toString() ?: "", product.supplierIdFk ?: "", product.category ?: "", product.unitMeasure ?: "")
             }
         }
 
-        val petHeaders = arrayOf("petId", "name", "ownerIdFk", "birthDate", "breed", "allergies")
+        val petHeaders = arrayOf("petId", "name", "ownerIdFk", "birthDate", "breed", "allergies", "observations")
         val pets = petDao.getAllPetsSimple().first()
         if (pets.isNotEmpty()){
             csvMap["pets.csv"] = listToCsvString(pets, petHeaders) { pet ->
-                arrayOf(pet.petId, pet.name, pet.ownerIdFk, pet.birthDate?.toString() ?: "", pet.breed ?: "", pet.allergies ?: "")
+                arrayOf(pet.petId, pet.name, pet.ownerIdFk, pet.birthDate?.toString() ?: "", pet.breed ?: "", pet.allergies ?: "", pet.observations ?: "")
             }
         }
 
@@ -523,11 +673,11 @@ class VetRepository @Inject constructor(
             }
         }
 
-        val appointmentHeaders = arrayOf("appointmentId", "clientIdFk", "petIdFk", "appointmentDate", "description")
+        val appointmentHeaders = arrayOf("appointmentId", "clientIdFk", "petIdFk", "appointmentDate", "description", "status")
         val appointments = appointmentDao.getAllAppointmentsSimple().first()
         if (appointments.isNotEmpty()){
             csvMap["appointments.csv"] = listToCsvString(appointments, appointmentHeaders) { a ->
-                arrayOf(a.appointmentId, a.clientIdFk, a.petIdFk, a.appointmentDate.toString(), a.description ?: "")
+                arrayOf(a.appointmentId, a.clientIdFk, a.petIdFk, a.appointmentDate.toString(), a.description ?: "", a.status)
             }
         }
 
@@ -560,6 +710,14 @@ class VetRepository @Inject constructor(
         if (restockOrderItems.isNotEmpty()) {
             csvMap["restock_order_items.csv"] = listToCsvString(restockOrderItems, restockOrderItemHeaders) { item ->
                 arrayOf(item.itemId, item.orderIdFk, item.productIdFk, item.quantity.toString(), item.costPerUnit.toString())
+            }
+        }
+
+        val stockMovementHeaders = arrayOf("movementId", "productIdFk", "productNameSnapshot", "movementDate", "movementType", "quantityChange", "stockAfter", "note", "unitCost")
+        val stockMovements = stockMovementDao.getAllStockMovementsSimple().first()
+        if (stockMovements.isNotEmpty()) {
+            csvMap["stock_movements.csv"] = listToCsvString(stockMovements, stockMovementHeaders) { movement ->
+                arrayOf(movement.movementId, movement.productIdFk ?: "", movement.productNameSnapshot, movement.movementDate.toString(), movement.movementType, movement.quantityChange.toString(), movement.stockAfter.toString(), movement.note ?: "", movement.unitCost?.toString() ?: "")
             }
         }
 
@@ -648,6 +806,7 @@ class VetRepository @Inject constructor(
         val supplierDebts = parseCSV(archivos["supplier_debts.csv"], ::parseSupplierDebt)
         val restockOrders = parseCSV(archivos["restock_orders.csv"], ::parseRestockOrder)
         val restockOrderItems = parseCSV(archivos["restock_order_items.csv"], ::parseRestockOrderItem)
+        val stockMovements = parseCSV(archivos["stock_movements.csv"], ::parseStockMovement)
 
         // Validation
         val clientIds = clients.map { it.clientId }.toSet()
@@ -691,8 +850,13 @@ class VetRepository @Inject constructor(
             if (item.orderIdFk !in restockOrderIds) throw BackupValidationException("Un detalle de reabastecimiento apunta a una orden inexistente.")
             if (item.productIdFk !in productIds) throw BackupValidationException("Un detalle de reabastecimiento apunta a un producto inexistente.")
         }
+        stockMovements.forEach { movement ->
+            if (movement.productIdFk != null && movement.productIdFk !in productIds) {
+                throw BackupValidationException("Un movimiento de stock apunta a un producto inexistente.")
+            }
+        }
 
-        return ParsedBackupData(clients, products, pets, treatments, sales, transactions, payments, saleProductCrossRefs, appointments, suppliers, clientDebtHistory, supplierDebts, restockOrders, restockOrderItems)
+        return ParsedBackupData(clients, products, pets, treatments, sales, transactions, payments, saleProductCrossRefs, appointments, suppliers, clientDebtHistory, supplierDebts, restockOrders, restockOrderItems, stockMovements)
     }
 
     private suspend fun performMergeImport(data: ParsedBackupData) {
@@ -711,6 +875,7 @@ class VetRepository @Inject constructor(
             if (data.supplierDebts.isNotEmpty()) supplierDebtDao.insertAll(data.supplierDebts)
             if (data.restockOrders.isNotEmpty()) restockDao.insertAllOrders(data.restockOrders)
             if (data.restockOrderItems.isNotEmpty()) restockDao.insertAllOrderItems(data.restockOrderItems)
+            if (data.stockMovements.isNotEmpty()) stockMovementDao.insertAll(data.stockMovements)
         }
     }
 
@@ -762,7 +927,9 @@ class VetRepository @Inject constructor(
         isContainer = r.optional("isContainer")?.toBoolean() ?: false,
         containedProductId = r.optional("containedProductId"),
         containerSize = r.optional("containerSize")?.toDoubleOrNull(),
-        supplierIdFk = r.optional("supplierIdFk")
+        supplierIdFk = r.optional("supplierIdFk"),
+        category = r.optional("category"),
+        unitMeasure = r.optional("unitMeasure")
     )
 
     private fun parsePet(r: CSVRecord) = Pet(
@@ -771,7 +938,8 @@ class VetRepository @Inject constructor(
         ownerIdFk = r.required("ownerIdFk"),
         birthDate = r.optional("birthDate")?.toLongOrNull(),
         breed = r.optional("breed"),
-        allergies = r.optional("allergies")
+        allergies = r.optional("allergies"),
+        observations = r.optional("observations")
     )
 
     private fun parseTreatment(r: CSVRecord) = Treatment(
@@ -827,7 +995,8 @@ class VetRepository @Inject constructor(
         clientIdFk = r.required("clientIdFk"),
         petIdFk = r.required("petIdFk"),
         appointmentDate = r.required("appointmentDate").toLong(),
-        description = r.optional("description")
+        description = r.optional("description"),
+        status = r.optional("status") ?: APPOINTMENT_STATUS_PENDING
     )
 
     private fun parseSupplier(r: CSVRecord) = Supplier(
@@ -873,5 +1042,17 @@ class VetRepository @Inject constructor(
         productIdFk = r.required("productIdFk"),
         quantity = r.required("quantity").toDouble(),
         costPerUnit = r.required("costPerUnit").toDouble()
+    )
+
+    private fun parseStockMovement(r: CSVRecord) = StockMovement(
+        movementId = r.required("movementId"),
+        productIdFk = r.optional("productIdFk"),
+        productNameSnapshot = r.required("productNameSnapshot"),
+        movementDate = r.required("movementDate").toLong(),
+        movementType = r.required("movementType"),
+        quantityChange = r.required("quantityChange").toDouble(),
+        stockAfter = r.required("stockAfter").toDouble(),
+        note = r.optional("note"),
+        unitCost = r.optional("unitCost")?.toDoubleOrNull()
     )
 }

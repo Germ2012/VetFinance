@@ -25,6 +25,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.vetfinance.R
+import com.example.vetfinance.data.APPOINTMENT_STATUS_CANCELLED
+import com.example.vetfinance.data.APPOINTMENT_STATUS_COMPLETED
+import com.example.vetfinance.data.APPOINTMENT_STATUS_PENDING
 import com.example.vetfinance.data.AppointmentWithDetails
 import com.example.vetfinance.data.Supplier
 import com.example.vetfinance.data.SupplierDebtWithSupplier
@@ -150,7 +153,12 @@ fun CalendarScreen(viewModel: VetViewModel) {
                     }
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    AppointmentList(appointments = appointments, supplierDebts = supplierDebts, onMarkSupplierDebtPaid = { viewModel.markSupplierDebtAsPaid(it) })
+                    AppointmentList(
+                        appointments = appointments,
+                        supplierDebts = supplierDebts,
+                        onMarkSupplierDebtPaid = { viewModel.markSupplierDebtAsPaid(it) },
+                        onAppointmentStatusChange = { appointment, status -> viewModel.updateAppointmentStatus(appointment, status) }
+                    )
                 }
             }
         } else {
@@ -170,7 +178,12 @@ fun CalendarScreen(viewModel: VetViewModel) {
                     }
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    AppointmentList(appointments = appointments, supplierDebts = supplierDebts, onMarkSupplierDebtPaid = { viewModel.markSupplierDebtAsPaid(it) })
+                    AppointmentList(
+                        appointments = appointments,
+                        supplierDebts = supplierDebts,
+                        onMarkSupplierDebtPaid = { viewModel.markSupplierDebtAsPaid(it) },
+                        onAppointmentStatusChange = { appointment, status -> viewModel.updateAppointmentStatus(appointment, status) }
+                    )
                 }
             }
         }
@@ -229,7 +242,8 @@ fun Day(day: CalendarDay, isSelected: Boolean, onClick: (CalendarDay) -> Unit) {
 fun AppointmentList(
     appointments: List<AppointmentWithDetails>,
     supplierDebts: List<SupplierDebtWithSupplier>,
-    onMarkSupplierDebtPaid: (String) -> Unit
+    onMarkSupplierDebtPaid: (String) -> Unit,
+    onAppointmentStatusChange: (com.example.vetfinance.data.Appointment, String) -> Unit
 ) {
     Column {
         HorizontalDivider()
@@ -262,7 +276,10 @@ fun AppointmentList(
                     }
                 }
                 items(appointments) { appointmentDetails ->
-                    AppointmentItem(appointmentDetails)
+                    AppointmentItem(
+                        details = appointmentDetails,
+                        onStatusChange = { status -> onAppointmentStatusChange(appointmentDetails.appointment, status) }
+                    )
                 }
             }
         }
@@ -409,14 +426,32 @@ fun AddSupplierDebtDialog(
 }
 
 @Composable
-fun AppointmentItem(details: AppointmentWithDetails) {
+fun AppointmentItem(details: AppointmentWithDetails, onStatusChange: (String) -> Unit) {
+    val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
+    val statusText = when (details.appointment.status) {
+        APPOINTMENT_STATUS_COMPLETED -> "Completada"
+        APPOINTMENT_STATUS_CANCELLED -> "Cancelada"
+        else -> "Pendiente"
+    }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(details.pet.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("${timeFormat.format(Date(details.appointment.appointmentDate))} - ${details.pet.name}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(stringResource(R.string.owner_label, details.client.name), style = MaterialTheme.typography.bodyMedium)
+            Text("Estado: $statusText", style = MaterialTheme.typography.bodySmall)
             Spacer(modifier = Modifier.height(4.dp))
             if (!details.appointment.description.isNullOrBlank()) {
                 Text(details.appointment.description, style = MaterialTheme.typography.bodyLarge)
+            }
+            if (details.appointment.status == APPOINTMENT_STATUS_PENDING) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { onStatusChange(APPOINTMENT_STATUS_COMPLETED) }) {
+                        Text("Completar")
+                    }
+                    TextButton(onClick = { onStatusChange(APPOINTMENT_STATUS_CANCELLED) }) {
+                        Text("Cancelar")
+                    }
+                }
             }
         }
     }

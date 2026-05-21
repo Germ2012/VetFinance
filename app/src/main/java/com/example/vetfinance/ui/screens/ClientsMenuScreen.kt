@@ -43,6 +43,12 @@ fun ClientsMenuScreen(navController: NavController) {
                 onClick = { navController.navigate(Screen.Suppliers.route) }
             )
         }
+        item {
+            MenuItem(
+                title = "Ajustes",
+                onClick = { navController.navigate(Screen.Settings.route) }
+            )
+        }
     }
 }
 

@@ -12,9 +12,10 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Sale::class, Client::class, SaleProductCrossRef::class, Payment::class,
         Appointment::class, Supplier::class, Purchase::class, PurchaseProductCrossRef::class,
         RestockOrder::class, RestockOrderItem::class,
-        AppointmentLog::class, ClientDebtHistory::class, SupplierDebt::class
+        AppointmentLog::class, ClientDebtHistory::class, SupplierDebt::class,
+        StockMovement::class
     ],
-    version = 24,
+    version = 25,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -34,6 +35,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun appointmentLogDao(): AppointmentLogDao
     abstract fun clientDebtHistoryDao(): ClientDebtHistoryDao
     abstract fun supplierDebtDao(): SupplierDebtDao
+    abstract fun stockMovementDao(): StockMovementDao
 
     companion object {
         /**
@@ -213,6 +215,31 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                 """.trimIndent())
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_supplier_debts_supplierIdFk` ON `supplier_debts` (`supplierIdFk`)")
+            }
+        }
+
+        val MIGRATION_24_25 = object : Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `appointments` ADD COLUMN `status` TEXT NOT NULL DEFAULT 'PENDING'")
+                db.execSQL("ALTER TABLE `pets` ADD COLUMN `observations` TEXT")
+                db.execSQL("ALTER TABLE `products` ADD COLUMN `category` TEXT")
+                db.execSQL("ALTER TABLE `products` ADD COLUMN `unitMeasure` TEXT")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `stock_movements` (
+                        `movementId` TEXT NOT NULL,
+                        `productIdFk` TEXT,
+                        `productNameSnapshot` TEXT NOT NULL,
+                        `movementDate` INTEGER NOT NULL,
+                        `movementType` TEXT NOT NULL,
+                        `quantityChange` REAL NOT NULL,
+                        `stockAfter` REAL NOT NULL,
+                        `note` TEXT,
+                        `unitCost` REAL,
+                        PRIMARY KEY(`movementId`),
+                        FOREIGN KEY(`productIdFk`) REFERENCES `products`(`productId`) ON UPDATE NO ACTION ON DELETE SET NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_stock_movements_productIdFk` ON `stock_movements` (`productIdFk`)")
             }
         }
 

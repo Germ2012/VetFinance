@@ -15,6 +15,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
+import com.example.vetfinance.data.STOCK_MOVEMENT_CONTAINER_OPEN
+import com.example.vetfinance.data.STOCK_MOVEMENT_MANUAL_ADJUSTMENT
+import com.example.vetfinance.data.STOCK_MOVEMENT_RESTOCK
+import com.example.vetfinance.data.STOCK_MOVEMENT_SALE
+import com.example.vetfinance.data.STOCK_MOVEMENT_SALE_REVERSAL
+import com.example.vetfinance.data.StockMovement
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency
 import java.text.SimpleDateFormat
@@ -31,9 +37,12 @@ fun InventoryScreen(viewModel: VetViewModel) {
     var productToEdit by remember { mutableStateOf<Product?>(null) }
     var productToDelete by remember { mutableStateOf<Product?>(null) }
     var productForCostHistory by remember { mutableStateOf<Product?>(null) }
+    var productForStockHistory by remember { mutableStateOf<Product?>(null) }
+    var productForStockAdjustment by remember { mutableStateOf<Product?>(null) }
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val productCostHistory by viewModel.productCostHistory.collectAsState()
+    val productStockMovements by viewModel.productStockMovements.collectAsState()
 
     val productsFilterText = stringResource(R.string.inventory_filter_products)
     val servicesFilterText = stringResource(R.string.inventory_filter_services)
@@ -111,6 +120,25 @@ fun InventoryScreen(viewModel: VetViewModel) {
         )
     }
 
+    productForStockHistory?.let { product ->
+        StockMovementHistoryDialog(
+            product = product,
+            movements = productStockMovements,
+            onDismiss = { productForStockHistory = null }
+        )
+    }
+
+    productForStockAdjustment?.let { product ->
+        AdjustStockDialog(
+            product = product,
+            onDismiss = { productForStockAdjustment = null },
+            onConfirm = { newStock, note ->
+                viewModel.adjustProductStock(product, newStock, note)
+                productForStockAdjustment = null
+            }
+        )
+    }
+
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { viewModel.onShowAddProductDialog() }) {
@@ -139,6 +167,11 @@ fun InventoryScreen(viewModel: VetViewModel) {
                                 productForCostHistory = it
                                 viewModel.loadProductCostHistory(it.productId)
                             },
+                            onShowStockHistory = {
+                                productForStockHistory = it
+                                viewModel.loadProductStockMovements(it.productId)
+                            },
+                            onAdjustStock = { productForStockAdjustment = it },
                             onOpenContainer = { viewModel.openContainerForBulkSale(it) }
                         )
                     }
@@ -186,6 +219,8 @@ fun InventoryItem(
     onEdit: (Product) -> Unit,
     onDelete: (Product) -> Unit,
     onShowCostHistory: (Product) -> Unit,
+    onShowStockHistory: (Product) -> Unit,
+    onAdjustStock: (Product) -> Unit,
     onOpenContainer: (Product) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -203,6 +238,9 @@ fun InventoryItem(
                     else stringResource(R.string.inventory_item_type_product) + ": " + product.sellingMethod,
                     style = MaterialTheme.typography.bodySmall
                 )
+                product.category?.takeIf { it.isNotBlank() }?.let {
+                    Text("Categoria: $it", style = MaterialTheme.typography.bodySmall)
+                }
                 if (product.isContainer) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(onClick = { onOpenContainer(product) }, enabled = product.stock >= 1) {
@@ -216,8 +254,9 @@ fun InventoryItem(
                     style = MaterialTheme.typography.bodyLarge
                 )
                 if (!product.isService) {
+                    val unit = product.unitMeasure?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
                     Text(
-                        text = stringResource(R.string.label_product_stock, formatCurrency(product.stock).replace(",00","")),
+                        text = "Stock: ${formatCurrency(product.stock).replace(",00","")}$unit",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -252,11 +291,112 @@ fun InventoryItem(
                                 expanded = false
                             }
                         )
+                        DropdownMenuItem(
+                            text = { Text("Historial de stock") },
+                            onClick = {
+                                onShowStockHistory(product)
+                                expanded = false
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Ajustar stock") },
+                            onClick = {
+                                onAdjustStock(product)
+                                expanded = false
+                            }
+                        )
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+fun StockMovementHistoryDialog(
+    product: Product,
+    movements: List<StockMovement>,
+    onDismiss: () -> Unit
+) {
+    val sdf = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Stock de ${product.name}") },
+        text = {
+            if (movements.isEmpty()) {
+                Text("Todavia no hay movimientos de stock para este producto.")
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(movements, key = { it.movementId }) { movement ->
+                        Column {
+                            Text(stockMovementLabel(movement.movementType), fontWeight = FontWeight.Bold)
+                            Text("${sdf.format(Date(movement.movementDate))} - Cambio: ${movement.quantityChange} - Stock: ${movement.stockAfter}")
+                            movement.unitCost?.let { Text("Costo registrado: Gs. ${formatCurrency(it)}") }
+                            movement.note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.accept_button)) }
+        }
+    )
+}
+
+private fun stockMovementLabel(type: String): String {
+    return when (type) {
+        STOCK_MOVEMENT_SALE -> "Venta"
+        STOCK_MOVEMENT_SALE_REVERSAL -> "Venta anulada"
+        STOCK_MOVEMENT_RESTOCK -> "Reabastecimiento"
+        STOCK_MOVEMENT_CONTAINER_OPEN -> "Apertura de contenedor"
+        STOCK_MOVEMENT_MANUAL_ADJUSTMENT -> "Ajuste manual"
+        else -> type
+    }
+}
+
+@Composable
+fun AdjustStockDialog(
+    product: Product,
+    onDismiss: () -> Unit,
+    onConfirm: (Double, String) -> Unit
+) {
+    var stock by remember(product) { mutableStateOf(product.stock.toString()) }
+    var note by remember(product) { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Ajustar stock de ${product.name}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = stock,
+                    onValueChange = {
+                        val filtered = it.filter { char -> char.isDigit() || char == '.' }
+                        if (filtered.count { char -> char == '.' } <= 1) stock = filtered
+                    },
+                    label = { Text("Nuevo stock") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text("Motivo obligatorio") },
+                    modifier = Modifier.fillMaxWidth(),
+                    isError = note.isBlank()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(stock.toDoubleOrNull() ?: product.stock, note) },
+                enabled = note.isNotBlank() && (stock.toDoubleOrNull() ?: -1.0) >= 0.0
+            ) { Text(stringResource(R.string.save_button)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) }
+        }
+    )
 }
 
 @Composable

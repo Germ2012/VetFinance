@@ -54,6 +54,8 @@ fun ProductDialog(
     var isService by remember(product) { mutableStateOf(product?.isService ?: false) }
     var selectedSellingMethod by remember(product) { mutableStateOf(product?.sellingMethod ?: SELLING_METHOD_BY_UNIT) }
     var lowStockThreshold by remember(product) { mutableStateOf(product?.lowStockThreshold?.toString() ?: "") }
+    var category by remember(product) { mutableStateOf(product?.category ?: "") }
+    var unitMeasure by remember(product) { mutableStateOf(product?.unitMeasure ?: "") }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
     // Estados para la funcionalidad de contenedor
@@ -130,6 +132,8 @@ fun ProductDialog(
                                             selectedSellingMethod = suggestion.sellingMethod
                                             isService = suggestion.isService
                                             selectedSupplierId = suggestion.supplierIdFk
+                                            category = suggestion.category ?: ""
+                                            unitMeasure = suggestion.unitMeasure ?: ""
                                         }
                                         .padding(vertical = 4.dp),
                                     fontSize = 14.sp
@@ -175,6 +179,17 @@ fun ProductDialog(
                     Checkbox(checked = isService, onCheckedChange = { isService = it })
                     Text(stringResource(R.string.product_dialog_is_service_checkbox))
                 }
+                ProductCategoryDropdown(
+                    selectedCategory = category,
+                    onCategorySelected = { category = it }
+                )
+                OutlinedTextField(
+                    value = unitMeasure,
+                    onValueChange = { unitMeasure = it },
+                    label = { Text("Unidad visible (unidad, ml, kg, dosis)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
                 if (!isService) {
                     SellingMethodDropdown(
                         selectedMethod = selectedSellingMethod,
@@ -297,7 +312,9 @@ fun ProductDialog(
                         isContainer = isContainer,
                         containerSize = if (isContainer) containerSize.toDoubleOrNull() else null,
                         containedProductId = if (isContainer) selectedContainedProductId else null,
-                        supplierIdFk = selectedSupplierId // Save selected supplier ID
+                        supplierIdFk = selectedSupplierId, // Save selected supplier ID
+                        category = category.ifBlank { null },
+                        unitMeasure = unitMeasure.ifBlank { null }
                     )
                     Log.d("DEBUG_GUARDAR", "Producto a Guardar (ID): ${newOrUpdatedProduct.productId}")
                     Log.d("DEBUG_GUARDAR", "Producto a Guardar (Contenido ID): ${newOrUpdatedProduct.containedProductId}")
@@ -328,6 +345,46 @@ fun ProductDialog(
             }
         }
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProductCategoryDropdown(selectedCategory: String, onCategorySelected: (String) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    val categories = listOf("Medicamentos", "Vacunas", "Alimentos", "Insumos", "Servicios")
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        OutlinedTextField(
+            value = selectedCategory.ifBlank { "Sin categoria" },
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Categoria") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.menuAnchor().fillMaxWidth()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Sin categoria") },
+                onClick = {
+                    onCategorySelected("")
+                    expanded = false
+                }
+            )
+            categories.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option) },
+                    onClick = {
+                        onCategorySelected(option)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -387,8 +444,12 @@ fun ProductSelectionItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(product.name, fontWeight = FontWeight.Bold)
                 Text(stringResource(R.string.product_selection_price_label_gs, formatCurrency(product.price)), fontSize = 14.sp)
+                product.category?.takeIf { it.isNotBlank() }?.let {
+                    Text("Categoria: $it", fontSize = 12.sp)
+                }
                 if (product.sellingMethod != SELLING_METHOD_DOSE_ONLY && !product.isService) {
-                    Text(stringResource(R.string.product_selection_stock_label, formatCurrency(product.stock).replace(",00","")), fontSize = 12.sp)
+                    val unit = product.unitMeasure?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
+                    Text("Stock: ${formatCurrency(product.stock).replace(",00","")}$unit", fontSize = 12.sp)
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -399,7 +460,7 @@ fun ProductSelectionItem(
                     text = if (quantityInCart > 0) formatCurrency(quantityInCart).replace(",00", "") else "0",
                     modifier = Modifier.padding(horizontal = 8.dp)
                 )
-                IconButton(onClick = onAdd, enabled = product.isService || product.sellingMethod != SELLING_METHOD_BY_UNIT || quantityInCart < product.stock) {
+                IconButton(onClick = onAdd) {
                     Icon(Icons.Default.Add, contentDescription = stringResource(R.string.product_selection_add_content_description))
                 }
             }

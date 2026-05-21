@@ -24,4 +24,5 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Suppliers : Screen("suppliers", "Proveedores", Icons.Default.LocalShipping)
     object Restock : Screen("restock", "Reabastecer", Icons.Default.AddShoppingCart)
     object AddRestock : Screen("add_restock", "Añadir Reabastecimiento", Icons.Default.Add) // Added
+    object Settings : Screen("settings", "Ajustes", Icons.Default.Settings)
 }

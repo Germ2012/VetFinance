@@ -264,3 +264,18 @@ interface AppointmentLogDao {
     @Query("SELECT * FROM appointment_logs WHERE originalAppointmentDate >= :startDate AND originalAppointmentDate < :endDate ORDER BY originalAppointmentDate DESC")
     fun getLogsForDateRange(startDate: Long, endDate: Long): Flow<List<AppointmentLog>>
 }
+
+@Dao
+interface StockMovementDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(movement: StockMovement)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(movements: List<StockMovement>)
+
+    @Query("SELECT * FROM stock_movements WHERE productIdFk = :productId ORDER BY movementDate DESC")
+    fun getMovementsForProduct(productId: String): Flow<List<StockMovement>>
+
+    @Query("SELECT * FROM stock_movements ORDER BY movementDate DESC")
+    fun getAllStockMovementsSimple(): Flow<List<StockMovement>>
+}

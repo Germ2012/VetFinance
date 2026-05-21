@@ -22,5 +22,7 @@ data class Product(
     val isContainer: Boolean = false,
     val containedProductId: String? = null,
     val containerSize: Double? = null,
-    val supplierIdFk: String? = null
+    val supplierIdFk: String? = null,
+    val category: String? = null,
+    val unitMeasure: String? = null
 )

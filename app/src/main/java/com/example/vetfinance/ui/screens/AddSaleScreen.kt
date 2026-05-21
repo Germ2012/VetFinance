@@ -1,5 +1,6 @@
 package com.example.vetfinance.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
@@ -41,6 +43,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     val inventory by viewModel.filteredInventory.collectAsState()
     val allProductsList by viewModel.inventory.collectAsState()
+    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
+    val frequentProducts by viewModel.frequentSaleProducts.collectAsState()
     val suppliers by viewModel.suppliers.collectAsState()
     val clients by viewModel.clients.collectAsState()
     val searchQuery by viewModel.productSearchQuery.collectAsState()
@@ -49,6 +53,9 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
 
     var saleClientName by remember { mutableStateOf("") }
     var selectedSaleClientId by remember { mutableStateOf<String?>(null) }
+    var saleFilter by remember { mutableStateOf("Todos") }
+    var showExitCartDialog by remember { mutableStateOf(false) }
+    var cartItemToEditPrice by remember { mutableStateOf<CartItem?>(null) }
 
     val showFractionalDialog by viewModel.showFractionalSaleDialog.collectAsState()
     val productForFractionalSale by viewModel.productForFractionalSale.collectAsState()
@@ -60,12 +67,68 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
 
     DisposableEffect(Unit) {
         onDispose {
-            viewModel.clearCart()
             viewModel.clearProductSearchQuery()
             viewModel.dismissFractionalSaleDialog()
             viewModel.dismissDoseSaleDialog()
             viewModel.clearClientNameSuggestions()
         }
+    }
+
+    val requestExit: () -> Unit = {
+        if (cart.isNotEmpty()) {
+            showExitCartDialog = true
+        } else {
+            navController.popBackStack()
+        }
+    }
+
+    BackHandler(enabled = cart.isNotEmpty()) {
+        showExitCartDialog = true
+    }
+
+    if (showExitCartDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitCartDialog = false },
+            title = { Text("Carrito activo") },
+            text = { Text("Hay productos cargados. Podes guardar temporalmente el carrito y volver luego, o salir limpiandolo.") },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = {
+                            viewModel.clearCart()
+                            showExitCartDialog = false
+                            navController.popBackStack()
+                        }
+                    ) {
+                        Text("Salir sin guardar")
+                    }
+                    Button(
+                        onClick = {
+                            showExitCartDialog = false
+                            navController.popBackStack()
+                        }
+                    ) {
+                        Text("Guardar y salir")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExitCartDialog = false }) {
+                    Text(stringResource(R.string.cancel_button))
+                }
+            }
+        )
+    }
+
+    cartItemToEditPrice?.let { cartItem ->
+        EditCartItemPriceDialog(
+            cartItem = cartItem,
+            onDismiss = { cartItemToEditPrice = null },
+            onConfirm = { finalPrice, reason ->
+                viewModel.updateCartItemPrice(cartItem, finalPrice, reason)
+                cartItemToEditPrice = null
+            }
+        )
     }
 
     if (showAddProductDialog) {
@@ -120,7 +183,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             TopAppBar(
                 title = { Text(stringResource(R.string.add_sale_title)) },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(onClick = requestExit) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.content_description_back))
                     }
                 },
@@ -235,7 +298,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                         CartItemRow(
                             cartItem = cartItem,
                             onRemove = { viewModel.removeFromCart(cartItem) },
-                            onAdd = { viewModel.addToCart(cartItem.product) }
+                            onAdd = { viewModel.addToCart(cartItem.product) },
+                            onEditPrice = { cartItemToEditPrice = cartItem }
                         )
                     }
                 }
@@ -247,7 +311,36 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(inventory, key = { it.productId }) { product ->
+                item {
+                    SaleProductFilterRow(
+                        selectedFilter = saleFilter,
+                        onFilterSelected = { saleFilter = it }
+                    )
+                }
+                val lowStockIds = lowStockProducts.map { it.productId }.toSet()
+                val frequentIds = frequentProducts.map { it.productId }
+                val visibleInventory = inventory
+                    .filter { product ->
+                        when (saleFilter) {
+                            "Productos" -> !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
+                            "Servicios" -> product.isService
+                            "Dosis" -> product.sellingMethod == SELLING_METHOD_DOSE_ONLY
+                            "Bajo stock" -> product.productId in lowStockIds
+                            else -> true
+                        }
+                    }
+                    .sortedWith(
+                        compareBy<Product> {
+                            val rank = frequentIds.indexOf(it.productId)
+                            if (rank >= 0) rank else Int.MAX_VALUE
+                        }.thenBy { it.name.lowercase(Locale.getDefault()) }
+                    )
+                if (frequentProducts.isNotEmpty() && saleFilter == "Todos" && searchQuery.isBlank()) {
+                    item {
+                        Text("Frecuentes", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    }
+                }
+                items(visibleInventory, key = { it.productId }) { product ->
                     ProductSelectionItem(
                         product = product,
                         quantityInCart = cart.filter { it.product.productId == product.productId }.sumOf { it.quantity },
@@ -273,7 +366,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
 }
 
 @Composable
-fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit) {
+fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit, onEditPrice: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(8.dp),
@@ -283,11 +376,17 @@ fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(cartItem.product.name, fontWeight = FontWeight.Bold)
                 val priceText = cartItem.overridePrice?.let {
-                    "${formatCurrency(it)} (Dosis)"
+                    "${formatCurrency(it)} (Precio final)"
                 } ?: formatCurrency(cartItem.product.price * cartItem.quantity)
                 Text(priceText, style = MaterialTheme.typography.bodyMedium)
+                cartItem.notes?.takeIf { it.isNotBlank() }?.let {
+                    Text("Motivo: $it", style = MaterialTheme.typography.bodySmall)
+                }
             }
 
+            IconButton(onClick = onEditPrice, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = "Editar precio")
+            }
             if (cartItem.product.sellingMethod != SELLING_METHOD_DOSE_ONLY) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
@@ -308,6 +407,69 @@ fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit) {
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SaleProductFilterRow(selectedFilter: String, onFilterSelected: (String) -> Unit) {
+    val filters = listOf("Todos", "Productos", "Servicios", "Dosis", "Bajo stock")
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        filters.forEachIndexed { index, filter ->
+            SegmentedButton(
+                selected = selectedFilter == filter,
+                onClick = { onFilterSelected(filter) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = filters.size)
+            ) {
+                Text(filter, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+fun EditCartItemPriceDialog(
+    cartItem: CartItem,
+    onDismiss: () -> Unit,
+    onConfirm: (Double?, String?) -> Unit
+) {
+    val defaultPrice = cartItem.overridePrice ?: (cartItem.product.price * cartItem.quantity)
+    var priceString by remember(cartItem) { mutableStateOf(defaultPrice.toLong().toString()) }
+    var reason by remember(cartItem) { mutableStateOf(cartItem.notes.orEmpty()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Precio final") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(cartItem.product.name, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = priceString,
+                    onValueChange = { priceString = it.filter { char -> char.isDigit() } },
+                    label = { Text("Precio final del item") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    visualTransformation = NumberTransformation(),
+                    prefix = { Text(stringResource(R.string.text_prefix_gs)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = { reason = it },
+                    label = { Text("Motivo (opcional)") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(priceString.toDoubleOrNull(), reason.ifBlank { null }) }) {
+                Text(stringResource(R.string.save_button))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel_button))
+            }
+        }
+    )
 }
 
 @Composable

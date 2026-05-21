@@ -38,6 +38,13 @@ data class HistoricalPeriod(
     val endDate: Long
 )
 
+data class GlobalSearchResult(
+    val id: String,
+    val type: String,
+    val title: String,
+    val subtitle: String
+)
+
 enum class TopProductsPeriod(@StringRes val displayResId: Int) {
     WEEK(R.string.topproducts_period_week),
     MONTH(R.string.topproducts_period_month),
@@ -62,6 +69,10 @@ class VetViewModel @Inject constructor(
 
     private fun reportOperationError(error: Throwable) {
         _operationErrorMessage.value = error.message ?: "Ocurrió un error inesperado."
+    }
+
+    private fun reportOperationError(message: String) {
+        _operationErrorMessage.value = message
     }
 
     private val _suppliers = MutableStateFlow<List<Supplier>>(emptyList())
@@ -171,7 +182,51 @@ class VetViewModel @Inject constructor(
     val debtHistory: StateFlow<List<ClientDebtHistory>> = _debtHistory.asStateFlow()
     private val _productCostHistory = MutableStateFlow<List<ProductCostHistoryItem>>(emptyList())
     val productCostHistory: StateFlow<List<ProductCostHistoryItem>> = _productCostHistory.asStateFlow()
+    private val _productStockMovements = MutableStateFlow<List<StockMovement>>(emptyList())
+    val productStockMovements: StateFlow<List<StockMovement>> = _productStockMovements.asStateFlow()
     private val _sales = repository.getAllSales().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _appSettings = MutableStateFlow(repository.getAppSettings())
+    val appSettings: StateFlow<AppSettings> = _appSettings.asStateFlow()
+    private val _globalSearchQuery = MutableStateFlow("")
+    val globalSearchQuery: StateFlow<String> = _globalSearchQuery.asStateFlow()
+
+    val frequentSaleProducts: StateFlow<List<Product>> = combine(inventory, _sales) { products, sales ->
+        val productScores = mutableMapOf<String, Double>()
+        sales.forEach { sale ->
+            sale.crossRefs.forEach { ref ->
+                productScores[ref.productId] = (productScores[ref.productId] ?: 0.0) + ref.quantitySold
+            }
+        }
+        products
+            .filter { productScores.containsKey(it.productId) }
+            .sortedByDescending { productScores[it.productId] ?: 0.0 }
+            .take(6)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val globalSearchResults: StateFlow<List<GlobalSearchResult>> = combine(
+        clients,
+        petsWithOwners,
+        inventory,
+        _globalSearchQuery
+    ) { clientList, petList, productList, query ->
+        if (query.isBlank()) {
+            emptyList()
+        } else {
+            val clientResults = clientList
+                .filter { it.name.contains(query, true) || (it.phone?.contains(query, true) == true) }
+                .map { GlobalSearchResult(it.clientId, "client", "Cliente: ${it.name}", it.phone ?: "Sin telefono") }
+            val petResults = petList
+                .filter { it.pet.name.contains(query, true) || it.owner.name.contains(query, true) }
+                .map { GlobalSearchResult(it.pet.petId, "pet", "Mascota: ${it.pet.name}", "Dueno: ${it.owner.name}") }
+            val productResults = productList
+                .filter { it.name.contains(query, true) }
+                .map { product ->
+                    val type = if (product.isService) "Servicio" else "Producto"
+                    GlobalSearchResult(product.productId, "product", "$type: ${product.name}", product.category ?: product.sellingMethod)
+                }
+            (clientResults + petResults + productResults).take(12)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val debtClientsPaginated: Flow<PagingData<Client>> = clientSearchQuery.flatMapLatest { repository.getDebtClientsPaginated(it) }.cachedIn(viewModelScope)
     val filteredPetsWithOwners: StateFlow<List<PetWithOwner>> = combine(petsWithOwners, _petSearchQuery) { pets, query ->
@@ -212,16 +267,22 @@ class VetViewModel @Inject constructor(
         repository.getSupplierDebtsForDate(date)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val upcomingAppointments: StateFlow<List<AppointmentWithDetails>> = flow {
+    val upcomingAppointments: StateFlow<List<AppointmentWithDetails>> = _appSettings.flatMapLatest { settings ->
+        flow {
         val zoneId = ZoneId.systemDefault()
         val now = LocalDate.now().atStartOfDay(zoneId).toInstant().toEpochMilli()
-        val threeDaysFromNow = LocalDate.now().plusDays(3).atStartOfDay(zoneId).toInstant().toEpochMilli()
-        emitAll(repository.getAppointmentsForDate(now, threeDaysFromNow))
+            val alertLimit = LocalDate.now().plusDays(settings.treatmentAlertDays.toLong()).atStartOfDay(zoneId).toInstant().toEpochMilli()
+            emitAll(repository.getAppointmentsForDate(now, alertLimit).map { appointments ->
+                appointments.filter { it.appointment.status == APPOINTMENT_STATUS_PENDING }
+            })
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val upcomingSupplierDebts: StateFlow<List<SupplierDebtWithSupplier>> = flow {
-        val dateLimit = LocalDate.now().plusDays(7).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        emitAll(repository.getUpcomingSupplierDebts(dateLimit))
+    val upcomingSupplierDebts: StateFlow<List<SupplierDebtWithSupplier>> = _appSettings.flatMapLatest { settings ->
+        flow {
+            val dateLimit = LocalDate.now().plusDays(settings.supplierDebtAlertDays.toLong()).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            emitAll(repository.getUpcomingSupplierDebts(dateLimit))
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val totalDebt: StateFlow<Double?> = repository.getTotalDebt().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -439,6 +500,8 @@ class VetViewModel @Inject constructor(
     fun clearClientSearchQuery() { _clientSearchQuery.value = "" }
     fun onProductSearchQueryChange(query: String) { _productSearchQuery.value = query }
     fun clearProductSearchQuery() { _productSearchQuery.value = "" }
+    fun onGlobalSearchQueryChange(query: String) { _globalSearchQuery.value = query }
+    fun clearGlobalSearchQuery() { _globalSearchQuery.value = "" }
     fun onSaleDateFilterSelected(date: Long?) { _selectedSaleDateFilter.value = date }
     fun clearSaleDateFilter() { _selectedSaleDateFilter.value = null }
     fun onProductNameChange(name: String) { if (name.isBlank()) { _productNameSuggestions.value = emptyList(); return }; _productNameSuggestions.value = inventory.value.filter { it.name.contains(name, ignoreCase = true) } }
@@ -493,6 +556,15 @@ class VetViewModel @Inject constructor(
         }
     }
 
+    fun updateAppSettings(settings: AppSettings) {
+        repository.saveAppSettings(settings)
+        _appSettings.value = settings
+    }
+
+    fun markBackupCreated() {
+        _appSettings.value = repository.markBackupCreated()
+    }
+
     fun addClient(name: String, phone: String, debt: Double) = executeWithLoading { repository.insertClient(Client(name = name, phone = phone.ifBlank { null }, address = null, debtAmount = debt)); onDismissAddClientDialog() }
     fun updateClient(client: Client) = executeWithLoading { repository.updateClient(client) }
     fun addPet(pet: Pet) = executeWithLoading { repository.insertPet(pet) }
@@ -501,6 +573,7 @@ class VetViewModel @Inject constructor(
     fun loadPaymentsForClient(clientId: String) = viewModelScope.launch { repository.getPaymentsForClient(clientId).collect { _paymentHistory.value = it } }
     fun loadDebtHistoryForClient(clientId: String) = viewModelScope.launch { repository.getDebtHistoryForClient(clientId).collect { _debtHistory.value = it } }
     fun loadProductCostHistory(productId: String) = viewModelScope.launch { repository.getProductCostHistory(productId).collect { _productCostHistory.value = it } }
+    fun loadProductStockMovements(productId: String) = viewModelScope.launch { repository.getProductStockMovements(productId).collect { _productStockMovements.value = it } }
     fun addTreatment(pet: Pet, description: String?, weight: Double?, temperature: String?, symptoms: String?, diagnosis: String?, treatmentPlan: String?, nextDate: Long?) = executeWithLoading {
         val newTreatment = Treatment( petIdFk = pet.petId, serviceId = null, treatmentDate = System.currentTimeMillis(), description = description, weight = weight, temperature = temperature, symptoms = symptoms, diagnosis = diagnosis, treatmentPlan = treatmentPlan, nextTreatmentDate = nextDate)
         repository.insertTreatment(newTreatment)
@@ -514,6 +587,9 @@ class VetViewModel @Inject constructor(
     fun adjustClientDebt(client: Client, newDebt: Double, note: String?) = executeWithLoading { repository.adjustClientDebt(client, newDebt, note) }
     fun addAppointment(appointment: Appointment) = executeWithLoading { repository.insertAppointment(appointment) }
     fun updateAppointment(appointment: Appointment) = executeWithLoading { repository.updateAppointment(appointment) }
+    fun updateAppointmentStatus(appointment: Appointment, status: String) = executeWithLoading {
+        repository.updateAppointment(appointment.copy(status = status))
+    }
     fun deleteAppointment(appointment: Appointment) = executeWithLoading { repository.deleteAppointment(appointment) }
     fun addSupplierDebt(supplierId: String?, description: String, amount: Double, dueDate: Long, note: String? = null) = executeWithLoading {
         repository.insertSupplierDebt(
@@ -529,6 +605,9 @@ class VetViewModel @Inject constructor(
         )
     }
     fun markSupplierDebtAsPaid(debtId: String) = executeWithLoading { repository.markSupplierDebtAsPaid(debtId) }
+    fun adjustProductStock(product: Product, newStock: Double, note: String) = executeWithLoading {
+        repository.adjustProductStock(product, newStock, note)
+    }
 
     private fun shouldValidateStockInCart(product: Product): Boolean {
         return !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
@@ -555,7 +634,10 @@ class VetViewModel @Inject constructor(
         if (product.sellingMethod != SELLING_METHOD_BY_UNIT) return
 
         val availableStock = availableStockForCart(product)
-        if (shouldValidateStockInCart(product) && availableStock < 1.0) return
+        if (shouldValidateStockInCart(product) && availableStock < 1.0) {
+            reportOperationError("Stock insuficiente para ${product.name}. Disponible: ${availableStock.formatForMessage()}.")
+            return
+        }
 
         // Solo incrementamos cantidad si es "Por Unidad" y ya existe
         if (existingItem != null) {
@@ -563,6 +645,8 @@ class VetViewModel @Inject constructor(
             if (!shouldValidateStockInCart(product) || newQuantity <= availableStock) {
                 val index = currentCart.indexOf(existingItem)
                 currentCart[index] = existingItem.copy(quantity = newQuantity)
+            } else {
+                reportOperationError("Stock insuficiente para ${product.name}. Disponible: ${availableStock.formatForMessage()}, solicitado: ${newQuantity.formatForMessage()}.")
             }
         } else {
             currentCart.add(CartItem(product = product, quantity = 1.0))
@@ -591,8 +675,17 @@ class VetViewModel @Inject constructor(
         val existingItemIndex = currentCart.indexOfFirst { it.product.productId == product.productId }
 
         if (quantity > 0) {
+            val availableStock = availableStockForCart(product)
             val validQuantity = if (shouldValidateStockInCart(product)) {
-                quantity.coerceAtMost(availableStockForCart(product))
+                if (availableStock <= 0.0) {
+                    reportOperationError("Stock insuficiente para ${product.name}.")
+                    0.0
+                } else {
+                    if (quantity > availableStock) {
+                        reportOperationError("Stock insuficiente para ${product.name}. Se agrego solo ${availableStock.formatForMessage()}.")
+                    }
+                    quantity.coerceAtMost(availableStock)
+                }
             } else {
                 quantity
             }
@@ -621,6 +714,21 @@ class VetViewModel @Inject constructor(
         dismissDoseSaleDialog()
     }
 
+    fun updateCartItemPrice(cartItem: CartItem, finalPrice: Double?, reason: String?) {
+        val currentCart = _shoppingCart.value.toMutableList()
+        val index = currentCart.indexOfFirst { it.cartItemId == cartItem.cartItemId }
+        if (index == -1) return
+
+        val normalizedPrice = finalPrice?.takeIf { it > 0.0 }
+        val normalizedReason = reason?.ifBlank { null }
+        currentCart[index] = currentCart[index].copy(
+            overridePrice = normalizedPrice,
+            notes = normalizedReason
+        )
+        _shoppingCart.value = currentCart
+        recalculateTotal()
+    }
+
     fun clearCart() { _shoppingCart.value = emptyList(); _saleTotal.value = 0.0 }
 
     private fun recalculateTotal() {
@@ -646,4 +754,8 @@ class VetViewModel @Inject constructor(
     suspend fun importarDatosDesdeZIP(uri: Uri, context: Context): String = repository.importarDatosDesdeZIP(uri, context)
 
     private suspend fun addSampleData() = repository.insertClient(Client(clientId = GENERAL_CLIENT_ID, name = "Cliente General", phone = null, address = null, debtAmount = 0.0))
+
+    private fun Double.formatForMessage(): String {
+        return if (this % 1.0 == 0.0) this.toLong().toString() else String.format(Locale.getDefault(), "%.3f", this)
+    }
 }

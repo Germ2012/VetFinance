@@ -69,5 +69,6 @@ fun AppNavigation(navController: NavHostController, viewModel: VetViewModel) {
         composable(Screen.Suppliers.route) { SuppliersScreen(viewModel, navController) }
         composable(Screen.Restock.route) { RestockScreen(viewModel, navController) }
         composable(Screen.AddRestock.route) { AddRestockScreen(viewModel, navController) } // Added
+        composable(Screen.Settings.route) { SettingsScreen(viewModel, navController) }
     }
 }

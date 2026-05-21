@@ -42,6 +42,8 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     // Estados para manejar el diálogo de edición y eliminación
     var treatmentToEdit by remember { mutableStateOf<Treatment?>(null) }
     var treatmentToDelete by remember { mutableStateOf<Treatment?>(null) }
+    var treatmentToRepeat by remember { mutableStateOf<Treatment?>(null) }
+    var showObservationsDialog by remember { mutableStateOf(false) }
 
     if (showTreatmentDialog && petWithOwner != null) {
         AddTreatmentDialog(
@@ -95,6 +97,44 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     }
 
     // Diálogo de confirmación para eliminar
+    treatmentToRepeat?.let { treatment ->
+        if (petWithOwner != null) {
+            AddTreatmentDialog(
+                initialTreatment = treatment,
+                services = services,
+                onDismiss = { treatmentToRepeat = null },
+                onConfirm = { description, weight, temperature, symptoms, diagnosis, treatmentPlan, nextDateMillis ->
+                    viewModel.addTreatment(
+                        pet = petWithOwner.pet,
+                        description = description,
+                        weight = weight.toDoubleOrNull(),
+                        temperature = temperature.ifBlank { null },
+                        symptoms = symptoms.ifBlank { null },
+                        diagnosis = diagnosis.ifBlank { null },
+                        treatmentPlan = treatmentPlan.ifBlank { null },
+                        nextDate = nextDateMillis
+                    )
+                    treatmentToRepeat = null
+                },
+                onAddNewServiceClick = {
+                    treatmentToRepeat = null
+                    viewModel.onShowAddProductDialog()
+                }
+            )
+        }
+    }
+
+    if (showObservationsDialog && petWithOwner != null) {
+        PetObservationsDialog(
+            initialValue = petWithOwner.pet.observations.orEmpty(),
+            onDismiss = { showObservationsDialog = false },
+            onConfirm = { observations ->
+                viewModel.updatePet(petWithOwner.pet.copy(observations = observations.ifBlank { null }))
+                showObservationsDialog = false
+            }
+        )
+    }
+
     treatmentToDelete?.let { treatment ->
         AlertDialog(
             onDismissRequest = { treatmentToDelete = null },
@@ -154,11 +194,21 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
             Text(stringResource(R.string.pet_detail_clinical_history_title), style = MaterialTheme.typography.headlineMedium)
             Spacer(modifier = Modifier.height(16.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                item {
+                    PetClinicalSummaryCard(
+                        petName = petWithOwner?.pet?.name ?: "",
+                        ownerName = petWithOwner?.owner?.name ?: "",
+                        observations = petWithOwner?.pet?.observations,
+                        history = history,
+                        onEditObservations = { showObservationsDialog = true }
+                    )
+                }
                 items(history) { treatment ->
                     TreatmentHistoryItem(
                         treatment = treatment,
                         onEdit = { treatmentToEdit = treatment },
-                        onDelete = { treatmentToDelete = treatment }
+                        onDelete = { treatmentToDelete = treatment },
+                        onRepeat = { treatmentToRepeat = treatment }
                     )
                 }
             }
@@ -170,7 +220,8 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
 fun TreatmentHistoryItem(
     treatment: Treatment,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onRepeat: () -> Unit
 ) {
     val dateFormat = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
     val nextDateString = treatment.nextTreatmentDate?.let {
@@ -204,10 +255,82 @@ fun TreatmentHistoryItem(
                     expanded = menuExpanded,
                     onDismissRequest = { menuExpanded = false }
                 ) {
+                    DropdownMenuItem(text = { Text("Repetir tratamiento") }, onClick = { onRepeat(); menuExpanded = false })
                     DropdownMenuItem(text = { Text("Editar") }, onClick = { onEdit(); menuExpanded = false })
                     DropdownMenuItem(text = { Text("Eliminar") }, onClick = { onDelete(); menuExpanded = false })
                 }
             }
         }
     }
+}
+
+@Composable
+fun PetClinicalSummaryCard(
+    petName: String,
+    ownerName: String,
+    observations: String?,
+    history: List<Treatment>,
+    onEditObservations: () -> Unit
+) {
+    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
+    val latestTreatment = history.firstOrNull()
+    val latestWeight = latestTreatment?.weight
+    val previousWeight = history.drop(1).firstOrNull { it.weight != null }?.weight
+    val nextControl = history.mapNotNull { it.nextTreatmentDate }.minOrNull()
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("$petName - $ownerName", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            latestTreatment?.let {
+                Text("Ultima consulta: ${dateFormat.format(Date(it.treatmentDate))}")
+                it.description?.takeIf { description -> description.isNotBlank() }?.let { description ->
+                    Text("Ultimo motivo: $description")
+                }
+            } ?: Text("Todavia no tiene consultas registradas.")
+
+            if (latestWeight != null || previousWeight != null) {
+                Text("Peso: ${latestWeight?.toString() ?: "-"} kg | anterior: ${previousWeight?.toString() ?: "-"} kg")
+            }
+            nextControl?.let {
+                Text("Proximo control/vacuna/desparasitacion: ${dateFormat.format(Date(it))}")
+            }
+            Text("Observaciones: ${observations?.takeIf { it.isNotBlank() } ?: "Sin observaciones generales"}")
+            TextButton(onClick = onEditObservations) {
+                Text("Editar observaciones")
+            }
+        }
+    }
+}
+
+@Composable
+fun PetObservationsDialog(
+    initialValue: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var observations by remember(initialValue) { mutableStateOf(initialValue) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Observaciones generales") },
+        text = {
+            OutlinedTextField(
+                value = observations,
+                onValueChange = { observations = it },
+                label = { Text("Observaciones de la mascota") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3
+            )
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(observations) }) {
+                Text(stringResource(R.string.save_button))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel_button))
+            }
+        }
+    )
 }

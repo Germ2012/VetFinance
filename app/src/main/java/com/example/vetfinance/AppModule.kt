@@ -15,6 +15,7 @@ import com.example.vetfinance.data.RestockDao
 import com.example.vetfinance.data.SaleDao
 import com.example.vetfinance.data.SupplierDao
 import com.example.vetfinance.data.SupplierDebtDao
+import com.example.vetfinance.data.StockMovementDao
 import com.example.vetfinance.data.TransactionDao
 import com.example.vetfinance.data.TreatmentDao
 import com.example.vetfinance.viewmodel.VetRepository
@@ -44,7 +45,8 @@ object AppModule {
                 AppDatabase.MIGRATION_22_23,
                 AppDatabase.MIGRATION_20_23,
                 AppDatabase.MIGRATION_21_23,
-                AppDatabase.MIGRATION_23_24
+                AppDatabase.MIGRATION_23_24,
+                AppDatabase.MIGRATION_24_25
             )
             .build()
     }
@@ -93,6 +95,9 @@ object AppModule {
     @Provides
     fun provideSupplierDebtDao(db: AppDatabase): SupplierDebtDao = db.supplierDebtDao()
 
+    @Provides
+    fun provideStockMovementDao(db: AppDatabase): StockMovementDao = db.stockMovementDao()
+
 
     // --- Repository Provider (Actualizado) ---
     @Provides
@@ -112,6 +117,7 @@ object AppModule {
         restockDao: RestockDao,
         clientDebtHistoryDao: ClientDebtHistoryDao,
         supplierDebtDao: SupplierDebtDao,
+        stockMovementDao: StockMovementDao,
         appointmentLogDao: AppointmentLogDao, // Parámetro añadido
         @ApplicationContext context: Context
     ): VetRepository {
@@ -130,6 +136,7 @@ object AppModule {
             restockDao,
             clientDebtHistoryDao,
             supplierDebtDao,
+            stockMovementDao,
             appointmentLogDao, // Argumento añadido
             context
         )

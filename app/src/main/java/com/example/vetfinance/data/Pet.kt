@@ -25,5 +25,6 @@ data class Pet(
     val ownerIdFk: String,
     val birthDate: Long? = null,
     val breed: String? = null,
-    val allergies: String? = null
+    val allergies: String? = null,
+    val observations: String? = null
 )

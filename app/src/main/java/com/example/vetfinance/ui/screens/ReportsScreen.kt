@@ -101,8 +101,6 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
     val noDataToExportMsg = stringResource(R.string.toast_no_data_to_export)
     val exportCompletedMsg = stringResource(R.string.toast_export_completed)
     val exportErrorMsg = stringResource(R.string.toast_export_error)
-    val exportFilePrefix = stringResource(R.string.export_file_prefix)
-    val exportFileSuffix = stringResource(R.string.export_file_suffix)
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -131,6 +129,7 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
                             }
                         }
                     }
+                    viewModel.markBackupCreated()
                     Toast.makeText(context, exportCompletedMsg, Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
                     val errorDetail = e.message ?: ""
@@ -161,8 +160,8 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
             Button(onClick = { importLauncher.launch(arrayOf("application/zip")) }) { Text(stringResource(R.string.button_import)) }
             Button(onClick = {
-                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                val fileName = "$exportFilePrefix$timestamp$exportFileSuffix"
+                val timestamp = SimpleDateFormat("yyyy-MM-dd_HHmmss", Locale.getDefault()).format(Date())
+                val fileName = "VetFinance_backup_$timestamp.zip"
                 exportLauncher.launch(fileName)
             }) { Text(stringResource(R.string.button_export)) }
         }

@@ -6,6 +6,10 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import java.util.UUID
 
+const val APPOINTMENT_STATUS_PENDING = "PENDING"
+const val APPOINTMENT_STATUS_COMPLETED = "COMPLETED"
+const val APPOINTMENT_STATUS_CANCELLED = "CANCELLED"
+
 @Entity(
     tableName = "appointments",
     foreignKeys = [
@@ -20,5 +24,6 @@ data class Appointment(
     val clientIdFk: String,
     val petIdFk: String,
     val appointmentDate: Long,
-    val description: String?
+    val description: String?,
+    val status: String = APPOINTMENT_STATUS_PENDING
 )

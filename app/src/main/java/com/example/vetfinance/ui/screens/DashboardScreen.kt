@@ -1,6 +1,7 @@
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -47,6 +48,9 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     var showManagementDialog by remember { mutableStateOf(false) }
     val lowStockProducts by viewModel.lowStockProducts.collectAsState()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
+    val globalSearchQuery by viewModel.globalSearchQuery.collectAsState()
+    val globalSearchResults by viewModel.globalSearchResults.collectAsState()
+    val appSettings by viewModel.appSettings.collectAsState()
 
     val isLoading by viewModel.isLoading.collectAsState()
     val petIdToNameMap = petsWithOwners.associate { it.pet.petId to it.pet.name }
@@ -137,7 +141,38 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             modifier = Modifier.fillMaxSize().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(stringResource(R.string.dashboard_summary_of_the_day), style = MaterialTheme.typography.headlineMedium)
+            Text(
+                appSettings.clinicName.ifBlank { stringResource(R.string.dashboard_summary_of_the_day) },
+                style = MaterialTheme.typography.headlineMedium
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = globalSearchQuery,
+                onValueChange = { viewModel.onGlobalSearchQueryChange(it) },
+                label = { Text("Buscar cliente, telefono, mascota o producto") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+            if (globalSearchResults.isNotEmpty()) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(8.dp)) {
+                        globalSearchResults.forEach { result ->
+                            ListItem(
+                                headlineContent = { Text(result.title) },
+                                supportingContent = { Text(result.subtitle) },
+                                modifier = Modifier.clickable {
+                                    when (result.type) {
+                                        "client" -> navController.navigate("client_detail/${result.id}")
+                                        "pet" -> navController.navigate("pet_detail/${result.id}")
+                                        "product" -> navController.navigate(Screen.Inventory.route)
+                                    }
+                                    viewModel.clearGlobalSearchQuery()
+                                }
+                            )
+                        }
+                    }
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
             val formattedSales = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(salesToday)
             ReportSummaryCard(stringResource(R.string.dashboard_sales_today_title), formattedSales)
