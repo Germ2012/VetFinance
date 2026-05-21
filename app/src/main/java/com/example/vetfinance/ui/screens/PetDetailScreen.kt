@@ -122,7 +122,6 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.insertOrUpdateProduct(newProduct)
-                viewModel.onDismissAddProductDialog()
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },

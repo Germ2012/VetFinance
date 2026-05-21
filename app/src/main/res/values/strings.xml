@@ -157,7 +157,6 @@
     <string name="add_appointment_description_label">Descripción / Motivo</string>
     <string name="owner_label">Dueño: %1$s</string>
     <string name="client_name_label">Nombre del cliente</string>
-    <string name="edit_client_title">Editar cliente</string>
     <string name="client_name_error">El nombre no puede estar vacío</string>
     <string name="client_phone_label">Teléfono (Opcional)</string>
     <string name="client_initial_debt_label">Deuda Inicial (Opcional)</string>
@@ -269,14 +268,6 @@
     <string name="appointment_cancelled_reason_prefix">Motivo:</string>
     <string name="no_cancelled_appointments">No hay citas canceladas para este día.</string>
     <string name="cancelled_appointments_title">Citas Canceladas</string>
-    <string name="appointment_options_content_description">Opciones de cita</string>
-    <string name="appointment_edit_menu">Editar</string>
-    <string name="appointment_reschedule_menu">Reagendar</string>
-    <string name="appointment_delete_menu">Eliminar</string>
-    <string name="edit_appointment_dialog_title">Editar cita</string>
-    <string name="reschedule_appointment_dialog_title">Reagendar cita</string>
-    <string name="confirm_delete_appointment_title">Eliminar cita</string>
-    <string name="confirm_delete_appointment_message">¿Eliminar la cita de %1$s? Esta acción no se puede deshacer.</string>
     <string name="content_description_delete_appointment">Eliminar cita</string>
     <string name="content_description_complete_appointment">Marcar cita como completada</string>
     <string name="content_description_cancel_appointment">Cancelar cita</string>

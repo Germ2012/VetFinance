@@ -1,6 +1,11 @@
 package com.example.vetfinance.navigation
 
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -12,6 +17,21 @@ import com.example.vetfinance.ui.screens.CalendarScreen
 
 @Composable
 fun AppNavigation(navController: NavHostController, viewModel: VetViewModel) {
+    val operationErrorMessage by viewModel.operationErrorMessage.collectAsState()
+
+    operationErrorMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { viewModel.clearOperationErrorMessage() },
+            title = { Text("Atención") },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearOperationErrorMessage() }) {
+                    Text("Aceptar")
+                }
+            }
+        )
+    }
+
     NavHost(navController = navController, startDestination = Screen.Dashboard.route) {
 
         // --- Pantallas Principales (desde la barra de navegación) ---

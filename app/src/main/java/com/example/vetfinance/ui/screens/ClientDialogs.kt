@@ -9,35 +9,22 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.R
-import com.example.vetfinance.data.Client
 import ui.utils.NumberTransformation
 
 @Composable
 fun AddOrEditClientDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, phone: String, debt: Double) -> Unit,
-    client: Client? = null,
     showDebtField: Boolean = true
 ) {
-    val initialDebt = remember(client?.clientId) {
-        client?.debtAmount?.let { amount ->
-            if (amount % 1.0 == 0.0) amount.toLong().toString() else amount.toString()
-        }.orEmpty()
-    }
-    var name by remember(client?.clientId) { mutableStateOf(client?.name.orEmpty()) }
-    var phone by remember(client?.clientId) { mutableStateOf(client?.phone.orEmpty()) }
-    var debt by remember(client?.clientId) { mutableStateOf(initialDebt) }
+    var name by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
+    var debt by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                stringResource(
-                    if (client == null) R.string.add_new_client_title else R.string.edit_client_title
-                )
-            )
-        },
+        title = { Text(stringResource(R.string.add_new_client_title)) },
         text = {
             Column {
                 OutlinedTextField(

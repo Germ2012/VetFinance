@@ -16,14 +16,17 @@ import kotlinx.coroutines.withContext
 import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
 import org.apache.commons.csv.CSVPrinter
+import org.apache.commons.csv.CSVRecord
+import java.io.ByteArrayOutputStream
 import java.io.StringWriter
-import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 import java.util.zip.ZipInputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.min
 
 // Data class definition for backup
@@ -58,35 +61,70 @@ class VetRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
 
+    private companion object {
+        const val MAX_BACKUP_FILE_BYTES = 2_000_000
+        const val MAX_BACKUP_TOTAL_BYTES = 10_000_000
+        val ALLOWED_BACKUP_FILES = setOf(
+            "clients.csv",
+            "suppliers.csv",
+            "products.csv",
+            "pets.csv",
+            "treatments.csv",
+            "sales.csv",
+            "transactions.csv",
+            "payments.csv",
+            "sale_product_cross_refs.csv",
+            "appointments.csv"
+        )
+    }
+
     suspend fun getRestockHistoryForDateRange(startDate: Long, endDate: Long): List<RestockHistoryItem> {
         return restockDao.getRestockHistoryForDateRange(startDate, endDate)
     }
 
     suspend fun deleteProduct(product: Product) {
-        productDao.delete(product)
+        db.withTransaction {
+            val salesUsingProduct = productDao.countSaleDetailsForProduct(product.productId)
+            if (salesUsingProduct > 0) {
+                throw IllegalStateException(
+                    "No se puede eliminar ${product.name} porque ya forma parte del historial de ventas. " +
+                        "Podés dejarlo con stock 0 o editarlo, pero eliminarlo borraría trazabilidad."
+                )
+            }
+            productDao.delete(product)
+        }
     }
 
     suspend fun performInventoryTransfer(containerId: String, containedId: String, amountToTransfer: Double) {
+        require(amountToTransfer > 0.0) { "La cantidad a transferir debe ser mayor a cero." }
+
         db.withTransaction {
             val containerProduct = productDao.getProductById(containerId)
+                ?: throw IllegalStateException("Producto contenedor no encontrado.")
             val containedProduct = productDao.getProductById(containedId)
+                ?: throw IllegalStateException("Producto contenido no encontrado.")
 
-            if (containerProduct != null && containedProduct != null) {
-                if (containerProduct.stock >= 1) {
-                    // Subtract 1 from the container
-                    val updatedContainer = containerProduct.copy(stock = containerProduct.stock - 1)
-                    productDao.update(updatedContainer)
-
-                    // Add the amount defined in 'containerSize' to the bulk product
-                    val updatedContained = containedProduct.copy(stock = containedProduct.stock + amountToTransfer)
-                    productDao.update(updatedContained)
-                }
+            if (containerProduct.stock < 1.0) {
+                throw IllegalStateException("No hay stock disponible del contenedor ${containerProduct.name}.")
             }
+
+            productDao.update(containerProduct.copy(stock = containerProduct.stock - 1.0))
+            productDao.update(containedProduct.copy(stock = containedProduct.stock + amountToTransfer))
         }
     }
 
     suspend fun deleteClient(client: Client) {
-        clientDao.delete(client)
+        db.withTransaction {
+            val currentClient = clientDao.getClientById(client.clientId) ?: return@withTransaction
+            val paymentsCount = clientDao.countPaymentsForClient(client.clientId)
+            if (currentClient.debtAmount > 0.0 || paymentsCount > 0) {
+                throw IllegalStateException(
+                    "No se puede eliminar ${currentClient.name} porque tiene deuda o pagos registrados. " +
+                        "Esto protege el historial financiero."
+                )
+            }
+            clientDao.delete(currentClient)
+        }
     }
 
     suspend fun deleteSale(saleWithProducts: SaleWithProducts) {
@@ -179,58 +217,103 @@ class VetRepository @Inject constructor(
 
     suspend fun makePayment(client: Client, amount: Double) {
         if (amount <= 0) return
-        val actualPaymentAmount = min(amount, client.debtAmount)
-        if (actualPaymentAmount <= 0) return
 
-        val payment = Payment(clientIdFk = client.clientId, amount = actualPaymentAmount, paymentDate = System.currentTimeMillis())
-        paymentDao.insert(payment)
+        db.withTransaction {
+            val currentClient = clientDao.getClientById(client.clientId) ?: return@withTransaction
+            val actualPaymentAmount = min(amount, currentClient.debtAmount)
+            if (actualPaymentAmount <= 0) return@withTransaction
 
-        val newDebt = client.debtAmount - actualPaymentAmount
-        clientDao.updateDebt(client.clientId, if (newDebt < 0.01) 0.0 else newDebt)
+            val payment = Payment(
+                clientIdFk = currentClient.clientId,
+                amount = actualPaymentAmount,
+                paymentDate = System.currentTimeMillis()
+            )
+            paymentDao.insert(payment)
+
+            val newDebt = currentClient.debtAmount - actualPaymentAmount
+            clientDao.updateDebt(currentClient.clientId, if (newDebt < 0.01) 0.0 else newDebt)
+        }
     }
 
     suspend fun insertSale(sale: Sale, items: List<CartItem>) {
+        require(items.isNotEmpty()) { "La venta debe tener al menos un producto o servicio." }
+        require(items.all { it.quantity > 0.0 }) { "Todas las cantidades de la venta deben ser mayores a cero." }
+
         db.withTransaction {
             saleDao.insertSale(sale)
+
             items.forEach { cartItem ->
-                val product = cartItem.product
+                val productFromCart = cartItem.product
+                var productForSale = productDao.getProductById(productFromCart.productId)
+                    ?: throw IllegalStateException("Producto no encontrado: ${productFromCart.name}")
+
+                if (shouldDiscountStock(productForSale)) {
+                    productForSale = ensureStockAvailable(productForSale, cartItem.quantity)
+                    productDao.update(productForSale.copy(stock = productForSale.stock - cartItem.quantity))
+                }
+
                 val crossRef = SaleProductCrossRef(
                     saleId = sale.saleId,
-                    productId = cartItem.product.productId,
+                    productId = productForSale.productId,
                     quantitySold = cartItem.quantity,
-                    priceAtTimeOfSale = cartItem.product.price,
+                    priceAtTimeOfSale = productForSale.price,
                     notes = cartItem.notes,
                     overridePrice = cartItem.overridePrice
                 )
                 saleDao.insertSaleProductCrossRef(crossRef)
-
-                if (product.sellingMethod != SELLING_METHOD_DOSE_ONLY && !product.isService) {
-                    if (product.stock < cartItem.quantity) {
-                        // CORRECTION: Use the new efficient query
-                        val container = productDao.findContainerForProduct(product.productId)
-
-                        if (container != null) {
-                            performInventoryTransfer(container.productId, product.productId, container.containerSize ?: 0.0)
-                        }
-                    }
-                    val currentProduct = productDao.getProductById(product.productId)
-                    if (currentProduct != null) {
-                        val updatedStock = currentProduct.stock - cartItem.quantity
-                        productDao.update(currentProduct.copy(stock = updatedStock))
-                    }
-                }
             }
         }
     }
 
+    private fun shouldDiscountStock(product: Product): Boolean {
+        return !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
+    }
+
+    private suspend fun ensureStockAvailable(product: Product, requiredQuantity: Double): Product {
+        var currentProduct = productDao.getProductById(product.productId)
+            ?: throw IllegalStateException("Producto no encontrado: ${product.name}")
+
+        if (currentProduct.stock >= requiredQuantity) return currentProduct
+
+        val container = productDao.findContainerForProduct(currentProduct.productId)
+        val containerSize = container?.containerSize ?: 0.0
+        val fullContainersAvailable = floor(container?.stock ?: 0.0).toInt()
+
+        if (container != null && containerSize > 0.0 && fullContainersAvailable > 0) {
+            val missingQuantity = requiredQuantity - currentProduct.stock
+            val containersNeeded = ceil(missingQuantity / containerSize).toInt()
+            val containersToOpen = min(containersNeeded, fullContainersAvailable)
+
+            if (containersToOpen > 0) {
+                productDao.update(container.copy(stock = container.stock - containersToOpen))
+                currentProduct = currentProduct.copy(stock = currentProduct.stock + (containersToOpen * containerSize))
+                productDao.update(currentProduct)
+            }
+        }
+
+        if (currentProduct.stock < requiredQuantity) {
+            throw IllegalStateException(
+                "Stock insuficiente para ${currentProduct.name}. Disponible: ${currentProduct.stock}, solicitado: $requiredQuantity"
+            )
+        }
+
+        return currentProduct
+    }
+
     suspend fun performRestock(order: RestockOrder, items: List<RestockOrderItem>) {
+        require(items.isNotEmpty()) { "La reposición debe tener al menos un producto." }
+        require(items.all { it.quantity > 0.0 && it.costPerUnit >= 0.0 }) {
+            "Las cantidades deben ser mayores a cero y los costos no pueden ser negativos."
+        }
+
         db.withTransaction {
             restockDao.insertOrder(order)
             restockDao.insertOrderItems(items)
 
             items.forEach { item ->
                 val product = productDao.getProductById(item.productIdFk)
-                if (product != null && !product.isService) {
+                    ?: throw IllegalStateException("Producto no encontrado en reposición.")
+                if (!product.isService) {
                     val updatedStock = product.stock + item.quantity
                     val updatedProduct = product.copy(
                         stock = updatedStock,
@@ -345,10 +428,30 @@ class VetRepository @Inject constructor(
     suspend fun importarDatosDesdeZIP(uri: Uri, context: Context): String = withContext(Dispatchers.IO) {
         try {
             val archivosDelZip = mutableMapOf<String, String>()
+            var totalBytesRead = 0L
+
             context.contentResolver.openInputStream(uri)?.use { inputStream ->
                 ZipInputStream(inputStream).use { zis ->
-                    generateSequence { zis.nextEntry }.forEach { entry ->
-                        archivosDelZip[entry.name] = zis.bufferedReader().readText()
+                    while (true) {
+                        val entry = zis.nextEntry ?: break
+                        if (entry.isDirectory) {
+                            zis.closeEntry()
+                            continue
+                        }
+
+                        val fileName = entry.name.substringAfterLast('/')
+                        if (fileName !in ALLOWED_BACKUP_FILES) {
+                            throw BackupValidationException("El respaldo contiene un archivo no permitido: $fileName")
+                        }
+
+                        val entryBytes = readZipEntryBytesLimited(zis, fileName)
+                        totalBytesRead += entryBytes.size
+                        if (totalBytesRead > MAX_BACKUP_TOTAL_BYTES) {
+                            throw BackupValidationException("El respaldo es demasiado grande para importarse de forma segura.")
+                        }
+
+                        archivosDelZip[fileName] = entryBytes.toString(Charsets.UTF_8)
+                        zis.closeEntry()
                     }
                 }
             }
@@ -365,6 +468,26 @@ class VetRepository @Inject constructor(
             e.printStackTrace()
             return@withContext context.getString(R.string.import_error_unexpected, e.message ?: context.getString(R.string.import_error_no_details))
         }
+    }
+
+    private fun readZipEntryBytesLimited(zis: ZipInputStream, fileName: String): ByteArray {
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        val output = ByteArrayOutputStream()
+        var bytesForEntry = 0
+
+        while (true) {
+            val read = zis.read(buffer)
+            if (read == -1) break
+
+            bytesForEntry += read
+            if (bytesForEntry > MAX_BACKUP_FILE_BYTES) {
+                throw BackupValidationException("El archivo $fileName supera el tamaño máximo permitido.")
+            }
+
+            output.write(buffer, 0, read)
+        }
+
+        return output.toByteArray()
     }
 
     @Throws(BackupValidationException::class)
@@ -427,53 +550,126 @@ class VetRepository @Inject constructor(
     }
 
     // --- CSV Parsers ---
-    private inline fun <T> parseCSV(content: String?, parser: (org.apache.commons.csv.CSVRecord) -> T): List<T> {
+    private inline fun <T> parseCSV(content: String?, parser: (CSVRecord) -> T): List<T> {
         if (content.isNullOrBlank()) return emptyList()
-        val format = CSVFormat.Builder.create(CSVFormat.DEFAULT).setHeader().setSkipHeaderRecord(true).setIgnoreEmptyLines(true).build()
-        return CSVParser.parse(content, format).map(parser)
+        val format = CSVFormat.Builder.create(CSVFormat.DEFAULT)
+            .setHeader()
+            .setSkipHeaderRecord(true)
+            .setIgnoreEmptyLines(true)
+            .build()
+        return CSVParser.parse(content, format).map { record ->
+            try {
+                parser(record)
+            } catch (e: BackupValidationException) {
+                throw e
+            } catch (e: Exception) {
+                throw BackupValidationException("No se pudo leer una fila del respaldo: ${e.message ?: "sin detalle"}")
+            }
+        }
     }
 
-    private fun org.apache.commons.csv.CSVRecord.optionalString(header: String): String? {
-        return if (isMapped(header)) get(header).ifEmpty { null } else null
+    private fun CSVRecord.required(column: String): String {
+        if (!isMapped(column)) throw BackupValidationException("Falta la columna obligatoria '$column' en un CSV del respaldo.")
+        return get(column).ifBlank { throw BackupValidationException("La columna obligatoria '$column' tiene un valor vacío.") }
     }
 
-    private fun org.apache.commons.csv.CSVRecord.optionalDouble(header: String): Double? {
-        return optionalString(header)?.toDoubleOrNull()
+    private fun CSVRecord.optional(column: String): String? {
+        return if (isMapped(column)) get(column).ifBlank { null } else null
     }
 
-    private fun org.apache.commons.csv.CSVRecord.optionalLong(header: String): Long? {
-        return optionalString(header)?.toLongOrNull()
-    }
-
-    private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r.optionalString("phone"), r.optionalString("address"), r["debtAmount"].toDouble())
-    private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(
-        productId = r["productId"], name = r["name"], price = r["price"].toDouble(), cost = r["cost"].toDouble(), stock = r["stock"].toDouble(), isService = r["isService"].toBoolean(),
-        sellingMethod = r.optionalString("sellingMethod") ?: SELLING_METHOD_BY_UNIT, lowStockThreshold = r.optionalDouble("lowStockThreshold"), isContainer = r.optionalString("isContainer")?.toBoolean() ?: false,
-        containedProductId = r.optionalString("containedProductId"), containerSize = r.optionalDouble("containerSize"), supplierIdFk = r.optionalString("supplierIdFk")
+    private fun parseClient(r: CSVRecord) = Client(
+        clientId = r.required("clientId"),
+        name = r.required("name"),
+        phone = r.optional("phone"),
+        address = r.optional("address"),
+        debtAmount = r.required("debtAmount").toDouble()
     )
-    private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r.optionalLong("birthDate"), r.optionalString("breed"), r.optionalString("allergies"))
-    private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r.optionalString("serviceId"), r["treatmentDate"].toLong(), r.optionalString("description"), r.optionalLong("nextTreatmentDate"), r["isNextTreatmentCompleted"].toBoolean(), r.optionalString("symptoms"), r.optionalString("diagnosis"), r.optionalString("treatmentPlan"), r.optionalDouble("weight"), r.optionalString("temperature"))
-    private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["date"].toLong(), r["totalAmount"].toDouble(), r.optionalString("clientIdFk"))
-    private fun parseTransaction(r: org.apache.commons.csv.CSVRecord) = Transaction(r["transactionId"], r.optionalString("saleIdFk"), r["date"].toLong(), r["type"], r["amount"].toDouble(), r.optionalString("description"))
-    private fun parsePayment(r: org.apache.commons.csv.CSVRecord) = Payment(r["paymentId"], r["clientIdFk"], r["amount"].toDouble(), r["paymentDate"].toLong())
-    private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(
-        saleId = r["saleId"], productId = r["productId"], quantitySold = r["quantitySold"].toDouble(), priceAtTimeOfSale = r["priceAtTimeOfSale"].toDouble(),
-        notes = r.optionalString("notes"), overridePrice = r.optionalDouble("overridePrice"),
-        crossRefId = r.optionalString("crossRefId") ?: legacySaleProductCrossRefId(r)
-    )
-    private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], r["appointmentDate"].toLong(), r.optionalString("description"))
-    private fun parseSupplier(r: org.apache.commons.csv.CSVRecord) = Supplier(r["supplierId"], r["name"], r.optionalString("contactPerson"), r.optionalString("phone"), r.optionalString("email"))
 
-    private fun legacySaleProductCrossRefId(r: org.apache.commons.csv.CSVRecord): String {
-        val stableKey = listOf(
-            r["saleId"],
-            r["productId"],
-            r["quantitySold"],
-            r["priceAtTimeOfSale"],
-            r.optionalString("notes").orEmpty(),
-            r.optionalString("overridePrice").orEmpty(),
-            r.recordNumber.toString()
-        ).joinToString("|")
-        return UUID.nameUUIDFromBytes(stableKey.toByteArray(StandardCharsets.UTF_8)).toString()
-    }
+    private fun parseProduct(r: CSVRecord) = Product(
+        productId = r.required("productId"),
+        name = r.required("name"),
+        price = r.required("price").toDouble(),
+        cost = r.required("cost").toDouble(),
+        stock = r.required("stock").toDouble(),
+        isService = r.required("isService").toBoolean(),
+        sellingMethod = r.optional("sellingMethod") ?: SELLING_METHOD_BY_UNIT,
+        lowStockThreshold = r.optional("lowStockThreshold")?.toDoubleOrNull(),
+        isContainer = r.optional("isContainer")?.toBoolean() ?: false,
+        containedProductId = r.optional("containedProductId"),
+        containerSize = r.optional("containerSize")?.toDoubleOrNull(),
+        supplierIdFk = r.optional("supplierIdFk")
+    )
+
+    private fun parsePet(r: CSVRecord) = Pet(
+        petId = r.required("petId"),
+        name = r.required("name"),
+        ownerIdFk = r.required("ownerIdFk"),
+        birthDate = r.optional("birthDate")?.toLongOrNull(),
+        breed = r.optional("breed"),
+        allergies = r.optional("allergies")
+    )
+
+    private fun parseTreatment(r: CSVRecord) = Treatment(
+        treatmentId = r.required("treatmentId"),
+        petIdFk = r.required("petIdFk"),
+        serviceId = r.optional("serviceId"),
+        treatmentDate = r.required("treatmentDate").toLong(),
+        description = r.optional("description"),
+        nextTreatmentDate = r.optional("nextTreatmentDate")?.toLongOrNull(),
+        isNextTreatmentCompleted = r.optional("isNextTreatmentCompleted")?.toBoolean() ?: false,
+        symptoms = r.optional("symptoms"),
+        diagnosis = r.optional("diagnosis"),
+        treatmentPlan = r.optional("treatmentPlan"),
+        weight = r.optional("weight")?.toDoubleOrNull(),
+        temperature = r.optional("temperature")
+    )
+
+    private fun parseSale(r: CSVRecord) = Sale(
+        saleId = r.required("saleId"),
+        date = r.required("date").toLong(),
+        totalAmount = r.required("totalAmount").toDouble(),
+        clientIdFk = r.optional("clientIdFk")
+    )
+
+    private fun parseTransaction(r: CSVRecord) = Transaction(
+        transactionId = r.required("transactionId"),
+        saleIdFk = r.optional("saleIdFk"),
+        date = r.required("date").toLong(),
+        type = r.required("type"),
+        amount = r.required("amount").toDouble(),
+        description = r.optional("description")
+    )
+
+    private fun parsePayment(r: CSVRecord) = Payment(
+        paymentId = r.required("paymentId"),
+        clientIdFk = r.required("clientIdFk"),
+        amount = r.required("amount").toDouble(),
+        paymentDate = r.required("paymentDate").toLong()
+    )
+
+    private fun parseSaleProductCrossRef(r: CSVRecord) = SaleProductCrossRef(
+        crossRefId = r.optional("crossRefId") ?: UUID.randomUUID().toString(),
+        saleId = r.required("saleId"),
+        productId = r.required("productId"),
+        quantitySold = r.required("quantitySold").toDouble(),
+        priceAtTimeOfSale = r.required("priceAtTimeOfSale").toDouble(),
+        notes = r.optional("notes"),
+        overridePrice = r.optional("overridePrice")?.toDoubleOrNull()
+    )
+
+    private fun parseAppointment(r: CSVRecord) = Appointment(
+        appointmentId = r.required("appointmentId"),
+        clientIdFk = r.required("clientIdFk"),
+        petIdFk = r.required("petIdFk"),
+        appointmentDate = r.required("appointmentDate").toLong(),
+        description = r.optional("description")
+    )
+
+    private fun parseSupplier(r: CSVRecord) = Supplier(
+        supplierId = r.required("supplierId"),
+        name = r.required("name"),
+        contactPerson = r.optional("contactPerson"),
+        phone = r.optional("phone"),
+        email = r.optional("email")
+    )
 }

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 23,
-    "identityHash": "ed2b89b765d3b4a321840185066a40da",
+    "identityHash": "a416bbd7a254904ed933ac9c3a142fe5",
     "entities": [
       {
         "tableName": "transactions",
@@ -150,7 +150,7 @@
       },
       {
         "tableName": "treatments",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`treatmentId` TEXT NOT NULL, `petIdFk` TEXT NOT NULL, `serviceId` TEXT, `treatmentDate` INTEGER NOT NULL, `description` TEXT, `nextTreatmentDate` INTEGER, `isNextTreatmentCompleted` INTEGER NOT NULL, `symptoms` TEXT, `diagnosis` TEXT, `treatmentPlan` TEXT, `weight` REAL, `temperature` TEXT, PRIMARY KEY(`treatmentId`), FOREIGN KEY(`petIdFk`) REFERENCES `pets`(`petId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`serviceId`) REFERENCES `products`(`productId`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`treatmentId` TEXT NOT NULL, `petIdFk` TEXT NOT NULL, `serviceId` TEXT, `treatmentDate` INTEGER NOT NULL, `description` TEXT, `nextTreatmentDate` INTEGER, `isNextTreatmentCompleted` INTEGER NOT NULL, `symptoms` TEXT, `diagnosis` TEXT, `treatmentPlan` TEXT, `weight` REAL, `temperature` TEXT, PRIMARY KEY(`treatmentId`), FOREIGN KEY(`petIdFk`) REFERENCES `pets`(`petId`) ON UPDATE NO ACTION ON DELETE NO ACTION , FOREIGN KEY(`serviceId`) REFERENCES `products`(`productId`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
         "fields": [
           {
             "fieldPath": "treatmentId",
@@ -254,7 +254,7 @@
         "foreignKeys": [
           {
             "table": "pets",
-            "onDelete": "CASCADE",
+            "onDelete": "NO ACTION",
             "onUpdate": "NO ACTION",
             "columns": [
               "petIdFk"
@@ -265,7 +265,7 @@
           },
           {
             "table": "products",
-            "onDelete": "SET NULL",
+            "onDelete": "NO ACTION",
             "onUpdate": "NO ACTION",
             "columns": [
               "serviceId"
@@ -468,8 +468,14 @@
       },
       {
         "tableName": "sales_products_cross_ref",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`saleId` TEXT NOT NULL, `productId` TEXT NOT NULL, `quantitySold` REAL NOT NULL, `priceAtTimeOfSale` REAL NOT NULL, `notes` TEXT, `overridePrice` REAL, `crossRefId` TEXT NOT NULL, PRIMARY KEY(`crossRefId`), FOREIGN KEY(`saleId`) REFERENCES `sales`(`saleId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`productId`) REFERENCES `products`(`productId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`crossRefId` TEXT NOT NULL, `saleId` TEXT NOT NULL, `productId` TEXT NOT NULL, `quantitySold` REAL NOT NULL, `priceAtTimeOfSale` REAL NOT NULL, `notes` TEXT, `overridePrice` REAL, PRIMARY KEY(`crossRefId`), FOREIGN KEY(`saleId`) REFERENCES `sales`(`saleId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`productId`) REFERENCES `products`(`productId`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
         "fields": [
+          {
+            "fieldPath": "crossRefId",
+            "columnName": "crossRefId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
           {
             "fieldPath": "saleId",
             "columnName": "saleId",
@@ -505,12 +511,6 @@
             "columnName": "overridePrice",
             "affinity": "REAL",
             "notNull": false
-          },
-          {
-            "fieldPath": "crossRefId",
-            "columnName": "crossRefId",
-            "affinity": "TEXT",
-            "notNull": true
           }
         ],
         "primaryKey": {
@@ -553,7 +553,7 @@
           },
           {
             "table": "products",
-            "onDelete": "CASCADE",
+            "onDelete": "NO ACTION",
             "onUpdate": "NO ACTION",
             "columns": [
               "productId"
@@ -566,7 +566,7 @@
       },
       {
         "tableName": "payments",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`paymentId` TEXT NOT NULL, `clientIdFk` TEXT NOT NULL, `amount` REAL NOT NULL, `paymentDate` INTEGER NOT NULL, PRIMARY KEY(`paymentId`), FOREIGN KEY(`clientIdFk`) REFERENCES `clients`(`clientId`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`paymentId` TEXT NOT NULL, `clientIdFk` TEXT NOT NULL, `amount` REAL NOT NULL, `paymentDate` INTEGER NOT NULL, PRIMARY KEY(`paymentId`), FOREIGN KEY(`clientIdFk`) REFERENCES `clients`(`clientId`) ON UPDATE NO ACTION ON DELETE NO ACTION )",
         "fields": [
           {
             "fieldPath": "paymentId",
@@ -613,7 +613,7 @@
         "foreignKeys": [
           {
             "table": "clients",
-            "onDelete": "CASCADE",
+            "onDelete": "NO ACTION",
             "onUpdate": "NO ACTION",
             "columns": [
               "clientIdFk"
@@ -1040,7 +1040,7 @@
     "views": [],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'ed2b89b765d3b4a321840185066a40da')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'a416bbd7a254904ed933ac9c3a142fe5')"
     ]
   }
 }

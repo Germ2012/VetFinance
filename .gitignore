@@ -1,6 +1,5 @@
 *.iml
 .gradle
-.gradle-user/
 /local.properties
 /.idea/caches
 /.idea/libraries
@@ -14,5 +13,3 @@
 .externalNativeBuild
 .cxx
 local.properties
-*.sqlite
-codex-current-screen.png

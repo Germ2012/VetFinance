@@ -9,12 +9,7 @@ import java.util.UUID
 @Entity(
     tableName = "payments",
     foreignKeys = [
-        ForeignKey(
-            entity = Client::class,
-            parentColumns = ["clientId"],
-            childColumns = ["clientIdFk"],
-            onDelete = ForeignKey.CASCADE
-        )
+        ForeignKey(entity = Client::class, parentColumns = ["clientId"], childColumns = ["clientIdFk"])
     ],
     indices = [Index("clientIdFk")]
 )

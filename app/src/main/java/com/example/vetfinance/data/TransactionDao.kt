@@ -53,11 +53,14 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE (:filterType = 'Todos') OR (:filterType = 'Productos' AND isService = 0) OR (:filterType = 'Servicios' AND isService = 1) ORDER BY name ASC")
     fun getProductsPagedSource(filterType: String): PagingSource<Int, Product>
 
-    @Query("SELECT SUM(price * stock) FROM products WHERE isService = 0")
+    @Query("SELECT SUM(cost * stock) FROM products WHERE isService = 0")
     fun getTotalInventoryValue(): Flow<Double?>
 
     @Delete
     suspend fun delete(product: Product)
+
+    @Query("SELECT COUNT(*) FROM sales_products_cross_ref WHERE productId = :productId")
+    suspend fun countSaleDetailsForProduct(productId: String): Int
 
     // --- FUNCTION ADDED ---
     @Query("SELECT * FROM products WHERE isContainer = 1 AND containedProductId = :containedProductId LIMIT 1")
@@ -125,6 +128,12 @@ interface ClientDao {
 
     @Query("SELECT * FROM clients ORDER BY name ASC")
     fun getAllClients(): Flow<List<Client>>
+
+    @Query("SELECT * FROM clients WHERE clientId = :clientId LIMIT 1")
+    suspend fun getClientById(clientId: String): Client?
+
+    @Query("SELECT COUNT(*) FROM payments WHERE clientIdFk = :clientId")
+    suspend fun countPaymentsForClient(clientId: String): Int
 
     @Query("UPDATE clients SET debtAmount = :newDebtAmount WHERE clientId = :clientId")
     suspend fun updateDebt(clientId: String, newDebtAmount: Double)

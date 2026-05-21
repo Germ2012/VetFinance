@@ -53,6 +53,17 @@ class VetViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private val _operationErrorMessage = MutableStateFlow<String?>(null)
+    val operationErrorMessage: StateFlow<String?> = _operationErrorMessage.asStateFlow()
+
+    fun clearOperationErrorMessage() {
+        _operationErrorMessage.value = null
+    }
+
+    private fun reportOperationError(error: Throwable) {
+        _operationErrorMessage.value = error.message ?: "Ocurrió un error inesperado."
+    }
+
     private val _suppliers = MutableStateFlow<List<Supplier>>(emptyList())
     val suppliers: StateFlow<List<Supplier>> = _suppliers.asStateFlow()
 
@@ -100,22 +111,36 @@ class VetViewModel @Inject constructor(
     }
 
     fun executeRestock(supplierId: String, totalCost: Double, itemsToRestock: List<RestockOrderItem>, orderDate: Long) = viewModelScope.launch {
-        val orderId = UUID.randomUUID().toString()
-        val order = RestockOrder(orderId = orderId, supplierIdFk = supplierId, orderDate = orderDate, totalAmount = totalCost)
-        val updatedItems = itemsToRestock.map { it.copy(orderIdFk = orderId) }
-        repository.performRestock(order, updatedItems)
+        try {
+            val orderId = UUID.randomUUID().toString()
+            val order = RestockOrder(orderId = orderId, supplierIdFk = supplierId, orderDate = orderDate, totalAmount = totalCost)
+            val updatedItems = itemsToRestock.map { it.copy(orderIdFk = orderId) }
+            repository.performRestock(order, updatedItems)
+        } catch (e: Exception) {
+            reportOperationError(e)
+        }
     }
 
-    fun deleteProduct(product: Product) = viewModelScope.launch { repository.deleteProduct(product) }
-    fun deleteSale(sale: SaleWithProducts) = viewModelScope.launch { repository.deleteSale(sale) }
-    fun deleteClient(client: Client) = viewModelScope.launch { repository.deleteClient(client) }
+    fun deleteProduct(product: Product) = viewModelScope.launch {
+        try { repository.deleteProduct(product) } catch (e: Exception) { reportOperationError(e) }
+    }
+    fun deleteSale(sale: SaleWithProducts) = viewModelScope.launch {
+        try { repository.deleteSale(sale) } catch (e: Exception) { reportOperationError(e) }
+    }
+    fun deleteClient(client: Client) = viewModelScope.launch {
+        try { repository.deleteClient(client) } catch (e: Exception) { reportOperationError(e) }
+    }
     fun openContainerForBulkSale(containerProduct: Product) = viewModelScope.launch {
-        if (containerProduct.containedProductId != null && containerProduct.containerSize != null) {
-            repository.performInventoryTransfer(
-                containerId = containerProduct.productId,
-                containedId = containerProduct.containedProductId,
-                amountToTransfer = containerProduct.containerSize
-            )
+        try {
+            if (containerProduct.containedProductId != null && containerProduct.containerSize != null) {
+                repository.performInventoryTransfer(
+                    containerId = containerProduct.productId,
+                    containedId = containerProduct.containedProductId,
+                    amountToTransfer = containerProduct.containerSize
+                )
+            }
+        } catch (e: Exception) {
+            reportOperationError(e)
         }
     }
     private val _inventoryFilter = MutableStateFlow("Todos")
@@ -163,7 +188,7 @@ class VetViewModel @Inject constructor(
         products.filter { product ->
             !product.isService && !product.isContainer && (
                     (product.sellingMethod == SELLING_METHOD_BY_UNIT && product.stock < 4) ||
-                            (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT && product.lowStockThreshold != null && product.stock < product.lowStockThreshold!!)
+                            (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT && (product.lowStockThreshold ?: 0.0) > 0.0 && product.stock < (product.lowStockThreshold ?: 0.0))
                     )
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -424,7 +449,16 @@ class VetViewModel @Inject constructor(
         _saleTypeDialogProduct.value = null
     }
 
-    private fun executeWithLoading(action: suspend () -> Unit) = viewModelScope.launch { _isLoading.value = true; try { action() } finally { _isLoading.value = false } }
+    private fun executeWithLoading(action: suspend () -> Unit) = viewModelScope.launch {
+        _isLoading.value = true
+        try {
+            action()
+        } catch (e: Exception) {
+            reportOperationError(e)
+        } finally {
+            _isLoading.value = false
+        }
+    }
 
     fun insertOrUpdateProduct(product: Product) {
         viewModelScope.launch {
@@ -452,22 +486,42 @@ class VetViewModel @Inject constructor(
     fun updateAppointment(appointment: Appointment) = executeWithLoading { repository.updateAppointment(appointment) }
     fun deleteAppointment(appointment: Appointment) = executeWithLoading { repository.deleteAppointment(appointment) }
 
+    private fun shouldValidateStockInCart(product: Product): Boolean {
+        return !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
+    }
+
+    private fun availableStockForCart(product: Product): Double {
+        if (!shouldValidateStockInCart(product)) return Double.MAX_VALUE
+        if (product.isContainer) return product.stock
+
+        val stockFromClosedContainers = inventory.value
+            .filter { it.isContainer && it.containedProductId == product.productId && (it.containerSize ?: 0.0) > 0.0 }
+            .sumOf { container ->
+                val fullContainers = kotlin.math.floor(container.stock)
+                fullContainers * (container.containerSize ?: 0.0)
+            }
+
+        return product.stock + stockFromClosedContainers
+    }
+
     fun addToCart(product: Product) {
         val currentCart = _shoppingCart.value.toMutableList()
         val existingItem = currentCart.find { it.product.productId == product.productId }
 
+        if (product.sellingMethod != SELLING_METHOD_BY_UNIT) return
+
+        val availableStock = availableStockForCart(product)
+        if (shouldValidateStockInCart(product) && availableStock < 1.0) return
+
         // Solo incrementamos cantidad si es "Por Unidad" y ya existe
-        if (existingItem != null && product.sellingMethod == SELLING_METHOD_BY_UNIT) {
-            val newQuantity = existingItem.quantity + 1
-            if (newQuantity <= product.stock) {
+        if (existingItem != null) {
+            val newQuantity = existingItem.quantity + 1.0
+            if (!shouldValidateStockInCart(product) || newQuantity <= availableStock) {
                 val index = currentCart.indexOf(existingItem)
                 currentCart[index] = existingItem.copy(quantity = newQuantity)
             }
         } else {
-            // Para "Dosis" o "Peso/Monto", o si es un item nuevo, siempre se abre diálogo o se añade
-            if (product.sellingMethod == SELLING_METHOD_BY_UNIT) {
-                currentCart.add(CartItem(product = product, quantity = 1.0))
-            }
+            currentCart.add(CartItem(product = product, quantity = 1.0))
         }
         _shoppingCart.value = currentCart
         recalculateTotal()
@@ -493,7 +547,11 @@ class VetViewModel @Inject constructor(
         val existingItemIndex = currentCart.indexOfFirst { it.product.productId == product.productId }
 
         if (quantity > 0) {
-            val validQuantity = if (!product.isService) quantity.coerceAtMost(product.stock) else quantity
+            val validQuantity = if (shouldValidateStockInCart(product)) {
+                quantity.coerceAtMost(availableStockForCart(product))
+            } else {
+                quantity
+            }
             if (validQuantity > 0) {
                 val newItem = CartItem(product = product, quantity = validQuantity)
                 if (existingItemIndex != -1) {
@@ -527,10 +585,10 @@ class VetViewModel @Inject constructor(
         }
     }
 
-    fun finalizeSale(onFinished: () -> Unit) = executeWithLoading {
+    fun finalizeSale(clientId: String? = GENERAL_CLIENT_ID, onFinished: () -> Unit) = executeWithLoading {
         if (_shoppingCart.value.isNotEmpty()) {
             repository.insertSale(
-                Sale(date = System.currentTimeMillis(), totalAmount = _saleTotal.value, clientIdFk = GENERAL_CLIENT_ID),
+                Sale(date = System.currentTimeMillis(), totalAmount = _saleTotal.value, clientIdFk = clientId ?: GENERAL_CLIENT_ID),
                 _shoppingCart.value
             )
             clearCart()
