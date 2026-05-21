@@ -27,12 +27,14 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import com.example.vetfinance.data.AppointmentWithDetails
+import com.example.vetfinance.data.SupplierDebtWithSupplier
 
 @Composable
 fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val salesToday by viewModel.salesSummaryToday.collectAsState()
     val upcomingTreatments by viewModel.upcomingTreatments.collectAsState()
     val upcomingAppointments by viewModel.upcomingAppointments.collectAsState()
+    val upcomingSupplierDebts by viewModel.upcomingSupplierDebts.collectAsState()
     val petsWithOwners by viewModel.petsWithOwners.collectAsState()
     var treatmentForNextDialog by remember { mutableStateOf<Treatment?>(null) }
     val petForDialog = treatmentForNextDialog?.let { treatment ->
@@ -172,6 +174,18 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                             AppointmentReminderItem(details = appointmentDetails)
                         }
                     }
+                    if (upcomingSupplierDebts.isNotEmpty()) {
+                        item {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(stringResource(R.string.dashboard_supplier_debts_title), style = MaterialTheme.typography.headlineSmall)
+                        }
+                        items(upcomingSupplierDebts, key = { it.debtId }) { debt ->
+                            SupplierDebtReminderItem(
+                                debt = debt,
+                                onMarkPaid = { viewModel.markSupplierDebtAsPaid(debt.debtId) }
+                            )
+                        }
+                    }
                     if (upcomingTreatments.isNotEmpty()) {
                         item {
                             Spacer(modifier = Modifier.height(16.dp))
@@ -189,6 +203,41 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun SupplierDebtReminderItem(
+    debt: SupplierDebtWithSupplier,
+    onMarkPaid: () -> Unit
+) {
+    val dueDate = Instant.ofEpochMilli(debt.dueDate)
+        .atZone(ZoneId.systemDefault())
+        .toLocalDate()
+    val today = LocalDate.now()
+    val daysUntil = ChronoUnit.DAYS.between(today, dueDate)
+    val cardColor = when {
+        daysUntil < 0 -> MaterialTheme.colorScheme.errorContainer
+        daysUntil <= 2 -> MaterialTheme.colorScheme.secondaryContainer
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val dateText = when {
+        daysUntil < 0 -> "Vencida por ${-daysUntil} dias"
+        daysUntil == 0L -> "Vence hoy"
+        daysUntil == 1L -> "Vence manana"
+        else -> "Vence en $daysUntil dias"
+    }
+
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = cardColor)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = "${debt.supplierName ?: stringResource(R.string.label_no_supplier)} - $dateText", fontWeight = FontWeight.Bold)
+            Text(text = debt.description)
+            Text(text = stringResource(R.string.supplier_debt_amount_label, formatCurrency(debt.amount)))
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onMarkPaid) {
+                Text(stringResource(R.string.supplier_debt_mark_paid_button))
             }
         }
     }

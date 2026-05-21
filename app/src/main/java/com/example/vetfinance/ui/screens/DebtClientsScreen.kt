@@ -3,6 +3,7 @@ package com.example.vetfinance.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
@@ -14,12 +15,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency // Importar formatCurrency
+import ui.utils.NumberTransformation
 
 @Composable
 fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
@@ -30,6 +33,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
 
     var showOnlyWithDebt by remember { mutableStateOf(false) }
     var clientToDelete by remember { mutableStateOf<Client?>(null) }
+    var clientToAdjustDebt by remember { mutableStateOf<Client?>(null) }
     val isLoading = allClients.isEmpty() && searchQuery.isBlank() && !showOnlyWithDebt
 
     DisposableEffect(Unit) {
@@ -79,6 +83,17 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 TextButton(onClick = { clientToDelete = null }) {
                     Text(stringResource(R.string.cancel_button))
                 }
+            }
+        )
+    }
+
+    clientToAdjustDebt?.let { client ->
+        DebtAdjustmentDialog(
+            client = client,
+            onDismiss = { clientToAdjustDebt = null },
+            onConfirm = { newDebt, note ->
+                viewModel.adjustClientDebt(client, newDebt, note)
+                clientToAdjustDebt = null
             }
         )
     }
@@ -143,6 +158,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                             client = client,
                             onDetailClick = { navController.navigate("client_detail/${client.clientId}") },
                             onPayClick = { viewModel.onShowPaymentDialog(client) },
+                            onAdjustDebtClick = { clientToAdjustDebt = client },
                             onDeleteClick = { clientToDelete = client }
                         )
                     }
@@ -175,6 +191,7 @@ fun ClientItem(
     client: Client,
     onDetailClick: () -> Unit,
     onPayClick: () -> Unit,
+    onAdjustDebtClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -206,6 +223,13 @@ fun ClientItem(
                         }
                     )
                     DropdownMenuItem(
+                        text = { Text(stringResource(R.string.debt_clients_adjust_debt_menu_item)) },
+                        onClick = {
+                            onAdjustDebtClick()
+                            expanded = false
+                        }
+                    )
+                    DropdownMenuItem(
                         text = { Text(stringResource(R.string.delete_button)) },
                         onClick = {
                             onDeleteClick()
@@ -216,4 +240,48 @@ fun ClientItem(
             }
         }
     }
+}
+
+@Composable
+fun DebtAdjustmentDialog(
+    client: Client,
+    onDismiss: () -> Unit,
+    onConfirm: (Double, String?) -> Unit
+) {
+    var debt by remember(client) { mutableStateOf(client.debtAmount.toLong().toString()) }
+    var note by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.debt_adjustment_title, client.name)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = debt,
+                    onValueChange = { debt = it.filter { char -> char.isDigit() } },
+                    label = { Text(stringResource(R.string.debt_adjustment_amount_label)) },
+                    prefix = { Text(stringResource(R.string.text_prefix_gs)) },
+                    visualTransformation = NumberTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it },
+                    label = { Text(stringResource(R.string.debt_adjustment_note_label)) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(debt.toDoubleOrNull() ?: 0.0, note.ifBlank { null }) }
+            ) {
+                Text(stringResource(R.string.save_button))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) }
+        }
+    )
 }

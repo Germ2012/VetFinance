@@ -29,6 +29,8 @@ import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.min
 
+private const val GENERAL_CLIENT_ID = "00000000-0000-0000-0000-000000000001"
+
 // Data class definition for backup
 private data class ParsedBackupData(
     val clients: List<Client>,
@@ -40,7 +42,11 @@ private data class ParsedBackupData(
     val payments: List<Payment>,
     val saleProductCrossRefs: List<SaleProductCrossRef>,
     val appointments: List<Appointment>,
-    val suppliers: List<Supplier>
+    val suppliers: List<Supplier>,
+    val clientDebtHistory: List<ClientDebtHistory>,
+    val supplierDebts: List<SupplierDebt>,
+    val restockOrders: List<RestockOrder>,
+    val restockOrderItems: List<RestockOrderItem>
 )
 
 @Singleton
@@ -57,6 +63,8 @@ class VetRepository @Inject constructor(
     private val supplierDao: SupplierDao,
     private val purchaseDao: PurchaseDao,
     private val restockDao: RestockDao,
+    private val clientDebtHistoryDao: ClientDebtHistoryDao,
+    private val supplierDebtDao: SupplierDebtDao,
     private val appointmentLogDao: AppointmentLogDao,
     @ApplicationContext private val context: Context
 ) {
@@ -74,7 +82,11 @@ class VetRepository @Inject constructor(
             "transactions.csv",
             "payments.csv",
             "sale_product_cross_refs.csv",
-            "appointments.csv"
+            "appointments.csv",
+            "client_debt_history.csv",
+            "supplier_debts.csv",
+            "restock_orders.csv",
+            "restock_order_items.csv"
         )
     }
 
@@ -117,10 +129,12 @@ class VetRepository @Inject constructor(
         db.withTransaction {
             val currentClient = clientDao.getClientById(client.clientId) ?: return@withTransaction
             val paymentsCount = clientDao.countPaymentsForClient(client.clientId)
-            if (currentClient.debtAmount > 0.0 || paymentsCount > 0) {
+            val petsCount = clientDao.countPetsForClient(client.clientId)
+            val debtHistoryCount = clientDebtHistoryDao.countHistoryForClient(client.clientId)
+            if (currentClient.debtAmount > 0.0 || paymentsCount > 0 || petsCount > 0 || debtHistoryCount > 0) {
                 throw IllegalStateException(
-                    "No se puede eliminar ${currentClient.name} porque tiene deuda o pagos registrados. " +
-                        "Esto protege el historial financiero."
+                    "No se puede eliminar ${currentClient.name} porque tiene deuda, pagos, mascotas o historial registrado. " +
+                        "Esto protege la trazabilidad de la clinica."
                 )
             }
             clientDao.delete(currentClient)
@@ -177,6 +191,17 @@ class VetRepository @Inject constructor(
     fun getAllClients(): Flow<List<Client>> = clientDao.getAllClients()
     fun getAllSuppliers(): Flow<List<Supplier>> = supplierDao.getAllSuppliers()
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>> = paymentDao.getPaymentsForClient(clientId)
+    fun getDebtHistoryForClient(clientId: String): Flow<List<ClientDebtHistory>> = clientDebtHistoryDao.getHistoryForClient(clientId)
+    fun getProductCostHistory(productId: String): Flow<List<ProductCostHistoryItem>> = restockDao.getProductCostHistory(productId)
+    fun getSupplierDebtsForDate(date: LocalDate): Flow<List<SupplierDebtWithSupplier>> {
+        val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        return supplierDebtDao.getDebtsForDateRange(startOfDay, endOfDay)
+    }
+    fun getSupplierDebtsForDate(startDate: Long, endDate: Long): Flow<List<SupplierDebtWithSupplier>> {
+        return supplierDebtDao.getDebtsForDateRange(startDate, endDate)
+    }
+    fun getUpcomingSupplierDebts(dateLimit: Long): Flow<List<SupplierDebtWithSupplier>> = supplierDebtDao.getUpcomingUnpaidDebts(dateLimit)
     fun getAllPetsWithOwners(): Flow<List<PetWithOwner>> = petDao.getAllPetsWithOwners()
     fun getTreatmentsForPet(petId: String): Flow<List<Treatment>> = treatmentDao.getTreatmentsForPet(petId)
     fun getUpcomingTreatments(): Flow<List<Treatment>> = treatmentDao.getUpcomingTreatments()
@@ -195,8 +220,37 @@ class VetRepository @Inject constructor(
         }
     }
 
-    suspend fun insertClient(client: Client) = clientDao.insertAll(listOf(client))
+    suspend fun insertClient(client: Client) {
+        db.withTransaction {
+            clientDao.insertAll(listOf(client))
+            if (client.debtAmount > 0.0) {
+                clientDebtHistoryDao.insert(
+                    ClientDebtHistory(
+                        clientIdFk = client.clientId,
+                        eventDate = System.currentTimeMillis(),
+                        eventType = CLIENT_DEBT_EVENT_INITIAL,
+                        amountChange = client.debtAmount,
+                        balanceAfter = client.debtAmount,
+                        note = "Deuda inicial"
+                    )
+                )
+            }
+        }
+    }
     suspend fun updateClient(client: Client) = clientDao.update(client)
+
+    suspend fun findOrCreateClientForSale(clientName: String?): Client {
+        val cleanName = clientName?.trim().orEmpty()
+        if (cleanName.isBlank()) {
+            return clientDao.getClientById(GENERAL_CLIENT_ID)
+                ?: Client(clientId = GENERAL_CLIENT_ID, name = "Cliente General", phone = null, address = null, debtAmount = 0.0)
+                    .also { clientDao.insertAll(listOf(it)) }
+        }
+
+        return clientDao.getClientByName(cleanName)
+            ?: Client(name = cleanName, phone = null, address = null, debtAmount = 0.0)
+                .also { clientDao.insertAll(listOf(it)) }
+    }
 
     suspend fun insertSupplier(supplier: Supplier) = supplierDao.insert(supplier)
     suspend fun updateSupplier(supplier: Supplier) = supplierDao.update(supplier)
@@ -212,6 +266,13 @@ class VetRepository @Inject constructor(
     suspend fun insertAppointment(appointment: Appointment) = appointmentDao.insert(appointment)
     suspend fun updateAppointment(appointment: Appointment) = appointmentDao.update(appointment)
     suspend fun deleteAppointment(appointment: Appointment) = appointmentDao.delete(appointment)
+    suspend fun insertSupplierDebt(debt: SupplierDebt) = supplierDebtDao.insert(debt)
+    suspend fun markSupplierDebtAsPaid(debtId: String) {
+        db.withTransaction {
+            val currentDebt = supplierDebtDao.getById(debtId) ?: return@withTransaction
+            supplierDebtDao.update(currentDebt.copy(isPaid = true, paidAt = System.currentTimeMillis()))
+        }
+    }
 
     suspend fun markTreatmentAsCompleted(treatmentId: String) = treatmentDao.markAsCompleted(treatmentId)
 
@@ -231,7 +292,41 @@ class VetRepository @Inject constructor(
             paymentDao.insert(payment)
 
             val newDebt = currentClient.debtAmount - actualPaymentAmount
-            clientDao.updateDebt(currentClient.clientId, if (newDebt < 0.01) 0.0 else newDebt)
+            val finalDebt = if (newDebt < 0.01) 0.0 else newDebt
+            clientDao.updateDebt(currentClient.clientId, finalDebt)
+            clientDebtHistoryDao.insert(
+                ClientDebtHistory(
+                    clientIdFk = currentClient.clientId,
+                    eventDate = payment.paymentDate,
+                    eventType = CLIENT_DEBT_EVENT_PAYMENT,
+                    amountChange = -actualPaymentAmount,
+                    balanceAfter = finalDebt,
+                    note = "Abono registrado"
+                )
+            )
+        }
+    }
+
+    suspend fun adjustClientDebt(client: Client, newDebtAmount: Double, note: String?) {
+        require(newDebtAmount >= 0.0) { "La deuda no puede ser negativa." }
+
+        db.withTransaction {
+            val currentClient = clientDao.getClientById(client.clientId) ?: return@withTransaction
+            val normalizedDebt = if (newDebtAmount < 0.01) 0.0 else newDebtAmount
+            val change = normalizedDebt - currentClient.debtAmount
+            if (kotlin.math.abs(change) < 0.01) return@withTransaction
+
+            clientDao.updateDebt(currentClient.clientId, normalizedDebt)
+            clientDebtHistoryDao.insert(
+                ClientDebtHistory(
+                    clientIdFk = currentClient.clientId,
+                    eventDate = System.currentTimeMillis(),
+                    eventType = CLIENT_DEBT_EVENT_ADJUSTMENT,
+                    amountChange = change,
+                    balanceAfter = normalizedDebt,
+                    note = note?.ifBlank { null } ?: "Ajuste manual de deuda"
+                )
+            )
         }
     }
 
@@ -300,7 +395,7 @@ class VetRepository @Inject constructor(
         return currentProduct
     }
 
-    suspend fun performRestock(order: RestockOrder, items: List<RestockOrderItem>) {
+    suspend fun performRestock(order: RestockOrder, items: List<RestockOrderItem>, supplierDebtDueDate: Long? = null) {
         require(items.isNotEmpty()) { "La reposición debe tener al menos un producto." }
         require(items.all { it.quantity > 0.0 && it.costPerUnit >= 0.0 }) {
             "Las cantidades deben ser mayores a cero y los costos no pueden ser negativos."
@@ -321,6 +416,20 @@ class VetRepository @Inject constructor(
                     )
                     productDao.update(updatedProduct)
                 }
+            }
+            if (supplierDebtDueDate != null) {
+                val supplier = supplierDao.getSupplierById(order.supplierIdFk)
+                supplierDebtDao.insert(
+                    SupplierDebt(
+                        supplierIdFk = order.supplierIdFk,
+                        description = "Reposicion de productos${supplier?.name?.let { " - $it" } ?: ""}",
+                        amount = order.totalAmount,
+                        dueDate = supplierDebtDueDate,
+                        createdAt = order.orderDate,
+                        isPaid = false,
+                        note = "Generado desde reabastecimiento"
+                    )
+                )
             }
         }
     }
@@ -422,6 +531,38 @@ class VetRepository @Inject constructor(
             }
         }
 
+        val clientDebtHistoryHeaders = arrayOf("historyId", "clientIdFk", "eventDate", "eventType", "amountChange", "balanceAfter", "note")
+        val clientDebtHistory = clientDebtHistoryDao.getAllDebtHistorySimple().first()
+        if (clientDebtHistory.isNotEmpty()) {
+            csvMap["client_debt_history.csv"] = listToCsvString(clientDebtHistory, clientDebtHistoryHeaders) { h ->
+                arrayOf(h.historyId, h.clientIdFk, h.eventDate.toString(), h.eventType, h.amountChange.toString(), h.balanceAfter.toString(), h.note ?: "")
+            }
+        }
+
+        val supplierDebtHeaders = arrayOf("debtId", "supplierIdFk", "description", "amount", "dueDate", "createdAt", "isPaid", "paidAt", "note")
+        val supplierDebts = supplierDebtDao.getAllSupplierDebtsSimple().first()
+        if (supplierDebts.isNotEmpty()) {
+            csvMap["supplier_debts.csv"] = listToCsvString(supplierDebts, supplierDebtHeaders) { d ->
+                arrayOf(d.debtId, d.supplierIdFk ?: "", d.description, d.amount.toString(), d.dueDate.toString(), d.createdAt.toString(), d.isPaid.toString(), d.paidAt?.toString() ?: "", d.note ?: "")
+            }
+        }
+
+        val restockOrderHeaders = arrayOf("orderId", "supplierIdFk", "orderDate", "totalAmount")
+        val restockOrders = restockDao.getAllRestockOrdersSimple().first()
+        if (restockOrders.isNotEmpty()) {
+            csvMap["restock_orders.csv"] = listToCsvString(restockOrders, restockOrderHeaders) { o ->
+                arrayOf(o.orderId, o.supplierIdFk, o.orderDate.toString(), o.totalAmount.toString())
+            }
+        }
+
+        val restockOrderItemHeaders = arrayOf("itemId", "orderIdFk", "productIdFk", "quantity", "costPerUnit")
+        val restockOrderItems = restockDao.getAllRestockOrderItemsSimple().first()
+        if (restockOrderItems.isNotEmpty()) {
+            csvMap["restock_order_items.csv"] = listToCsvString(restockOrderItems, restockOrderItemHeaders) { item ->
+                arrayOf(item.itemId, item.orderIdFk, item.productIdFk, item.quantity.toString(), item.costPerUnit.toString())
+            }
+        }
+
         return@withContext csvMap
     }
 
@@ -503,17 +644,24 @@ class VetRepository @Inject constructor(
         val saleProductCrossRefs = parseCSV(archivos["sale_product_cross_refs.csv"], ::parseSaleProductCrossRef)
         val appointments = parseCSV(archivos["appointments.csv"], ::parseAppointment)
         val suppliers = parseCSV(archivos["suppliers.csv"], ::parseSupplier)
+        val clientDebtHistory = parseCSV(archivos["client_debt_history.csv"], ::parseClientDebtHistory)
+        val supplierDebts = parseCSV(archivos["supplier_debts.csv"], ::parseSupplierDebt)
+        val restockOrders = parseCSV(archivos["restock_orders.csv"], ::parseRestockOrder)
+        val restockOrderItems = parseCSV(archivos["restock_order_items.csv"], ::parseRestockOrderItem)
 
         // Validation
         val clientIds = clients.map { it.clientId }.toSet()
         val petIds = pets.map { it.petId }.toSet()
         val productIds = products.map { it.productId }.toSet()
         val saleIds = sales.map { it.saleId }.toSet()
+        val supplierIds = suppliers.map { it.supplierId }.toSet()
+        val restockOrderIds = restockOrders.map { it.orderId }.toSet()
 
         pets.forEach { if (it.ownerIdFk !in clientIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_pet_invalid_owner, it.name)) }
         treatments.forEach { if (it.petIdFk !in petIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_treatment_invalid_pet, it.treatmentId)) }
         sales.forEach { if (it.clientIdFk != null && it.clientIdFk !in clientIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_sale_invalid_client, it.saleId)) }
         payments.forEach { if (it.clientIdFk !in clientIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_payment_invalid_client, it.paymentId)) }
+        clientDebtHistory.forEach { if (it.clientIdFk !in clientIds) throw BackupValidationException("Un historial de deuda apunta a un cliente inexistente.") }
         saleProductCrossRefs.forEach {
             if (it.saleId !in saleIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_sale_detail_invalid_sale_id, it.saleId))
             if (it.productId !in productIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_sale_detail_invalid_product_id, it.productId))
@@ -523,15 +671,28 @@ class VetRepository @Inject constructor(
             if (it.petIdFk !in petIds) throw BackupValidationException(context.getString(R.string.backup_validation_error_appointment_invalid_pet, it.appointmentId))
         }
         if (suppliers.isNotEmpty()) {
-            val supplierIds = suppliers.map { it.supplierId }.toSet()
             products.forEach { product ->
                 if (product.supplierIdFk != null && product.supplierIdFk !in supplierIds) {
                     throw BackupValidationException(context.getString(R.string.backup_validation_error_product_invalid_supplier, product.name))
                 }
             }
         }
+        supplierDebts.forEach { debt ->
+            if (debt.supplierIdFk != null && debt.supplierIdFk !in supplierIds) {
+                throw BackupValidationException("Una deuda de proveedor apunta a un proveedor inexistente.")
+            }
+        }
+        restockOrders.forEach { order ->
+            if (order.supplierIdFk !in supplierIds) {
+                throw BackupValidationException("Un reabastecimiento apunta a un proveedor inexistente.")
+            }
+        }
+        restockOrderItems.forEach { item ->
+            if (item.orderIdFk !in restockOrderIds) throw BackupValidationException("Un detalle de reabastecimiento apunta a una orden inexistente.")
+            if (item.productIdFk !in productIds) throw BackupValidationException("Un detalle de reabastecimiento apunta a un producto inexistente.")
+        }
 
-        return ParsedBackupData(clients, products, pets, treatments, sales, transactions, payments, saleProductCrossRefs, appointments, suppliers)
+        return ParsedBackupData(clients, products, pets, treatments, sales, transactions, payments, saleProductCrossRefs, appointments, suppliers, clientDebtHistory, supplierDebts, restockOrders, restockOrderItems)
     }
 
     private suspend fun performMergeImport(data: ParsedBackupData) {
@@ -544,8 +705,12 @@ class VetRepository @Inject constructor(
             if (data.treatments.isNotEmpty()) treatmentDao.insertAll(data.treatments)
             if (data.transactions.isNotEmpty()) transactionDao.insertAll(data.transactions)
             if (data.payments.isNotEmpty()) paymentDao.insertAll(data.payments)
+            if (data.clientDebtHistory.isNotEmpty()) clientDebtHistoryDao.insertAll(data.clientDebtHistory)
             if (data.saleProductCrossRefs.isNotEmpty()) saleDao.insertAllSaleProductCrossRefs(data.saleProductCrossRefs)
             if (data.appointments.isNotEmpty()) appointmentDao.insertAll(data.appointments)
+            if (data.supplierDebts.isNotEmpty()) supplierDebtDao.insertAll(data.supplierDebts)
+            if (data.restockOrders.isNotEmpty()) restockDao.insertAllOrders(data.restockOrders)
+            if (data.restockOrderItems.isNotEmpty()) restockDao.insertAllOrderItems(data.restockOrderItems)
         }
     }
 
@@ -671,5 +836,42 @@ class VetRepository @Inject constructor(
         contactPerson = r.optional("contactPerson"),
         phone = r.optional("phone"),
         email = r.optional("email")
+    )
+
+    private fun parseClientDebtHistory(r: CSVRecord) = ClientDebtHistory(
+        historyId = r.required("historyId"),
+        clientIdFk = r.required("clientIdFk"),
+        eventDate = r.required("eventDate").toLong(),
+        eventType = r.required("eventType"),
+        amountChange = r.required("amountChange").toDouble(),
+        balanceAfter = r.required("balanceAfter").toDouble(),
+        note = r.optional("note")
+    )
+
+    private fun parseSupplierDebt(r: CSVRecord) = SupplierDebt(
+        debtId = r.required("debtId"),
+        supplierIdFk = r.optional("supplierIdFk"),
+        description = r.required("description"),
+        amount = r.required("amount").toDouble(),
+        dueDate = r.required("dueDate").toLong(),
+        createdAt = r.required("createdAt").toLong(),
+        isPaid = r.required("isPaid").toBoolean(),
+        paidAt = r.optional("paidAt")?.toLongOrNull(),
+        note = r.optional("note")
+    )
+
+    private fun parseRestockOrder(r: CSVRecord) = RestockOrder(
+        orderId = r.required("orderId"),
+        supplierIdFk = r.required("supplierIdFk"),
+        orderDate = r.required("orderDate").toLong(),
+        totalAmount = r.required("totalAmount").toDouble()
+    )
+
+    private fun parseRestockOrderItem(r: CSVRecord) = RestockOrderItem(
+        itemId = r.required("itemId"),
+        orderIdFk = r.required("orderIdFk"),
+        productIdFk = r.required("productIdFk"),
+        quantity = r.required("quantity").toDouble(),
+        costPerUnit = r.required("costPerUnit").toDouble()
     )
 }

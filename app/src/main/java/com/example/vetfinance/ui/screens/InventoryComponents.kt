@@ -1,6 +1,7 @@
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -120,7 +121,17 @@ fun ProductDialog(
                             items(productNameSuggestions) { suggestion ->
                                 Text(
                                     text = suggestion.name,
-                                    modifier = Modifier.padding(vertical = 4.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            name = suggestion.name
+                                            price = suggestion.price.toLong().toString()
+                                            cost = suggestion.cost.toLong().toString()
+                                            selectedSellingMethod = suggestion.sellingMethod
+                                            isService = suggestion.isService
+                                            selectedSupplierId = suggestion.supplierIdFk
+                                        }
+                                        .padding(vertical = 4.dp),
                                     fontSize = 14.sp
                                 )
                             }
@@ -171,7 +182,7 @@ fun ProductDialog(
                     )
                 }
 
-                if (selectedSellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) {
+                if (!isService && selectedSellingMethod != SELLING_METHOD_DOSE_ONLY) {
                     OutlinedTextField(
                         value = lowStockThreshold,
                         onValueChange = { lowStockThreshold = it.filter { char -> char.isDigit() || char == '.' } },
@@ -282,7 +293,7 @@ fun ProductDialog(
                         cost = cost.replace(".", "").toDoubleOrNull() ?: 0.0,
                         isService = isService,
                         sellingMethod = if (isService) SELLING_METHOD_DOSE_ONLY else selectedSellingMethod,
-                        lowStockThreshold = if (selectedSellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT) lowStockThreshold.toDoubleOrNull() else null,
+                        lowStockThreshold = if (!isService && selectedSellingMethod != SELLING_METHOD_DOSE_ONLY) lowStockThreshold.toDoubleOrNull() else null,
                         isContainer = isContainer,
                         containerSize = if (isContainer) containerSize.toDoubleOrNull() else null,
                         containedProductId = if (isContainer) selectedContainedProductId else null,

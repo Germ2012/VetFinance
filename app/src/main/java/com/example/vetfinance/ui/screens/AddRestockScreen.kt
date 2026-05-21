@@ -39,6 +39,9 @@ fun AddRestockScreen( // Renamed
     val searchQuery by viewModel.restockSearchQuery.collectAsState()
     var selectedDate by remember { mutableStateOf(System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
+    var createSupplierDebt by remember { mutableStateOf(false) }
+    var supplierDebtDueDate by remember { mutableStateOf(System.currentTimeMillis()) }
+    var showDebtDatePicker by remember { mutableStateOf(false) }
 
     var selectedSupplierId by remember { mutableStateOf<String?>(null) }
     val selectedSupplier = remember(selectedSupplierId, suppliers) {
@@ -95,6 +98,28 @@ fun AddRestockScreen( // Renamed
         }
     }
 
+    if (showDebtDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = supplierDebtDueDate)
+        DatePickerDialog(
+            onDismissRequest = { showDebtDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    val selectedMillis = datePickerState.selectedDateMillis
+                    if (selectedMillis != null) {
+                        val localDate = Instant.ofEpochMilli(selectedMillis)
+                            .atZone(ZoneId.of("UTC")).toLocalDate()
+                        supplierDebtDueDate = localDate.atStartOfDay(ZoneId.systemDefault())
+                            .toInstant().toEpochMilli()
+                    }
+                    showDebtDatePicker = false
+                }) { Text(stringResource(id = R.string.accept_button)) }
+            },
+            dismissButton = { TextButton(onClick = { showDebtDatePicker = false }) { Text(stringResource(id = R.string.cancel_button)) } }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
@@ -144,7 +169,8 @@ fun AddRestockScreen( // Renamed
                         supplierId = selectedSupplierId!!,
                         totalCost = calculatedTotalCost,
                         itemsToRestock = itemsToRestock,
-                        orderDate = selectedDate
+                        orderDate = selectedDate,
+                        supplierDebtDueDate = if (createSupplierDebt) supplierDebtDueDate else null
                     )
 
                     scope.launch {
@@ -208,6 +234,20 @@ fun AddRestockScreen( // Renamed
                 Text(SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(selectedDate)))
                 IconButton(onClick = { showDatePicker = true }) {
                     Icon(Icons.Default.DateRange, contentDescription = stringResource(R.string.select_date_content_description))
+                }
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
+                Checkbox(checked = createSupplierDebt, onCheckedChange = { createSupplierDebt = it })
+                Text(stringResource(R.string.restock_supplier_debt_checkbox), modifier = Modifier.weight(1f))
+            }
+            if (createSupplierDebt) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+                    Text(stringResource(R.string.supplier_debt_due_date_label), modifier = Modifier.weight(1f))
+                    Text(SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(supplierDebtDueDate)))
+                    IconButton(onClick = { showDebtDatePicker = true }) {
+                        Icon(Icons.Default.DateRange, contentDescription = stringResource(R.string.select_date_content_description))
+                    }
                 }
             }
 

@@ -17,6 +17,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
+import com.example.vetfinance.data.CLIENT_DEBT_EVENT_ADJUSTMENT
+import com.example.vetfinance.data.CLIENT_DEBT_EVENT_INITIAL
+import com.example.vetfinance.data.CLIENT_DEBT_EVENT_PAYMENT
+import com.example.vetfinance.data.ClientDebtHistory
 import com.example.vetfinance.data.Payment
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency
@@ -34,10 +38,12 @@ fun ClientDetailScreen(
     if (clientId.isBlank()) return
     LaunchedEffect(key1 = clientId) {
         viewModel.loadPaymentsForClient(clientId)
+        viewModel.loadDebtHistoryForClient(clientId)
     }
 
     val clients by viewModel.clients.collectAsState()
     val paymentHistory by viewModel.paymentHistory.collectAsState()
+    val debtHistory by viewModel.debtHistory.collectAsState()
     val client = clients.find { it.clientId == clientId }
 
     Scaffold(
@@ -73,13 +79,25 @@ fun ClientDetailScreen(
             HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
 
             if (paymentHistory.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(stringResource(R.string.client_detail_no_payments_message))
-                }
+                Text(stringResource(R.string.client_detail_no_payments_message))
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(paymentHistory) { payment ->
                         PaymentItem(payment)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(stringResource(R.string.client_detail_debt_history_title), style = MaterialTheme.typography.titleLarge)
+            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+
+            if (debtHistory.isEmpty()) {
+                Text(stringResource(R.string.client_detail_no_debt_history_message))
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f, fill = false)) {
+                    items(debtHistory) { item ->
+                        DebtHistoryItem(item)
                     }
                 }
             }
@@ -105,6 +123,27 @@ fun PaymentItem(payment: Payment) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
+        }
+    }
+}
+
+@Composable
+fun DebtHistoryItem(item: ClientDebtHistory) {
+    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+    val title = when (item.eventType) {
+        CLIENT_DEBT_EVENT_INITIAL -> stringResource(R.string.debt_history_initial)
+        CLIENT_DEBT_EVENT_PAYMENT -> stringResource(R.string.debt_history_payment)
+        CLIENT_DEBT_EVENT_ADJUSTMENT -> stringResource(R.string.debt_history_adjustment)
+        else -> item.eventType
+    }
+    val sign = if (item.amountChange >= 0) "+" else "-"
+
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("$title - ${sdf.format(Date(item.eventDate))}", fontWeight = FontWeight.Bold)
+            Text("$sign ${stringResource(R.string.text_prefix_gs)} ${formatCurrency(kotlin.math.abs(item.amountChange))}")
+            Text(stringResource(R.string.debt_history_balance_after, formatCurrency(item.balanceAfter)))
+            item.note?.takeIf { it.isNotBlank() }?.let { Text(it) }
         }
     }
 }

@@ -17,6 +17,9 @@ import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -27,8 +30,10 @@ fun InventoryScreen(viewModel: VetViewModel) {
     val suppliers by viewModel.suppliers.collectAsState()
     var productToEdit by remember { mutableStateOf<Product?>(null) }
     var productToDelete by remember { mutableStateOf<Product?>(null) }
+    var productForCostHistory by remember { mutableStateOf<Product?>(null) }
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val productCostHistory by viewModel.productCostHistory.collectAsState()
 
     val productsFilterText = stringResource(R.string.inventory_filter_products)
     val servicesFilterText = stringResource(R.string.inventory_filter_services)
@@ -98,6 +103,14 @@ fun InventoryScreen(viewModel: VetViewModel) {
         )
     }
 
+    productForCostHistory?.let { product ->
+        CostHistoryDialog(
+            product = product,
+            history = productCostHistory,
+            onDismiss = { productForCostHistory = null }
+        )
+    }
+
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { viewModel.onShowAddProductDialog() }) {
@@ -122,6 +135,10 @@ fun InventoryScreen(viewModel: VetViewModel) {
                             product = product,
                             onEdit = { productToEdit = it },
                             onDelete = { productToDelete = it },
+                            onShowCostHistory = {
+                                productForCostHistory = it
+                                viewModel.loadProductCostHistory(it.productId)
+                            },
                             onOpenContainer = { viewModel.openContainerForBulkSale(it) }
                         )
                     }
@@ -168,6 +185,7 @@ fun InventoryItem(
     product: Product,
     onEdit: (Product) -> Unit,
     onDelete: (Product) -> Unit,
+    onShowCostHistory: (Product) -> Unit,
     onOpenContainer: (Product) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -226,8 +244,47 @@ fun InventoryItem(
                             expanded = false
                         }
                     )
+                    if (!product.isService) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.inventory_item_menu_cost_history)) },
+                            onClick = {
+                                onShowCostHistory(product)
+                                expanded = false
+                            }
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+fun CostHistoryDialog(
+    product: Product,
+    history: List<com.example.vetfinance.data.ProductCostHistoryItem>,
+    onDismiss: () -> Unit
+) {
+    val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.cost_history_title, product.name)) },
+        text = {
+            if (history.isEmpty()) {
+                Text(stringResource(R.string.cost_history_empty))
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(history) { item ->
+                        Column {
+                            Text(item.supplierName ?: stringResource(R.string.label_no_supplier), fontWeight = FontWeight.Bold)
+                            Text(stringResource(R.string.cost_history_item, sdf.format(Date(item.orderDate)), formatCurrency(item.costAtTime), item.quantity.toString()))
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.accept_button)) }
+        }
+    )
 }

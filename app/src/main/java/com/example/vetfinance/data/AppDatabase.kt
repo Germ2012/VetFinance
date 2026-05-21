@@ -12,9 +12,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         Sale::class, Client::class, SaleProductCrossRef::class, Payment::class,
         Appointment::class, Supplier::class, Purchase::class, PurchaseProductCrossRef::class,
         RestockOrder::class, RestockOrderItem::class,
-        AppointmentLog::class
+        AppointmentLog::class, ClientDebtHistory::class, SupplierDebt::class
     ],
-    version = 23,
+    version = 24,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -32,6 +32,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun purchaseDao(): PurchaseDao
     abstract fun restockDao(): RestockDao
     abstract fun appointmentLogDao(): AppointmentLogDao
+    abstract fun clientDebtHistoryDao(): ClientDebtHistoryDao
+    abstract fun supplierDebtDao(): SupplierDebtDao
 
     companion object {
         /**
@@ -167,6 +169,50 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATION_21_23 = object : Migration(21, 23) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 migrateCompositeSaleDetailsToIndependentRows(db)
+            }
+        }
+
+        val MIGRATION_23_24 = object : Migration(23, 24) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `client_debt_history` (
+                        `historyId` TEXT NOT NULL,
+                        `clientIdFk` TEXT NOT NULL,
+                        `eventDate` INTEGER NOT NULL,
+                        `eventType` TEXT NOT NULL,
+                        `amountChange` REAL NOT NULL,
+                        `balanceAfter` REAL NOT NULL,
+                        `note` TEXT,
+                        PRIMARY KEY(`historyId`),
+                        FOREIGN KEY(`clientIdFk`) REFERENCES `clients`(`clientId`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_client_debt_history_clientIdFk` ON `client_debt_history` (`clientIdFk`)")
+                db.execSQL("""
+                    INSERT INTO `client_debt_history`
+                    (`historyId`, `clientIdFk`, `eventDate`, `eventType`, `amountChange`, `balanceAfter`, `note`)
+                    SELECT lower(hex(randomblob(16))), `clientId`, CAST(strftime('%s','now') AS INTEGER) * 1000,
+                        'INITIAL', `debtAmount`, `debtAmount`, 'Saldo existente al actualizar la app'
+                    FROM `clients`
+                    WHERE `debtAmount` > 0
+                """.trimIndent())
+
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `supplier_debts` (
+                        `debtId` TEXT NOT NULL,
+                        `supplierIdFk` TEXT,
+                        `description` TEXT NOT NULL,
+                        `amount` REAL NOT NULL,
+                        `dueDate` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `isPaid` INTEGER NOT NULL,
+                        `paidAt` INTEGER,
+                        `note` TEXT,
+                        PRIMARY KEY(`debtId`),
+                        FOREIGN KEY(`supplierIdFk`) REFERENCES `suppliers`(`supplierId`) ON UPDATE NO ACTION ON DELETE SET NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_supplier_debts_supplierIdFk` ON `supplier_debts` (`supplierIdFk`)")
             }
         }
 

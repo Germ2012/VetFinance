@@ -6,6 +6,7 @@ import com.example.vetfinance.data.AppDatabase
 import com.example.vetfinance.data.AppointmentDao
 import com.example.vetfinance.data.AppointmentLogDao // Importación añadida
 import com.example.vetfinance.data.ClientDao
+import com.example.vetfinance.data.ClientDebtHistoryDao
 import com.example.vetfinance.data.PaymentDao
 import com.example.vetfinance.data.PetDao
 import com.example.vetfinance.data.ProductDao
@@ -13,6 +14,7 @@ import com.example.vetfinance.data.PurchaseDao
 import com.example.vetfinance.data.RestockDao
 import com.example.vetfinance.data.SaleDao
 import com.example.vetfinance.data.SupplierDao
+import com.example.vetfinance.data.SupplierDebtDao
 import com.example.vetfinance.data.TransactionDao
 import com.example.vetfinance.data.TreatmentDao
 import com.example.vetfinance.viewmodel.VetRepository
@@ -41,7 +43,8 @@ object AppModule {
                 AppDatabase.MIGRATION_21_22,
                 AppDatabase.MIGRATION_22_23,
                 AppDatabase.MIGRATION_20_23,
-                AppDatabase.MIGRATION_21_23
+                AppDatabase.MIGRATION_21_23,
+                AppDatabase.MIGRATION_23_24
             )
             .build()
     }
@@ -84,6 +87,12 @@ object AppModule {
     @Provides
     fun provideAppointmentLogDao(db: AppDatabase): AppointmentLogDao = db.appointmentLogDao()
 
+    @Provides
+    fun provideClientDebtHistoryDao(db: AppDatabase): ClientDebtHistoryDao = db.clientDebtHistoryDao()
+
+    @Provides
+    fun provideSupplierDebtDao(db: AppDatabase): SupplierDebtDao = db.supplierDebtDao()
+
 
     // --- Repository Provider (Actualizado) ---
     @Provides
@@ -101,6 +110,8 @@ object AppModule {
         supplierDao: SupplierDao,
         purchaseDao: PurchaseDao,
         restockDao: RestockDao,
+        clientDebtHistoryDao: ClientDebtHistoryDao,
+        supplierDebtDao: SupplierDebtDao,
         appointmentLogDao: AppointmentLogDao, // Parámetro añadido
         @ApplicationContext context: Context
     ): VetRepository {
@@ -117,6 +128,8 @@ object AppModule {
             supplierDao,
             purchaseDao,
             restockDao,
+            clientDebtHistoryDao,
+            supplierDebtDao,
             appointmentLogDao, // Argumento añadido
             context
         )

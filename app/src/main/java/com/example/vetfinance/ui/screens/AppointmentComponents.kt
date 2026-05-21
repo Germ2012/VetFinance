@@ -92,7 +92,7 @@ fun AddAppointmentDialog(
                     ) {
                         petsOfSelectedClient.forEach { petWithOwner ->
                             DropdownMenuItem(
-                                text = { Text(petWithOwner.pet.name) },
+                                text = { Text("${petWithOwner.pet.name} - ${petWithOwner.owner.name}") },
                                 onClick = {
                                     selectedPet = petWithOwner.pet
                                     petMenuExpanded = false

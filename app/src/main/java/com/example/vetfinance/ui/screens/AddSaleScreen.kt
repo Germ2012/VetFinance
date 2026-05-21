@@ -1,6 +1,7 @@
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -41,8 +42,13 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     val inventory by viewModel.filteredInventory.collectAsState()
     val allProductsList by viewModel.inventory.collectAsState()
     val suppliers by viewModel.suppliers.collectAsState()
+    val clients by viewModel.clients.collectAsState()
     val searchQuery by viewModel.productSearchQuery.collectAsState()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
+    val clientNameSuggestions by viewModel.clientNameSuggestions.collectAsState()
+
+    var saleClientName by remember { mutableStateOf("") }
+    var selectedSaleClientId by remember { mutableStateOf<String?>(null) }
 
     val showFractionalDialog by viewModel.showFractionalSaleDialog.collectAsState()
     val productForFractionalSale by viewModel.productForFractionalSale.collectAsState()
@@ -58,6 +64,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             viewModel.clearProductSearchQuery()
             viewModel.dismissFractionalSaleDialog()
             viewModel.dismissDoseSaleDialog()
+            viewModel.clearClientNameSuggestions()
         }
     }
 
@@ -139,7 +146,12 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                         fontWeight = FontWeight.Bold
                     )
                     Button(
-                        onClick = { viewModel.finalizeSale { navController.popBackStack() } },
+                        onClick = {
+                            viewModel.finalizeSale(
+                                clientName = saleClientName,
+                                selectedClientId = selectedSaleClientId
+                            ) { navController.popBackStack() }
+                        },
                         enabled = cart.isNotEmpty()
                     ) {
                         Text(stringResource(R.string.button_confirm_sale))
@@ -149,6 +161,47 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         }
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues)) {
+            OutlinedTextField(
+                value = saleClientName,
+                onValueChange = {
+                    saleClientName = it
+                    selectedSaleClientId = null
+                    viewModel.onClientNameChange(it)
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                label = { Text(stringResource(R.string.sale_client_label)) },
+                supportingText = {
+                    val selectedClient = clients.find { it.clientId == selectedSaleClientId }
+                    Text(selectedClient?.phone ?: stringResource(R.string.sale_client_general_hint))
+                },
+                singleLine = true
+            )
+
+            if (clientNameSuggestions.isNotEmpty() && saleClientName.isNotBlank()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 120.dp)
+                        .padding(horizontal = 16.dp)
+                ) {
+                    items(clientNameSuggestions, key = { it.clientId }) { client ->
+                        ListItem(
+                            headlineContent = { Text(client.name) },
+                            supportingContent = {
+                                Text(client.phone ?: stringResource(R.string.client_suggestion_no_phone))
+                            },
+                            modifier = Modifier.clickable {
+                                saleClientName = client.name
+                                selectedSaleClientId = client.clientId
+                                viewModel.clearClientNameSuggestions()
+                            }
+                        )
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.onProductSearchQueryChange(it) },

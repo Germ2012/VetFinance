@@ -132,8 +132,14 @@ interface ClientDao {
     @Query("SELECT * FROM clients WHERE clientId = :clientId LIMIT 1")
     suspend fun getClientById(clientId: String): Client?
 
+    @Query("SELECT * FROM clients WHERE lower(name) = lower(:name) ORDER BY name ASC LIMIT 1")
+    suspend fun getClientByName(name: String): Client?
+
     @Query("SELECT COUNT(*) FROM payments WHERE clientIdFk = :clientId")
     suspend fun countPaymentsForClient(clientId: String): Int
+
+    @Query("SELECT COUNT(*) FROM pets WHERE ownerIdFk = :clientId")
+    suspend fun countPetsForClient(clientId: String): Int
 
     @Query("UPDATE clients SET debtAmount = :newDebtAmount WHERE clientId = :clientId")
     suspend fun updateDebt(clientId: String, newDebtAmount: Double)

@@ -1,6 +1,9 @@
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -9,13 +12,17 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.R
+import com.example.vetfinance.data.Client
 import ui.utils.NumberTransformation
 
 @Composable
 fun AddOrEditClientDialog(
     onDismiss: () -> Unit,
     onConfirm: (name: String, phone: String, debt: Double) -> Unit,
-    showDebtField: Boolean = true
+    showDebtField: Boolean = true,
+    clientSuggestions: List<Client> = emptyList(),
+    onNameChange: (String) -> Unit = {},
+    onSuggestionSelected: (Client) -> Unit = {}
 ) {
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
@@ -29,11 +36,38 @@ fun AddOrEditClientDialog(
             Column {
                 OutlinedTextField(
                     value = name,
-                    onValueChange = { name = it; nameError = false },
+                    onValueChange = {
+                        name = it
+                        nameError = false
+                        onNameChange(it)
+                    },
                     label = { Text(stringResource(R.string.client_name_label)) },
                     isError = nameError,
                     modifier = Modifier.fillMaxWidth()
                 )
+                if (clientSuggestions.isNotEmpty() && name.isNotBlank()) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 120.dp)
+                            .padding(top = 4.dp)
+                    ) {
+                        items(clientSuggestions, key = { it.clientId }) { suggestion ->
+                            ListItem(
+                                headlineContent = { Text(suggestion.name) },
+                                supportingContent = {
+                                    Text(suggestion.phone ?: stringResource(R.string.client_suggestion_no_phone))
+                                },
+                                modifier = Modifier.clickable {
+                                    name = suggestion.name
+                                    phone = suggestion.phone.orEmpty()
+                                    debt = suggestion.debtAmount.takeIf { showDebtField && it > 0.0 }?.toLong()?.toString().orEmpty()
+                                    onSuggestionSelected(suggestion)
+                                }
+                            )
+                        }
+                    }
+                }
                 if (nameError) {
                     Text(
                         text = stringResource(R.string.client_name_error),

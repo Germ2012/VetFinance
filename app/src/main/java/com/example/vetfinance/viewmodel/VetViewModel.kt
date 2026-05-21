@@ -110,12 +110,12 @@ class VetViewModel @Inject constructor(
         }
     }
 
-    fun executeRestock(supplierId: String, totalCost: Double, itemsToRestock: List<RestockOrderItem>, orderDate: Long) = viewModelScope.launch {
+    fun executeRestock(supplierId: String, totalCost: Double, itemsToRestock: List<RestockOrderItem>, orderDate: Long, supplierDebtDueDate: Long? = null) = viewModelScope.launch {
         try {
             val orderId = UUID.randomUUID().toString()
             val order = RestockOrder(orderId = orderId, supplierIdFk = supplierId, orderDate = orderDate, totalAmount = totalCost)
             val updatedItems = itemsToRestock.map { it.copy(orderIdFk = orderId) }
-            repository.performRestock(order, updatedItems)
+            repository.performRestock(order, updatedItems, supplierDebtDueDate)
         } catch (e: Exception) {
             reportOperationError(e)
         }
@@ -156,6 +156,8 @@ class VetViewModel @Inject constructor(
 
     private val _productNameSuggestions = MutableStateFlow<List<Product>>(emptyList())
     val productNameSuggestions: StateFlow<List<Product>> = _productNameSuggestions.asStateFlow()
+    private val _clientNameSuggestions = MutableStateFlow<List<Client>>(emptyList())
+    val clientNameSuggestions: StateFlow<List<Client>> = _clientNameSuggestions.asStateFlow()
 
     val clients: StateFlow<List<Client>> = repository.getAllClients().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val petsWithOwners: StateFlow<List<PetWithOwner>> = repository.getAllPetsWithOwners().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -165,6 +167,10 @@ class VetViewModel @Inject constructor(
     val upcomingTreatments: StateFlow<List<Treatment>> = repository.getUpcomingTreatments().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _paymentHistory = MutableStateFlow<List<Payment>>(emptyList())
     val paymentHistory: StateFlow<List<Payment>> = _paymentHistory.asStateFlow()
+    private val _debtHistory = MutableStateFlow<List<ClientDebtHistory>>(emptyList())
+    val debtHistory: StateFlow<List<ClientDebtHistory>> = _debtHistory.asStateFlow()
+    private val _productCostHistory = MutableStateFlow<List<ProductCostHistoryItem>>(emptyList())
+    val productCostHistory: StateFlow<List<ProductCostHistoryItem>> = _productCostHistory.asStateFlow()
     private val _sales = repository.getAllSales().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val debtClientsPaginated: Flow<PagingData<Client>> = clientSearchQuery.flatMapLatest { repository.getDebtClientsPaginated(it) }.cachedIn(viewModelScope)
@@ -186,10 +192,12 @@ class VetViewModel @Inject constructor(
 
     val lowStockProducts: StateFlow<List<Product>> = inventory.map { products ->
         products.filter { product ->
-            !product.isService && !product.isContainer && (
-                    (product.sellingMethod == SELLING_METHOD_BY_UNIT && product.stock < 4) ||
-                            (product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT && (product.lowStockThreshold ?: 0.0) > 0.0 && product.stock < (product.lowStockThreshold ?: 0.0))
-                    )
+            if (product.isService || product.isContainer || product.sellingMethod == SELLING_METHOD_DOSE_ONLY) {
+                false
+            } else {
+                val threshold = product.lowStockThreshold ?: if (product.sellingMethod == SELLING_METHOD_BY_UNIT) 4.0 else 0.0
+                threshold > 0.0 && product.stock < threshold
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -200,11 +208,20 @@ class VetViewModel @Inject constructor(
         repository.getAppointmentsForDate(date)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val supplierDebtsOnSelectedDate: StateFlow<List<SupplierDebtWithSupplier>> = _selectedCalendarDate.flatMapLatest { date ->
+        repository.getSupplierDebtsForDate(date)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val upcomingAppointments: StateFlow<List<AppointmentWithDetails>> = flow {
         val zoneId = ZoneId.systemDefault()
         val now = LocalDate.now().atStartOfDay(zoneId).toInstant().toEpochMilli()
         val threeDaysFromNow = LocalDate.now().plusDays(3).atStartOfDay(zoneId).toInstant().toEpochMilli()
         emitAll(repository.getAppointmentsForDate(now, threeDaysFromNow))
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val upcomingSupplierDebts: StateFlow<List<SupplierDebtWithSupplier>> = flow {
+        val dateLimit = LocalDate.now().plusDays(7).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        emitAll(repository.getUpcomingSupplierDebts(dateLimit))
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val totalDebt: StateFlow<Double?> = repository.getTotalDebt().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
@@ -426,13 +443,23 @@ class VetViewModel @Inject constructor(
     fun clearSaleDateFilter() { _selectedSaleDateFilter.value = null }
     fun onProductNameChange(name: String) { if (name.isBlank()) { _productNameSuggestions.value = emptyList(); return }; _productNameSuggestions.value = inventory.value.filter { it.name.contains(name, ignoreCase = true) } }
     fun clearProductNameSuggestions() { _productNameSuggestions.value = emptyList() }
+    fun onClientNameChange(name: String) {
+        if (name.isBlank()) {
+            _clientNameSuggestions.value = emptyList()
+            return
+        }
+        _clientNameSuggestions.value = clients.value
+            .filter { it.name.contains(name, ignoreCase = true) || (it.phone?.contains(name) == true) }
+            .take(6)
+    }
+    fun clearClientNameSuggestions() { _clientNameSuggestions.value = emptyList() }
     fun onTopProductsPeriodSelected(period: TopProductsPeriod) { _topProductsPeriod.value = period; _topProductsDate.value = LocalDate.now() }
     fun onTopProductsDateSelected(dateMillis: Long) { _topProductsDate.value = Instant.ofEpochMilli(dateMillis).atZone(ZoneId.systemDefault()).toLocalDate() }
     fun onTopProductSelected(product: TopSellingProduct?) { _selectedTopProduct.value = if (_selectedTopProduct.value == product) null else product }
     fun onShowAddProductDialog() { _showAddProductDialog.value = true }
     fun onDismissAddProductDialog() { _showAddProductDialog.value = false; clearProductNameSuggestions() }
     fun onShowAddClientDialog() { _showAddClientDialog.value = true }
-    fun onDismissAddClientDialog() { _showAddClientDialog.value = false }
+    fun onDismissAddClientDialog() { _showAddClientDialog.value = false; clearClientNameSuggestions() }
     fun onShowPaymentDialog(client: Client) { _clientForPayment.value = client; _showPaymentDialog.value = true }
     fun onDismissPaymentDialog() { _clientForPayment.value = null; _showPaymentDialog.value = false }
     fun onShowAddAppointmentDialog() { _showAddAppointmentDialog.value = true }
@@ -472,6 +499,8 @@ class VetViewModel @Inject constructor(
     fun updatePet(pet: Pet) = executeWithLoading { repository.updatePet(pet) }
     fun loadTreatmentsForPet(petId: String) = viewModelScope.launch { repository.getTreatmentsForPet(petId).collect { _treatmentHistory.value = it } }
     fun loadPaymentsForClient(clientId: String) = viewModelScope.launch { repository.getPaymentsForClient(clientId).collect { _paymentHistory.value = it } }
+    fun loadDebtHistoryForClient(clientId: String) = viewModelScope.launch { repository.getDebtHistoryForClient(clientId).collect { _debtHistory.value = it } }
+    fun loadProductCostHistory(productId: String) = viewModelScope.launch { repository.getProductCostHistory(productId).collect { _productCostHistory.value = it } }
     fun addTreatment(pet: Pet, description: String?, weight: Double?, temperature: String?, symptoms: String?, diagnosis: String?, treatmentPlan: String?, nextDate: Long?) = executeWithLoading {
         val newTreatment = Treatment( petIdFk = pet.petId, serviceId = null, treatmentDate = System.currentTimeMillis(), description = description, weight = weight, temperature = temperature, symptoms = symptoms, diagnosis = diagnosis, treatmentPlan = treatmentPlan, nextTreatmentDate = nextDate)
         repository.insertTreatment(newTreatment)
@@ -482,9 +511,24 @@ class VetViewModel @Inject constructor(
     fun deleteTreatment(treatment: Treatment) = executeWithLoading { repository.deleteTreatment(treatment) }
 
     fun makePayment(amount: Double) = executeWithLoading { _clientForPayment.value?.let { repository.makePayment(it, amount); onDismissPaymentDialog() } }
+    fun adjustClientDebt(client: Client, newDebt: Double, note: String?) = executeWithLoading { repository.adjustClientDebt(client, newDebt, note) }
     fun addAppointment(appointment: Appointment) = executeWithLoading { repository.insertAppointment(appointment) }
     fun updateAppointment(appointment: Appointment) = executeWithLoading { repository.updateAppointment(appointment) }
     fun deleteAppointment(appointment: Appointment) = executeWithLoading { repository.deleteAppointment(appointment) }
+    fun addSupplierDebt(supplierId: String?, description: String, amount: Double, dueDate: Long, note: String? = null) = executeWithLoading {
+        repository.insertSupplierDebt(
+            SupplierDebt(
+                supplierIdFk = supplierId,
+                description = description,
+                amount = amount,
+                dueDate = dueDate,
+                createdAt = System.currentTimeMillis(),
+                isPaid = false,
+                note = note?.ifBlank { null }
+            )
+        )
+    }
+    fun markSupplierDebtAsPaid(debtId: String) = executeWithLoading { repository.markSupplierDebtAsPaid(debtId) }
 
     private fun shouldValidateStockInCart(product: Product): Boolean {
         return !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
@@ -585,10 +629,13 @@ class VetViewModel @Inject constructor(
         }
     }
 
-    fun finalizeSale(clientId: String? = GENERAL_CLIENT_ID, onFinished: () -> Unit) = executeWithLoading {
+    fun finalizeSale(clientName: String? = null, selectedClientId: String? = null, onFinished: () -> Unit) = executeWithLoading {
         if (_shoppingCart.value.isNotEmpty()) {
+            val saleClient = selectedClientId
+                ?.let { clientId -> clients.value.find { it.clientId == clientId } }
+                ?: repository.findOrCreateClientForSale(clientName)
             repository.insertSale(
-                Sale(date = System.currentTimeMillis(), totalAmount = _saleTotal.value, clientIdFk = clientId ?: GENERAL_CLIENT_ID),
+                Sale(date = System.currentTimeMillis(), totalAmount = _saleTotal.value, clientIdFk = saleClient.clientId),
                 _shoppingCart.value
             )
             clearCart()

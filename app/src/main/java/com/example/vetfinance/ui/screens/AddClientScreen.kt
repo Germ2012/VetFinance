@@ -9,6 +9,8 @@ fun AddClientScreen(
     viewModel: VetViewModel,
     navController: NavController
 ) {
+    val clientSuggestions by viewModel.clientNameSuggestions.collectAsState()
+
     AddOrEditClientDialog(
         onDismiss = {
             navController.popBackStack()
@@ -17,6 +19,9 @@ fun AddClientScreen(
             viewModel.addClient(name, phone, debt)
             navController.popBackStack()
         },
-        showDebtField = true
+        showDebtField = true,
+        clientSuggestions = clientSuggestions,
+        onNameChange = { viewModel.onClientNameChange(it) },
+        onSuggestionSelected = { viewModel.clearClientNameSuggestions() }
     )
 }

@@ -27,16 +27,23 @@ fun AddPetScreen(
     var showAddOwnerDialog by remember { mutableStateOf(false) }
 
     val clients by viewModel.clients.collectAsState()
+    val clientSuggestions by viewModel.clientNameSuggestions.collectAsState()
 
-    // --- DIÁLOGO PARA AÑADIR DUEÑO (CLIENTE) ---
     if (showAddOwnerDialog) {
         AddOrEditClientDialog(
             onDismiss = { showAddOwnerDialog = false },
-            onConfirm = { name, phone, _ -> // La deuda se ignora aquí
+            onConfirm = { name, phone, _ ->
                 viewModel.addClient(name, phone, 0.0)
                 showAddOwnerDialog = false
             },
-            showDebtField = false // No se muestra el campo de deuda al añadir un dueño desde aquí
+            showDebtField = false,
+            clientSuggestions = clientSuggestions,
+            onNameChange = { viewModel.onClientNameChange(it) },
+            onSuggestionSelected = { client ->
+                selectedOwner = client
+                showAddOwnerDialog = false
+                viewModel.clearClientNameSuggestions()
+            }
         )
     }
 
@@ -67,7 +74,8 @@ fun AddPetScreen(
                     modifier = Modifier.weight(1f)
                 ) {
                     OutlinedTextField(
-                        value = selectedOwner?.name ?: stringResource(R.string.select_owner_placeholder),
+                        value = selectedOwner?.let { "${it.name}${it.phone?.let { phone -> " - $phone" } ?: ""}" }
+                            ?: stringResource(R.string.select_owner_placeholder),
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = ownerMenuExpanded) },
@@ -79,7 +87,7 @@ fun AddPetScreen(
                     ) {
                         clients.forEach { client ->
                             DropdownMenuItem(
-                                text = { Text(client.name) },
+                                text = { Text("${client.name}${client.phone?.let { " - $it" } ?: ""}") },
                                 onClick = {
                                     selectedOwner = client
                                     ownerMenuExpanded = false
