@@ -9,8 +9,18 @@ import java.util.UUID
 @Entity(
     tableName = "treatments",
     foreignKeys = [
-        ForeignKey(entity = Pet::class, parentColumns = ["petId"], childColumns = ["petIdFk"]),
-        ForeignKey(entity = Product::class, parentColumns = ["productId"], childColumns = ["serviceId"])
+        ForeignKey(
+            entity = Pet::class,
+            parentColumns = ["petId"],
+            childColumns = ["petIdFk"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = Product::class,
+            parentColumns = ["productId"],
+            childColumns = ["serviceId"],
+            onDelete = ForeignKey.SET_NULL
+        )
     ],
     indices = [Index("petIdFk"), Index("serviceId")]
 )

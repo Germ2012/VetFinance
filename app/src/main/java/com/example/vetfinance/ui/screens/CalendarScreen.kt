@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.vetfinance.R
+import com.example.vetfinance.data.Appointment
 import com.example.vetfinance.data.AppointmentWithDetails
 import com.example.vetfinance.viewmodel.VetViewModel
 import com.kizitonwose.calendar.compose.HorizontalCalendar
@@ -31,8 +33,10 @@ import com.kizitonwose.calendar.compose.rememberCalendarState
 import com.kizitonwose.calendar.core.CalendarDay
 import com.kizitonwose.calendar.core.firstDayOfWeekFromLocale
 import java.time.DayOfWeek
+import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
 import java.time.format.TextStyle
 import java.util.Locale
 
@@ -43,6 +47,9 @@ fun CalendarScreen(viewModel: VetViewModel) {
     val showDialog by viewModel.showAddAppointmentDialog.collectAsState()
     val clients by viewModel.clients.collectAsState()
     val petsWithOwners by viewModel.petsWithOwners.collectAsState()
+    var appointmentToEdit by remember { mutableStateOf<AppointmentWithDetails?>(null) }
+    var appointmentToReschedule by remember { mutableStateOf<AppointmentWithDetails?>(null) }
+    var appointmentToDelete by remember { mutableStateOf<AppointmentWithDetails?>(null) }
 
     if (showDialog) {
         AddAppointmentDialog(
@@ -53,6 +60,58 @@ fun CalendarScreen(viewModel: VetViewModel) {
             onConfirm = {
                 viewModel.addAppointment(it)
                 viewModel.onDismissAddAppointmentDialog()
+            }
+        )
+    }
+
+    appointmentToEdit?.let { details ->
+        EditAppointmentDialog(
+            appointment = details.appointment,
+            onDismiss = { appointmentToEdit = null },
+            onConfirm = { description ->
+                val cleanDescription = description.trim().takeIf { it.isNotEmpty() }
+                viewModel.updateAppointment(details.appointment.copy(description = cleanDescription))
+                appointmentToEdit = null
+            }
+        )
+    }
+
+    appointmentToReschedule?.let { details ->
+        RescheduleAppointmentDialog(
+            details = details,
+            onDismiss = { appointmentToReschedule = null },
+            onConfirm = { newDateMillis ->
+                viewModel.updateAppointment(details.appointment.copy(appointmentDate = newDateMillis))
+                viewModel.onCalendarDateSelected(
+                    Instant.ofEpochMilli(newDateMillis).atZone(ZoneId.systemDefault()).toLocalDate()
+                )
+                appointmentToReschedule = null
+            }
+        )
+    }
+
+    appointmentToDelete?.let { details ->
+        AlertDialog(
+            onDismissRequest = { appointmentToDelete = null },
+            title = { Text(stringResource(R.string.confirm_delete_appointment_title)) },
+            text = {
+                Text(stringResource(R.string.confirm_delete_appointment_message, details.pet.name))
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteAppointment(details.appointment)
+                        appointmentToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(stringResource(R.string.delete_button))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { appointmentToDelete = null }) {
+                    Text(stringResource(R.string.cancel_button))
+                }
             }
         )
     }
@@ -97,7 +156,12 @@ fun CalendarScreen(viewModel: VetViewModel) {
                     }
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    AppointmentList(appointments = appointments)
+                    AppointmentList(
+                        appointments = appointments,
+                        onEdit = { appointmentToEdit = it },
+                        onReschedule = { appointmentToReschedule = it },
+                        onDelete = { appointmentToDelete = it }
+                    )
                 }
             }
         } else {
@@ -117,7 +181,12 @@ fun CalendarScreen(viewModel: VetViewModel) {
                     }
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    AppointmentList(appointments = appointments)
+                    AppointmentList(
+                        appointments = appointments,
+                        onEdit = { appointmentToEdit = it },
+                        onReschedule = { appointmentToReschedule = it },
+                        onDelete = { appointmentToDelete = it }
+                    )
                 }
             }
         }
@@ -173,7 +242,12 @@ fun Day(day: CalendarDay, isSelected: Boolean, onClick: (CalendarDay) -> Unit) {
 }
 
 @Composable
-fun AppointmentList(appointments: List<AppointmentWithDetails>) {
+fun AppointmentList(
+    appointments: List<AppointmentWithDetails>,
+    onEdit: (AppointmentWithDetails) -> Unit,
+    onReschedule: (AppointmentWithDetails) -> Unit,
+    onDelete: (AppointmentWithDetails) -> Unit
+) {
     Column {
         HorizontalDivider()
         if (appointments.isEmpty()) {
@@ -191,8 +265,13 @@ fun AppointmentList(appointments: List<AppointmentWithDetails>) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(appointments) { appointmentDetails ->
-                    AppointmentItem(appointmentDetails)
+                items(appointments, key = { it.appointment.appointmentId }) { appointmentDetails ->
+                    AppointmentItem(
+                        details = appointmentDetails,
+                        onEdit = onEdit,
+                        onReschedule = onReschedule,
+                        onDelete = onDelete
+                    )
                 }
             }
         }
@@ -200,15 +279,148 @@ fun AppointmentList(appointments: List<AppointmentWithDetails>) {
 }
 
 @Composable
-fun AppointmentItem(details: AppointmentWithDetails) {
+fun AppointmentItem(
+    details: AppointmentWithDetails,
+    onEdit: (AppointmentWithDetails) -> Unit,
+    onReschedule: (AppointmentWithDetails) -> Unit,
+    onDelete: (AppointmentWithDetails) -> Unit
+) {
+    var menuExpanded by remember { mutableStateOf(false) }
+
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(details.pet.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-            Text(stringResource(R.string.owner_label, details.client.name), style = MaterialTheme.typography.bodyMedium)
-            Spacer(modifier = Modifier.height(4.dp))
-            if (!details.appointment.description.isNullOrBlank()) {
-                Text(details.appointment.description, style = MaterialTheme.typography.bodyLarge)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, top = 16.dp, end = 8.dp, bottom = 16.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(details.pet.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text(stringResource(R.string.owner_label, details.client.name), style = MaterialTheme.typography.bodyMedium)
+                Spacer(modifier = Modifier.height(4.dp))
+                if (!details.appointment.description.isNullOrBlank()) {
+                    Text(details.appointment.description, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+            Box {
+                IconButton(onClick = { menuExpanded = true }) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = stringResource(R.string.appointment_options_content_description)
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.appointment_edit_menu)) },
+                        onClick = {
+                            menuExpanded = false
+                            onEdit(details)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.appointment_reschedule_menu)) },
+                        onClick = {
+                            menuExpanded = false
+                            onReschedule(details)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.appointment_delete_menu)) },
+                        onClick = {
+                            menuExpanded = false
+                            onDelete(details)
+                        }
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+fun EditAppointmentDialog(
+    appointment: Appointment,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var description by remember(appointment.appointmentId) {
+        mutableStateOf(appointment.description.orEmpty())
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.edit_appointment_dialog_title)) },
+        text = {
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text(stringResource(R.string.add_appointment_description_label)) },
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(description) },
+                enabled = description.isNotBlank()
+            ) {
+                Text(stringResource(R.string.save_button))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel_button))
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RescheduleAppointmentDialog(
+    details: AppointmentWithDetails,
+    onDismiss: () -> Unit,
+    onConfirm: (Long) -> Unit
+) {
+    val datePickerState = rememberDatePickerState(
+        initialSelectedDateMillis = details.appointment.appointmentDate
+    )
+
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val selectedMillis = datePickerState.selectedDateMillis ?: return@TextButton
+                    val selectedDate = Instant.ofEpochMilli(selectedMillis)
+                        .atZone(ZoneId.of("UTC"))
+                        .toLocalDate()
+                    val newDateMillis = selectedDate
+                        .atStartOfDay(ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli()
+                    onConfirm(newDateMillis)
+                }
+            ) {
+                Text(stringResource(R.string.accept_button))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel_button))
+            }
+        }
+    ) {
+        DatePicker(
+            state = datePickerState,
+            title = {
+                Text(
+                    text = stringResource(R.string.reschedule_appointment_dialog_title),
+                    modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp)
+                )
+            }
+        )
     }
 }

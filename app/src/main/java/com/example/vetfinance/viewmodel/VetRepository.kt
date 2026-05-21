@@ -17,6 +17,7 @@ import org.apache.commons.csv.CSVFormat
 import org.apache.commons.csv.CSVParser
 import org.apache.commons.csv.CSVPrinter
 import java.io.StringWriter
+import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
@@ -322,11 +323,11 @@ class VetRepository @Inject constructor(
             }
         }
 
-        val saleProductCrossRefHeaders = arrayOf("saleId", "productId", "quantitySold", "priceAtTimeOfSale", "notes", "overridePrice")
+        val saleProductCrossRefHeaders = arrayOf("crossRefId", "saleId", "productId", "quantitySold", "priceAtTimeOfSale", "notes", "overridePrice")
         val saleProductCrossRefs = saleDao.getAllSaleProductCrossRefsSimple().first()
         if (saleProductCrossRefs.isNotEmpty()){
             csvMap["sale_product_cross_refs.csv"] = listToCsvString(saleProductCrossRefs, saleProductCrossRefHeaders) { cr ->
-                arrayOf(cr.saleId, cr.productId, cr.quantitySold.toString(), cr.priceAtTimeOfSale.toString(), cr.notes ?: "", cr.overridePrice?.toString() ?: "")
+                arrayOf(cr.crossRefId, cr.saleId, cr.productId, cr.quantitySold.toString(), cr.priceAtTimeOfSale.toString(), cr.notes ?: "", cr.overridePrice?.toString() ?: "")
             }
         }
 
@@ -432,21 +433,47 @@ class VetRepository @Inject constructor(
         return CSVParser.parse(content, format).map(parser)
     }
 
-    private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r["phone"].ifEmpty { null }, r.get("address")?.ifEmpty { null }, r["debtAmount"].toDouble())
+    private fun org.apache.commons.csv.CSVRecord.optionalString(header: String): String? {
+        return if (isMapped(header)) get(header).ifEmpty { null } else null
+    }
+
+    private fun org.apache.commons.csv.CSVRecord.optionalDouble(header: String): Double? {
+        return optionalString(header)?.toDoubleOrNull()
+    }
+
+    private fun org.apache.commons.csv.CSVRecord.optionalLong(header: String): Long? {
+        return optionalString(header)?.toLongOrNull()
+    }
+
+    private fun parseClient(r: org.apache.commons.csv.CSVRecord) = Client(r["clientId"], r["name"], r.optionalString("phone"), r.optionalString("address"), r["debtAmount"].toDouble())
     private fun parseProduct(r: org.apache.commons.csv.CSVRecord) = Product(
         productId = r["productId"], name = r["name"], price = r["price"].toDouble(), cost = r["cost"].toDouble(), stock = r["stock"].toDouble(), isService = r["isService"].toBoolean(),
-        sellingMethod = r.get("sellingMethod") ?: SELLING_METHOD_BY_UNIT, lowStockThreshold = r.get("lowStockThreshold")?.toDoubleOrNull(), isContainer = if (r.isMapped("isContainer")) r.get("isContainer").toBoolean() else false,
-        containedProductId = if (r.isMapped("containedProductId")) r.get("containedProductId").ifEmpty { null } else null, containerSize = if (r.isMapped("containerSize")) r.get("containerSize").toDoubleOrNull() else null, supplierIdFk = r.get("supplierIdFk")?.ifEmpty { null }
+        sellingMethod = r.optionalString("sellingMethod") ?: SELLING_METHOD_BY_UNIT, lowStockThreshold = r.optionalDouble("lowStockThreshold"), isContainer = r.optionalString("isContainer")?.toBoolean() ?: false,
+        containedProductId = r.optionalString("containedProductId"), containerSize = r.optionalDouble("containerSize"), supplierIdFk = r.optionalString("supplierIdFk")
     )
-    private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r["birthDate"].toLongOrNull(), r["breed"].ifEmpty { null }, r["allergies"].ifEmpty { null })
-    private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r["serviceId"].ifEmpty { null }, r["treatmentDate"].toLong(), r["description"]?.ifEmpty { null }, r["nextTreatmentDate"].toLongOrNull(), r["isNextTreatmentCompleted"].toBoolean(), r["symptoms"].ifEmpty { null }, r["diagnosis"].ifEmpty { null }, r["treatmentPlan"].ifEmpty { null }, r["weight"].toDoubleOrNull(), r["temperature"]?.ifEmpty { null })
-    private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["date"].toLong(), r["totalAmount"].toDouble(), r["clientIdFk"]?.ifEmpty { null })
-    private fun parseTransaction(r: org.apache.commons.csv.CSVRecord) = Transaction(r["transactionId"], r["saleIdFk"].ifEmpty { null }, r["date"].toLong(), r["type"], r["amount"].toDouble(), r["description"].ifEmpty { null })
+    private fun parsePet(r: org.apache.commons.csv.CSVRecord) = Pet(r["petId"], r["name"], r["ownerIdFk"], r.optionalLong("birthDate"), r.optionalString("breed"), r.optionalString("allergies"))
+    private fun parseTreatment(r: org.apache.commons.csv.CSVRecord) = Treatment(r["treatmentId"], r["petIdFk"], r.optionalString("serviceId"), r["treatmentDate"].toLong(), r.optionalString("description"), r.optionalLong("nextTreatmentDate"), r["isNextTreatmentCompleted"].toBoolean(), r.optionalString("symptoms"), r.optionalString("diagnosis"), r.optionalString("treatmentPlan"), r.optionalDouble("weight"), r.optionalString("temperature"))
+    private fun parseSale(r: org.apache.commons.csv.CSVRecord) = Sale(r["saleId"], r["date"].toLong(), r["totalAmount"].toDouble(), r.optionalString("clientIdFk"))
+    private fun parseTransaction(r: org.apache.commons.csv.CSVRecord) = Transaction(r["transactionId"], r.optionalString("saleIdFk"), r["date"].toLong(), r["type"], r["amount"].toDouble(), r.optionalString("description"))
     private fun parsePayment(r: org.apache.commons.csv.CSVRecord) = Payment(r["paymentId"], r["clientIdFk"], r["amount"].toDouble(), r["paymentDate"].toLong())
     private fun parseSaleProductCrossRef(r: org.apache.commons.csv.CSVRecord) = SaleProductCrossRef(
         saleId = r["saleId"], productId = r["productId"], quantitySold = r["quantitySold"].toDouble(), priceAtTimeOfSale = r["priceAtTimeOfSale"].toDouble(),
-        notes = r.get("notes")?.ifEmpty { null }, overridePrice = r.get("overridePrice")?.toDoubleOrNull()
+        notes = r.optionalString("notes"), overridePrice = r.optionalDouble("overridePrice"),
+        crossRefId = r.optionalString("crossRefId") ?: legacySaleProductCrossRefId(r)
     )
-    private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], r["appointmentDate"].toLong(), r["description"]?.ifEmpty { null })
-    private fun parseSupplier(r: org.apache.commons.csv.CSVRecord) = Supplier(r["supplierId"], r["name"], r["contactPerson"].ifEmpty { null }, r["phone"].ifEmpty { null }, r["email"].ifEmpty { null })
+    private fun parseAppointment(r: org.apache.commons.csv.CSVRecord) = Appointment(r["appointmentId"], r["clientIdFk"], r["petIdFk"], r["appointmentDate"].toLong(), r.optionalString("description"))
+    private fun parseSupplier(r: org.apache.commons.csv.CSVRecord) = Supplier(r["supplierId"], r["name"], r.optionalString("contactPerson"), r.optionalString("phone"), r.optionalString("email"))
+
+    private fun legacySaleProductCrossRefId(r: org.apache.commons.csv.CSVRecord): String {
+        val stableKey = listOf(
+            r["saleId"],
+            r["productId"],
+            r["quantitySold"],
+            r["priceAtTimeOfSale"],
+            r.optionalString("notes").orEmpty(),
+            r.optionalString("overridePrice").orEmpty(),
+            r.recordNumber.toString()
+        ).joinToString("|")
+        return UUID.nameUUIDFromBytes(stableKey.toByteArray(StandardCharsets.UTF_8)).toString()
+    }
 }

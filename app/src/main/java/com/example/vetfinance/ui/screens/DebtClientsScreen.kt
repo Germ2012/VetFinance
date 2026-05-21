@@ -29,6 +29,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
     val clientForPayment by viewModel.clientForPayment.collectAsState()
 
     var showOnlyWithDebt by remember { mutableStateOf(false) }
+    var clientToEdit by remember { mutableStateOf<Client?>(null) }
     var clientToDelete by remember { mutableStateOf<Client?>(null) }
     val isLoading = allClients.isEmpty() && searchQuery.isBlank() && !showOnlyWithDebt
 
@@ -56,6 +57,23 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
             client = currentClientForPayment,
             onDismiss = { viewModel.onDismissPaymentDialog() },
             onConfirm = { amount -> viewModel.makePayment(amount) }
+        )
+    }
+
+    clientToEdit?.let { client ->
+        AddOrEditClientDialog(
+            client = client,
+            onDismiss = { clientToEdit = null },
+            onConfirm = { name, phone, debt ->
+                viewModel.updateClient(
+                    client.copy(
+                        name = name,
+                        phone = phone.takeIf { it.isNotBlank() },
+                        debtAmount = debt
+                    )
+                )
+                clientToEdit = null
+            }
         )
     }
 
@@ -142,6 +160,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                         ClientItem(
                             client = client,
                             onDetailClick = { navController.navigate("client_detail/${client.clientId}") },
+                            onEditClick = { clientToEdit = client },
                             onPayClick = { viewModel.onShowPaymentDialog(client) },
                             onDeleteClick = { clientToDelete = client }
                         )
@@ -174,6 +193,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
 fun ClientItem(
     client: Client,
     onDetailClick: () -> Unit,
+    onEditClick: () -> Unit,
     onPayClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
@@ -202,6 +222,13 @@ fun ClientItem(
                         text = { Text(stringResource(R.string.debt_clients_view_details_menu_item)) },
                         onClick = {
                             onDetailClick()
+                            expanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.appointment_edit_menu)) },
+                        onClick = {
+                            onEditClick()
                             expanded = false
                         }
                     )

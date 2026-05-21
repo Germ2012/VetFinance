@@ -9,7 +9,11 @@ data class SaleWithProducts(
     @Relation(
         parentColumn = "saleId",
         entityColumn = "productId",
-        associateBy = Junction(SaleProductCrossRef::class)
+        associateBy = Junction(
+            value = SaleProductCrossRef::class,
+            parentColumn = "saleId",
+            entityColumn = "productId"
+        )
     )
     val products: List<Product>,
     @Relation(

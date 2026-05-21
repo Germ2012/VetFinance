@@ -3,22 +3,23 @@ package com.example.vetfinance.data
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
+import java.util.UUID
 
 @Entity(
     tableName = "sales_products_cross_ref",
-    primaryKeys = ["saleId", "productId"], // Es más común usar una clave primaria compuesta aquí
+    primaryKeys = ["crossRefId"],
     foreignKeys = [
         ForeignKey(
             entity = Sale::class,
             parentColumns = ["saleId"],
             childColumns = ["saleId"],
-            onDelete = ForeignKey.CASCADE // <-- MODIFICACIÓN AÑADIDA
+            onDelete = ForeignKey.CASCADE
         ),
         ForeignKey(
             entity = Product::class,
             parentColumns = ["productId"],
             childColumns = ["productId"],
-            onDelete = ForeignKey.CASCADE // <-- MODIFICACIÓN AÑADIDA
+            onDelete = ForeignKey.CASCADE
         )
     ],
     indices = [Index("productId"), Index("saleId")]
@@ -29,5 +30,6 @@ data class SaleProductCrossRef(
     val quantitySold: Double,
     val priceAtTimeOfSale: Double,
     val notes: String? = null,
-    val overridePrice: Double? = null
+    val overridePrice: Double? = null,
+    val crossRefId: String = UUID.randomUUID().toString()
 )
