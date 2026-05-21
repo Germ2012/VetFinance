@@ -88,6 +88,7 @@ dependencies {
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.hilt.work)
+    ksp(libs.hilt.compiler.work)
 
     // ---- Navigation y Componentes de UI ----
     implementation(libs.androidx.lifecycle.viewmodel.compose)
