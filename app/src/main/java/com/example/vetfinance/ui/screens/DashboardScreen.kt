@@ -14,7 +14,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
@@ -33,29 +32,29 @@ import com.example.vetfinance.data.SupplierDebtWithSupplier
 
 @Composable
 fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
-    val salesToday by viewModel.salesSummaryToday.collectAsStateWithLifecycle()
-    val upcomingTreatments by viewModel.upcomingTreatments.collectAsStateWithLifecycle()
-    val upcomingAppointments by viewModel.upcomingAppointments.collectAsStateWithLifecycle()
-    val upcomingSupplierDebts by viewModel.upcomingSupplierDebts.collectAsStateWithLifecycle()
-    val petsWithOwners by viewModel.petsWithOwners.collectAsStateWithLifecycle()
+    val salesToday by viewModel.salesSummaryToday.collectAsState()
+    val upcomingTreatments by viewModel.upcomingTreatments.collectAsState()
+    val upcomingAppointments by viewModel.upcomingAppointments.collectAsState()
+    val upcomingSupplierDebts by viewModel.upcomingSupplierDebts.collectAsState()
+    val petsWithOwners by viewModel.petsWithOwners.collectAsState()
     var treatmentForNextDialog by remember { mutableStateOf<Treatment?>(null) }
     val petForDialog = remember(treatmentForNextDialog, petsWithOwners) {
         treatmentForNextDialog?.let { treatment ->
             petsWithOwners.find { it.pet.petId == treatment.petIdFk }
         }
     }
-    val inventory by viewModel.inventory.collectAsStateWithLifecycle()
-    val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
+    val inventory by viewModel.inventory.collectAsState()
+    val suppliers by viewModel.suppliers.collectAsState()
     val services = remember(inventory) { inventory.filter { it.isService } }
-    val showAddProductDialog by viewModel.showAddProductDialog.collectAsStateWithLifecycle()
+    val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
     var showManagementDialog by remember { mutableStateOf(false) }
-    val lowStockProducts by viewModel.lowStockProducts.collectAsStateWithLifecycle()
-    val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
-    val globalSearchQuery by viewModel.globalSearchQuery.collectAsStateWithLifecycle()
-    val globalSearchResults by viewModel.globalSearchResults.collectAsStateWithLifecycle()
-    val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
+    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
+    val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
+    val globalSearchQuery by viewModel.globalSearchQuery.collectAsState()
+    val globalSearchResults by viewModel.globalSearchResults.collectAsState()
+    val appSettings by viewModel.appSettings.collectAsState()
 
-    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsState()
     val petIdToNameMap = remember(petsWithOwners) { petsWithOwners.associate { it.pet.petId to it.pet.name } }
 
     if (treatmentForNextDialog != null && petForDialog != null) {

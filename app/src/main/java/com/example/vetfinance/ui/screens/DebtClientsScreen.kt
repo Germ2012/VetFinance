@@ -19,7 +19,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
@@ -30,12 +29,12 @@ import ui.utils.NumberTransformation
 
 @Composable
 fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
-    val allClients by viewModel.clients.collectAsStateWithLifecycle()
-    val pendingCollectionRows by viewModel.pendingCollectionRows.collectAsStateWithLifecycle()
-    val searchQuery by viewModel.clientSearchQuery.collectAsStateWithLifecycle()
-    val showPaymentDialog by viewModel.showPaymentDialog.collectAsStateWithLifecycle()
-    val clientForPayment by viewModel.clientForPayment.collectAsStateWithLifecycle()
-    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val allClients by viewModel.clients.collectAsState()
+    val pendingCollectionRows by viewModel.pendingCollectionRows.collectAsState()
+    val searchQuery by viewModel.clientSearchQuery.collectAsState()
+    val showPaymentDialog by viewModel.showPaymentDialog.collectAsState()
+    val clientForPayment by viewModel.clientForPayment.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
 
     var showOnlyWithDebt by remember { mutableStateOf(true) }
     var minimumDebtText by remember { mutableStateOf("") }
