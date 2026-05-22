@@ -12,6 +12,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.example.vetfinance.viewmodel.ReminderWorker
 import dagger.hilt.android.HiltAndroidApp
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -20,11 +21,18 @@ class VetFinanceApp : Application(), Configuration.Provider {
 
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
+    private val startupExecutor = Executors.newSingleThreadExecutor()
 
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
-        setupRecurringWork()
+        startupExecutor.execute {
+            try {
+                setupRecurringWork()
+            } finally {
+                startupExecutor.shutdown()
+            }
+        }
     }
 
     override val workManagerConfiguration: Configuration

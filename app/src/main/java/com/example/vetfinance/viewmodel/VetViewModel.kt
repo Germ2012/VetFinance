@@ -45,6 +45,13 @@ data class GlobalSearchResult(
     val subtitle: String
 )
 
+data class DebtCollectionRow(
+    val client: Client,
+    val totalSold: Double,
+    val totalPaid: Double,
+    val balance: Double
+)
+
 enum class TopProductsPeriod(@StringRes val displayResId: Int) {
     WEEK(R.string.topproducts_period_week),
     MONTH(R.string.topproducts_period_month),
@@ -62,9 +69,15 @@ class VetViewModel @Inject constructor(
 
     private val _operationErrorMessage = MutableStateFlow<String?>(null)
     val operationErrorMessage: StateFlow<String?> = _operationErrorMessage.asStateFlow()
+    private val _operationSuccessMessage = MutableStateFlow<String?>(null)
+    val operationSuccessMessage: StateFlow<String?> = _operationSuccessMessage.asStateFlow()
 
     fun clearOperationErrorMessage() {
         _operationErrorMessage.value = null
+    }
+
+    fun clearOperationSuccessMessage() {
+        _operationSuccessMessage.value = null
     }
 
     private fun reportOperationError(error: Throwable) {
@@ -73,6 +86,11 @@ class VetViewModel @Inject constructor(
 
     private fun reportOperationError(message: String) {
         _operationErrorMessage.value = message
+    }
+
+    private fun reportOperationSuccess(message: String) {
+        _operationSuccessMessage.value = null
+        _operationSuccessMessage.value = message
     }
 
     private val _suppliers = MutableStateFlow<List<Supplier>>(emptyList())
@@ -97,8 +115,10 @@ class VetViewModel @Inject constructor(
     fun addOrUpdateSupplier(supplier: Supplier) = viewModelScope.launch {
         if (_editingSupplier.value == null) {
             repository.insertSupplier(supplier)
+            reportOperationSuccess("Proveedor guardado.")
         } else {
             repository.updateSupplier(supplier)
+            reportOperationSuccess("Proveedor actualizado.")
         }
         onDismissSupplierDialog()
     }
@@ -127,19 +147,20 @@ class VetViewModel @Inject constructor(
             val order = RestockOrder(orderId = orderId, supplierIdFk = supplierId, orderDate = orderDate, totalAmount = totalCost)
             val updatedItems = itemsToRestock.map { it.copy(orderIdFk = orderId) }
             repository.performRestock(order, updatedItems, supplierDebtDueDate)
+            reportOperationSuccess("Reabastecimiento registrado.")
         } catch (e: Exception) {
             reportOperationError(e)
         }
     }
 
     fun deleteProduct(product: Product) = viewModelScope.launch {
-        try { repository.deleteProduct(product) } catch (e: Exception) { reportOperationError(e) }
+        try { repository.deleteProduct(product); reportOperationSuccess("Producto eliminado.") } catch (e: Exception) { reportOperationError(e) }
     }
     fun deleteSale(sale: SaleWithProducts) = viewModelScope.launch {
-        try { repository.deleteSale(sale) } catch (e: Exception) { reportOperationError(e) }
+        try { repository.deleteSale(sale); reportOperationSuccess("Venta eliminada y stock restaurado.") } catch (e: Exception) { reportOperationError(e) }
     }
     fun deleteClient(client: Client) = viewModelScope.launch {
-        try { repository.deleteClient(client) } catch (e: Exception) { reportOperationError(e) }
+        try { repository.deleteClient(client); reportOperationSuccess("Cliente eliminado.") } catch (e: Exception) { reportOperationError(e) }
     }
     fun openContainerForBulkSale(containerProduct: Product) = viewModelScope.launch {
         try {
@@ -149,6 +170,7 @@ class VetViewModel @Inject constructor(
                     containedId = containerProduct.containedProductId,
                     amountToTransfer = containerProduct.containerSize
                 )
+                reportOperationSuccess("Contenedor abierto y stock actualizado.")
             }
         } catch (e: Exception) {
             reportOperationError(e)
@@ -185,6 +207,7 @@ class VetViewModel @Inject constructor(
     private val _productStockMovements = MutableStateFlow<List<StockMovement>>(emptyList())
     val productStockMovements: StateFlow<List<StockMovement>> = _productStockMovements.asStateFlow()
     private val _sales = repository.getAllSales().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _payments = repository.getAllPayments().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _appSettings = MutableStateFlow(repository.getAppSettings())
     val appSettings: StateFlow<AppSettings> = _appSettings.asStateFlow()
     private val _globalSearchQuery = MutableStateFlow("")
@@ -201,6 +224,26 @@ class VetViewModel @Inject constructor(
             .filter { productScores.containsKey(it.productId) }
             .sortedByDescending { productScores[it.productId] ?: 0.0 }
             .take(6)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val pendingCollectionRows: StateFlow<List<DebtCollectionRow>> = combine(clients, _sales, _payments) { clientList, sales, payments ->
+        val salesByClient = sales
+            .groupBy { it.sale.clientIdFk }
+            .mapValues { (_, clientSales) -> clientSales.sumOf { it.sale.totalAmount } }
+        val paymentsByClient = payments
+            .groupBy { it.clientIdFk }
+            .mapValues { (_, clientPayments) -> clientPayments.sumOf { it.amount } }
+
+        clientList
+            .filter { it.debtAmount > 0.0 }
+            .map { client ->
+                DebtCollectionRow(
+                    client = client,
+                    totalSold = salesByClient[client.clientId] ?: 0.0,
+                    totalPaid = paymentsByClient[client.clientId] ?: 0.0,
+                    balance = client.debtAmount
+                )
+            }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val globalSearchResults: StateFlow<List<GlobalSearchResult>> = combine(
@@ -550,25 +593,40 @@ class VetViewModel @Inject constructor(
         }
     }
 
-    fun insertOrUpdateProduct(product: Product) {
-        viewModelScope.launch {
-            repository.insertOrUpdateProduct(product)
-        }
+    fun insertOrUpdateProduct(product: Product) = executeWithLoading {
+        val isNewProduct = product.productId.isBlank()
+        repository.insertOrUpdateProduct(product)
+        reportOperationSuccess(if (isNewProduct) "Producto guardado." else "Producto actualizado.")
     }
 
     fun updateAppSettings(settings: AppSettings) {
         repository.saveAppSettings(settings)
         _appSettings.value = settings
+        reportOperationSuccess("Ajustes guardados.")
     }
 
     fun markBackupCreated() {
         _appSettings.value = repository.markBackupCreated()
+        reportOperationSuccess("Fecha de respaldo actualizada.")
     }
 
-    fun addClient(name: String, phone: String, debt: Double) = executeWithLoading { repository.insertClient(Client(name = name, phone = phone.ifBlank { null }, address = null, debtAmount = debt)); onDismissAddClientDialog() }
-    fun updateClient(client: Client) = executeWithLoading { repository.updateClient(client) }
-    fun addPet(pet: Pet) = executeWithLoading { repository.insertPet(pet) }
-    fun updatePet(pet: Pet) = executeWithLoading { repository.updatePet(pet) }
+    fun addClient(name: String, phone: String, debt: Double) = executeWithLoading {
+        repository.insertClient(Client(name = name, phone = phone.ifBlank { null }, address = null, debtAmount = debt))
+        reportOperationSuccess("Cliente guardado.")
+        onDismissAddClientDialog()
+    }
+    fun updateClient(client: Client) = executeWithLoading {
+        repository.updateClient(client)
+        reportOperationSuccess("Cliente actualizado.")
+    }
+    fun addPet(pet: Pet) = executeWithLoading {
+        repository.insertPet(pet)
+        reportOperationSuccess("Mascota guardada.")
+    }
+    fun updatePet(pet: Pet) = executeWithLoading {
+        repository.updatePet(pet)
+        reportOperationSuccess("Mascota actualizada.")
+    }
     fun loadTreatmentsForPet(petId: String) = viewModelScope.launch { repository.getTreatmentsForPet(petId).collect { _treatmentHistory.value = it } }
     fun loadPaymentsForClient(clientId: String) = viewModelScope.launch { repository.getPaymentsForClient(clientId).collect { _paymentHistory.value = it } }
     fun loadDebtHistoryForClient(clientId: String) = viewModelScope.launch { repository.getDebtHistoryForClient(clientId).collect { _debtHistory.value = it } }
@@ -577,20 +635,50 @@ class VetViewModel @Inject constructor(
     fun addTreatment(pet: Pet, description: String?, weight: Double?, temperature: String?, symptoms: String?, diagnosis: String?, treatmentPlan: String?, nextDate: Long?) = executeWithLoading {
         val newTreatment = Treatment( petIdFk = pet.petId, serviceId = null, treatmentDate = System.currentTimeMillis(), description = description, weight = weight, temperature = temperature, symptoms = symptoms, diagnosis = diagnosis, treatmentPlan = treatmentPlan, nextTreatmentDate = nextDate)
         repository.insertTreatment(newTreatment)
+        reportOperationSuccess("Consulta registrada.")
     }
-    fun markTreatmentAsCompleted(treatment: Treatment) = executeWithLoading { repository.markTreatmentAsCompleted(treatment.treatmentId) }
+    fun markTreatmentAsCompleted(treatment: Treatment) = executeWithLoading {
+        repository.markTreatmentAsCompleted(treatment.treatmentId)
+        reportOperationSuccess("Tratamiento marcado como completado.")
+    }
 
-    fun updateTreatment(treatment: Treatment) = executeWithLoading { repository.updateTreatment(treatment) }
-    fun deleteTreatment(treatment: Treatment) = executeWithLoading { repository.deleteTreatment(treatment) }
+    fun updateTreatment(treatment: Treatment) = executeWithLoading {
+        repository.updateTreatment(treatment)
+        reportOperationSuccess("Consulta actualizada.")
+    }
+    fun deleteTreatment(treatment: Treatment) = executeWithLoading {
+        repository.deleteTreatment(treatment)
+        reportOperationSuccess("Consulta eliminada.")
+    }
 
-    fun makePayment(amount: Double) = executeWithLoading { _clientForPayment.value?.let { repository.makePayment(it, amount); onDismissPaymentDialog() } }
-    fun adjustClientDebt(client: Client, newDebt: Double, note: String?) = executeWithLoading { repository.adjustClientDebt(client, newDebt, note) }
-    fun addAppointment(appointment: Appointment) = executeWithLoading { repository.insertAppointment(appointment) }
-    fun updateAppointment(appointment: Appointment) = executeWithLoading { repository.updateAppointment(appointment) }
+    fun makePayment(amount: Double) = executeWithLoading {
+        val client = _clientForPayment.value ?: return@executeWithLoading
+        val paid = kotlin.math.min(amount, client.debtAmount)
+        val remainingDebt = (client.debtAmount - paid).coerceAtLeast(0.0)
+        repository.makePayment(client, amount)
+        reportOperationSuccess("Pago registrado. Saldo pendiente: Gs. ${remainingDebt.formatMoneyForMessage()}.")
+        onDismissPaymentDialog()
+    }
+    fun adjustClientDebt(client: Client, newDebt: Double, note: String?) = executeWithLoading {
+        repository.adjustClientDebt(client, newDebt, note)
+        reportOperationSuccess("Deuda ajustada. Nuevo saldo: Gs. ${newDebt.formatMoneyForMessage()}.")
+    }
+    fun addAppointment(appointment: Appointment) = executeWithLoading {
+        repository.insertAppointment(appointment)
+        reportOperationSuccess("Cita agendada.")
+    }
+    fun updateAppointment(appointment: Appointment) = executeWithLoading {
+        repository.updateAppointment(appointment)
+        reportOperationSuccess("Cita actualizada.")
+    }
     fun updateAppointmentStatus(appointment: Appointment, status: String) = executeWithLoading {
         repository.updateAppointment(appointment.copy(status = status))
+        reportOperationSuccess("Estado de cita actualizado.")
     }
-    fun deleteAppointment(appointment: Appointment) = executeWithLoading { repository.deleteAppointment(appointment) }
+    fun deleteAppointment(appointment: Appointment) = executeWithLoading {
+        repository.deleteAppointment(appointment)
+        reportOperationSuccess("Cita eliminada.")
+    }
     fun addSupplierDebt(supplierId: String?, description: String, amount: Double, dueDate: Long, note: String? = null) = executeWithLoading {
         repository.insertSupplierDebt(
             SupplierDebt(
@@ -603,10 +691,15 @@ class VetViewModel @Inject constructor(
                 note = note?.ifBlank { null }
             )
         )
+        reportOperationSuccess("Deuda de proveedor registrada.")
     }
-    fun markSupplierDebtAsPaid(debtId: String) = executeWithLoading { repository.markSupplierDebtAsPaid(debtId) }
+    fun markSupplierDebtAsPaid(debtId: String) = executeWithLoading {
+        repository.markSupplierDebtAsPaid(debtId)
+        reportOperationSuccess("Deuda de proveedor marcada como pagada.")
+    }
     fun adjustProductStock(product: Product, newStock: Double, note: String) = executeWithLoading {
         repository.adjustProductStock(product, newStock, note)
+        reportOperationSuccess("Stock ajustado.")
     }
 
     private fun shouldValidateStockInCart(product: Product): Boolean {
@@ -747,6 +840,7 @@ class VetViewModel @Inject constructor(
                 _shoppingCart.value
             )
             clearCart()
+            reportOperationSuccess("Venta registrada correctamente.")
             onFinished()
         }
     }
@@ -757,5 +851,9 @@ class VetViewModel @Inject constructor(
 
     private fun Double.formatForMessage(): String {
         return if (this % 1.0 == 0.0) this.toLong().toString() else String.format(Locale.getDefault(), "%.3f", this)
+    }
+
+    private fun Double.formatMoneyForMessage(): String {
+        return String.format(Locale.getDefault(), "%,.0f", this)
     }
 }

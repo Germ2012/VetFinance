@@ -3,6 +3,8 @@ package com.example.vetfinance.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -17,24 +19,30 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
+import com.example.vetfinance.viewmodel.DebtCollectionRow
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.formatCurrency // Importar formatCurrency
 import ui.utils.NumberTransformation
 
 @Composable
 fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
-    val allClients by viewModel.clients.collectAsState()
-    val searchQuery by viewModel.clientSearchQuery.collectAsState()
-    val showPaymentDialog by viewModel.showPaymentDialog.collectAsState()
-    val clientForPayment by viewModel.clientForPayment.collectAsState()
+    val allClients by viewModel.clients.collectAsStateWithLifecycle()
+    val pendingCollectionRows by viewModel.pendingCollectionRows.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.clientSearchQuery.collectAsStateWithLifecycle()
+    val showPaymentDialog by viewModel.showPaymentDialog.collectAsStateWithLifecycle()
+    val clientForPayment by viewModel.clientForPayment.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 
-    var showOnlyWithDebt by remember { mutableStateOf(false) }
+    var showOnlyWithDebt by remember { mutableStateOf(true) }
+    var minimumDebtText by remember { mutableStateOf("") }
+    var selectedSort by remember { mutableStateOf("Mayor deuda") }
     var clientToDelete by remember { mutableStateOf<Client?>(null) }
     var clientToAdjustDebt by remember { mutableStateOf<Client?>(null) }
-    val isLoading = allClients.isEmpty() && searchQuery.isBlank() && !showOnlyWithDebt
+    val sortOptions = remember { listOf("Mayor deuda", "Menor deuda", "Nombre") }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -42,17 +50,39 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
         }
     }
 
-    val filteredClients = remember(allClients, searchQuery, showOnlyWithDebt) {
-        val clients = if (showOnlyWithDebt) {
-            allClients.filter { it.debtAmount > 0 }
-        } else {
-            allClients
-        }
-        clients.filter { client ->
-            if (searchQuery.isBlank()) true
-            else client.name.contains(searchQuery, ignoreCase = true)
+    val collectionRows = remember(allClients, pendingCollectionRows) {
+        val pendingByClientId = pendingCollectionRows.associateBy { it.client.clientId }
+        allClients.map { client ->
+            pendingByClientId[client.clientId] ?: DebtCollectionRow(
+                client = client,
+                totalSold = 0.0,
+                totalPaid = 0.0,
+                balance = client.debtAmount
+            )
         }
     }
+
+    val filteredRows = remember(collectionRows, pendingCollectionRows, searchQuery, showOnlyWithDebt, minimumDebtText, selectedSort) {
+        val minimumDebt = minimumDebtText.toDoubleOrNull() ?: 0.0
+        val baseRows = if (showOnlyWithDebt) {
+            pendingCollectionRows
+        } else {
+            collectionRows
+        }
+        val filtered = baseRows.filter { row ->
+            val matchesSearch = searchQuery.isBlank() ||
+                    row.client.name.contains(searchQuery, ignoreCase = true) ||
+                    row.client.phone.orEmpty().contains(searchQuery, ignoreCase = true)
+            matchesSearch && row.balance >= minimumDebt
+        }
+        when (selectedSort) {
+            "Menor deuda" -> filtered.sortedBy { it.balance }
+            "Nombre" -> filtered.sortedBy { it.client.name.lowercase() }
+            else -> filtered.sortedByDescending { it.balance }
+        }
+    }
+    val totalPending = remember(filteredRows) { filteredRows.sumOf { it.balance } }
+    val totalPaid = remember(filteredRows) { filteredRows.sumOf { it.totalPaid } }
 
     val currentClientForPayment = clientForPayment
     if (showPaymentDialog && currentClientForPayment != null) {
@@ -146,6 +176,38 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
+            CollectionSummaryCard(
+                clientCount = filteredRows.size,
+                totalPending = totalPending,
+                totalPaid = totalPaid
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = minimumDebtText,
+                onValueChange = { minimumDebtText = it.filter { char -> char.isDigit() } },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Deuda minima") },
+                prefix = { Text(stringResource(R.string.text_prefix_gs)) },
+                visualTransformation = NumberTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                sortOptions.forEach { option ->
+                    FilterChip(
+                        selected = selectedSort == option,
+                        onClick = { selectedSort = option },
+                        label = { Text(option) }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -153,9 +215,10 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 }
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(filteredClients, key = { it.clientId }) { client -> 
+                    items(filteredRows, key = { it.client.clientId }) { row ->
+                        val client = row.client
                         ClientItem(
-                            client = client,
+                            row = row,
                             onDetailClick = { navController.navigate("client_detail/${client.clientId}") },
                             onPayClick = { viewModel.onShowPaymentDialog(client) },
                             onAdjustDebtClick = { clientToAdjustDebt = client },
@@ -163,7 +226,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                         )
                     }
 
-                    if (filteredClients.isEmpty()) {
+                    if (filteredRows.isEmpty()) {
                         item {
                             Box(
                                 modifier = Modifier
@@ -187,14 +250,35 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
 }
 
 @Composable
+private fun CollectionSummaryCard(
+    clientCount: Int,
+    totalPending: Double,
+    totalPaid: Double
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("Cobros pendientes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text("Saldo: ${stringResource(R.string.text_prefix_gs)} ${formatCurrency(totalPending)}")
+            Text("Clientes: $clientCount")
+            Text("Pagado historico: ${stringResource(R.string.text_prefix_gs)} ${formatCurrency(totalPaid)}")
+        }
+    }
+}
+
+@Composable
 fun ClientItem(
-    client: Client,
+    row: DebtCollectionRow,
     onDetailClick: () -> Unit,
     onPayClick: () -> Unit,
     onAdjustDebtClick: () -> Unit,
     onDeleteClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val client = row.client
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -203,9 +287,16 @@ fun ClientItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(client.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                Text(stringResource(R.string.client_item_debt_label, formatCurrency(client.debtAmount)), style = MaterialTheme.typography.bodyMedium)
+                client.phone?.takeIf { it.isNotBlank() }?.let { phone ->
+                    Text(phone, style = MaterialTheme.typography.bodySmall)
+                }
+                Text(stringResource(R.string.client_item_debt_label, formatCurrency(row.balance)), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "Vendido: ${stringResource(R.string.text_prefix_gs)} ${formatCurrency(row.totalSold)} - Pagado: ${stringResource(R.string.text_prefix_gs)} ${formatCurrency(row.totalPaid)}",
+                    style = MaterialTheme.typography.labelMedium
+                )
             }
-            if (client.debtAmount > 0) {
+            if (row.balance > 0) {
                 TextButton(onClick = onPayClick) {
                     Text(stringResource(R.string.client_item_pay_button))
                 }

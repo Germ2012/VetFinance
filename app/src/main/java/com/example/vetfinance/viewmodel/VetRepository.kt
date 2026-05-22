@@ -281,6 +281,7 @@ class VetRepository @Inject constructor(
     fun getAllProducts(): Flow<List<Product>> = productDao.getAllProducts()
     fun getAllSales(): Flow<List<SaleWithProducts>> = saleDao.getAllSalesWithProducts()
     fun getAllClients(): Flow<List<Client>> = clientDao.getAllClients()
+    fun getAllPayments(): Flow<List<Payment>> = paymentDao.getAllPaymentsSimple()
     fun getAllSuppliers(): Flow<List<Supplier>> = supplierDao.getAllSuppliers()
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>> = paymentDao.getPaymentsForClient(clientId)
     fun getDebtHistoryForClient(clientId: String): Flow<List<ClientDebtHistory>> = clientDebtHistoryDao.getHistoryForClient(clientId)
