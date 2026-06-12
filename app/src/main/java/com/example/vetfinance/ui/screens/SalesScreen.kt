@@ -3,10 +3,13 @@ package com.example.vetfinance.ui.screens
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
@@ -34,6 +38,7 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
     val filteredSales by viewModel.filteredSales.collectAsState()
     val selectedDate by viewModel.selectedSaleDateFilter.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val visibleSalesTotal = remember(filteredSales) { filteredSales.sumOf { it.sale.totalAmount } }
 
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
@@ -129,7 +134,13 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                     }
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
+            SalesSummaryStrip(
+                saleCount = filteredSales.size,
+                totalAmount = visibleSalesTotal,
+                selectedDate = selectedDate
+            )
+            Spacer(modifier = Modifier.height(12.dp))
 
             // --- LISTA DE VENTAS ---
             if (isLoading && filteredSales.isEmpty()) {
@@ -140,10 +151,16 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     val message = if (selectedDate != null) stringResource(R.string.no_sales_for_date)
                     else stringResource(R.string.no_sales_recorded)
-                    Text(message)
+                    SalesEmptyState(
+                        message = message,
+                        onAddClick = { navController.navigate(Screen.AddSale.route) }
+                    )
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    contentPadding = PaddingValues(bottom = 96.dp)
+                ) {
                     items(filteredSales, key = { it.sale.saleId }) { sale ->
                         SaleItem(
                             saleWithProducts = sale,
@@ -157,6 +174,89 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
 }
 
 @Composable
+private fun SalesSummaryStrip(
+    saleCount: Int,
+    totalAmount: Double,
+    selectedDate: Long?
+) {
+    val periodText = if (selectedDate == null) {
+        "Todas las ventas visibles"
+    } else {
+        val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
+        "Ventas del ${sdf.format(Date(selectedDate))}"
+    }
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Default.PointOfSale,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(30.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    periodText,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "$saleCount ventas",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            Text(
+                text = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(totalAmount),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+    }
+}
+
+@Composable
+private fun SalesEmptyState(
+    message: String,
+    onAddClick: () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ReceiptLong,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(34.dp)
+            )
+            Text(message, style = MaterialTheme.typography.bodyLarge)
+            Button(onClick = onAddClick, shape = RoundedCornerShape(8.dp)) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(stringResource(R.string.register_sale_fab))
+            }
+        }
+    }
+}
+
+@Composable
 fun SaleItem(
     saleWithProducts: SaleWithProducts,
     onDelete: () -> Unit
@@ -164,7 +264,9 @@ fun SaleItem(
     val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
     Card(
         modifier = Modifier.fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(4.dp)
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        elevation = CardDefaults.cardElevation(1.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // --- ENCABEZADO DE LA TARJETA ---
@@ -173,11 +275,20 @@ fun SaleItem(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = dateFormat.format(Date(saleWithProducts.sale.date)),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.ReceiptLong,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = dateFormat.format(Date(saleWithProducts.sale.date)),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.content_description_delete_sale))
                 }

@@ -6,10 +6,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
@@ -141,9 +146,23 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
         ) {
             Text(
                 text = stringResource(R.string.debt_clients_screen_title),
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(vertical = 16.dp)
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 18.dp)
             )
+            Text(
+                text = "Filtra, cobra y consulta el historial de cada cliente.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+            )
+
+            CollectionSummaryCard(
+                clientCount = filteredRows.size,
+                totalPending = totalPending,
+                totalPaid = totalPaid
+            )
+            Spacer(modifier = Modifier.height(12.dp))
 
             OutlinedTextField(
                 value = searchQuery,
@@ -158,62 +177,67 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                         }
                     }
                 },
-                singleLine = true
+                singleLine = true,
+                shape = RoundedCornerShape(8.dp)
             )
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            Row(
+            Card(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End
+                shape = RoundedCornerShape(8.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
             ) {
-                Text(stringResource(R.string.debt_clients_show_only_with_debt_switch))
-                Spacer(modifier = Modifier.width(8.dp))
-                Switch(
-                    checked = showOnlyWithDebt,
-                    onCheckedChange = { showOnlyWithDebt = it }
-                )
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-            CollectionSummaryCard(
-                clientCount = filteredRows.size,
-                totalPending = totalPending,
-                totalPaid = totalPaid
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = minimumDebtText,
-                onValueChange = { minimumDebtText = it.filter { char -> char.isDigit() } },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Deuda minima") },
-                prefix = { Text(stringResource(R.string.text_prefix_gs)) },
-                visualTransformation = NumberTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                sortOptions.forEach { option ->
-                    FilterChip(
-                        selected = selectedSort == option,
-                        onClick = { selectedSort = option },
-                        label = { Text(option) }
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(stringResource(R.string.debt_clients_show_only_with_debt_switch))
+                        Switch(
+                            checked = showOnlyWithDebt,
+                            onCheckedChange = { showOnlyWithDebt = it }
+                        )
+                    }
+                    OutlinedTextField(
+                        value = minimumDebtText,
+                        onValueChange = { minimumDebtText = it.filter { char -> char.isDigit() } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Deuda m\u00ednima") },
+                        prefix = { Text(stringResource(R.string.text_prefix_gs)) },
+                        visualTransformation = NumberTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                        shape = RoundedCornerShape(8.dp)
                     )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        sortOptions.forEach { option ->
+                            FilterChip(
+                                selected = selectedSort == option,
+                                onClick = { selectedSort = option },
+                                label = { Text(option) }
+                            )
+                        }
+                    }
                 }
             }
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 96.dp)
+                ) {
                     items(filteredRows, key = { it.client.clientId }) { row ->
                         val client = row.client
                         ClientItem(
@@ -227,19 +251,12 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
 
                     if (filteredRows.isEmpty()) {
                         item {
-                            Box(
-                                modifier = Modifier
-                                    .fillParentMaxSize()
-                                    .padding(top = 100.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                val message = when {
-                                    searchQuery.isNotBlank() -> stringResource(R.string.debt_clients_empty_search_message)
-                                    showOnlyWithDebt -> stringResource(R.string.debt_clients_empty_debt_message)
-                                    else -> stringResource(R.string.debt_clients_empty_clients_message)
-                                }
-                                Text(message)
+                            val message = when {
+                                searchQuery.isNotBlank() -> stringResource(R.string.debt_clients_empty_search_message)
+                                showOnlyWithDebt -> stringResource(R.string.debt_clients_empty_debt_message)
+                                else -> stringResource(R.string.debt_clients_empty_clients_message)
                             }
+                            DebtClientsEmptyState(message = message)
                         }
                     }
                 }
@@ -256,15 +273,67 @@ private fun CollectionSummaryCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text("Cobros pendientes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text("Saldo: ${stringResource(R.string.text_prefix_gs)} ${formatCurrency(totalPending)}")
-            Text("Clientes: $clientCount")
-            Text("Pagado historico: ${stringResource(R.string.text_prefix_gs)} ${formatCurrency(totalPaid)}")
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.Payments,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Cobros pendientes",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SummaryValue(
+                    label = "Saldo",
+                    value = "${stringResource(R.string.text_prefix_gs)} ${formatCurrency(totalPending)}",
+                    modifier = Modifier.weight(1f)
+                )
+                SummaryValue(
+                    label = "Clientes",
+                    value = clientCount.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                SummaryValue(
+                    label = "Pagado",
+                    value = "${stringResource(R.string.text_prefix_gs)} ${formatCurrency(totalPaid)}",
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun SummaryValue(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier = modifier) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -279,15 +348,34 @@ fun ClientItem(
     var expanded by remember { mutableStateOf(false) }
     val client = row.client
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onDetailClick() },
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
         Row(
-            modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp),
+            modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Icon(
+                Icons.Default.People,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(26.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(client.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    client.name,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 client.phone?.takeIf { it.isNotBlank() }?.let { phone ->
-                    Text(phone, style = MaterialTheme.typography.bodySmall)
+                    Text(phone, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Text(stringResource(R.string.client_item_debt_label, formatCurrency(row.balance)), style = MaterialTheme.typography.bodyMedium)
                 Text(
@@ -296,7 +384,7 @@ fun ClientItem(
                 )
             }
             if (row.balance > 0) {
-                TextButton(onClick = onPayClick) {
+                FilledTonalButton(onClick = onPayClick, shape = RoundedCornerShape(8.dp)) {
                     Text(stringResource(R.string.client_item_pay_button))
                 }
             }
@@ -328,6 +416,31 @@ fun ClientItem(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DebtClientsEmptyState(message: String) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 24.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                Icons.Default.People,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
+            )
+            Text(message, style = MaterialTheme.typography.bodyLarge)
         }
     }
 }

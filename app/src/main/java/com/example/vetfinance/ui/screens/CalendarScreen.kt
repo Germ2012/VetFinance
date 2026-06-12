@@ -9,8 +9,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +26,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.vetfinance.R
@@ -41,6 +46,7 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -154,6 +160,7 @@ fun CalendarScreen(viewModel: VetViewModel) {
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     AppointmentList(
+                        selectedDate = selectedDate,
                         appointments = appointments,
                         supplierDebts = supplierDebts,
                         onMarkSupplierDebtPaid = { viewModel.markSupplierDebtAsPaid(it) },
@@ -179,6 +186,7 @@ fun CalendarScreen(viewModel: VetViewModel) {
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     AppointmentList(
+                        selectedDate = selectedDate,
                         appointments = appointments,
                         supplierDebts = supplierDebts,
                         onMarkSupplierDebtPaid = { viewModel.markSupplierDebtAsPaid(it) },
@@ -240,6 +248,7 @@ fun Day(day: CalendarDay, isSelected: Boolean, onClick: (CalendarDay) -> Unit) {
 
 @Composable
 fun AppointmentList(
+    selectedDate: LocalDate,
     appointments: List<AppointmentWithDetails>,
     supplierDebts: List<SupplierDebtWithSupplier>,
     onMarkSupplierDebtPaid: (String) -> Unit,
@@ -247,6 +256,11 @@ fun AppointmentList(
 ) {
     Column {
         HorizontalDivider()
+        CalendarDaySummary(
+            selectedDate = selectedDate,
+            appointmentCount = appointments.size,
+            supplierDebtCount = supplierDebts.size
+        )
         if (appointments.isEmpty() && supplierDebts.isEmpty()) {
             Box(
                 modifier = Modifier
@@ -254,7 +268,7 @@ fun AppointmentList(
                     .padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(stringResource(R.string.no_appointments_for_selected_day))
+                CalendarEmptyState(message = stringResource(R.string.no_appointments_for_selected_day))
             }
         } else {
             LazyColumn(
@@ -287,12 +301,89 @@ fun AppointmentList(
 }
 
 @Composable
+private fun CalendarDaySummary(
+    selectedDate: LocalDate,
+    appointmentCount: Int,
+    supplierDebtCount: Int
+) {
+    val formatter = remember { DateTimeFormatter.ofPattern("EEEE dd/MM", Locale("es", "ES")) }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp, 12.dp, 16.dp, 0.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    Icons.Default.CalendarMonth,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = selectedDate.format(formatter).replaceFirstChar { it.uppercase() },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AssistChip(
+                    onClick = {},
+                    label = { Text("$appointmentCount citas") },
+                    leadingIcon = {
+                        Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
+                )
+                AssistChip(
+                    onClick = {},
+                    label = { Text("$supplierDebtCount deudas") },
+                    leadingIcon = {
+                        Icon(Icons.Default.LocalShipping, contentDescription = null, modifier = Modifier.size(16.dp))
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarEmptyState(message: String) {
+    Card(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.size(32.dp)
+            )
+            Text(message, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+        }
+    }
+}
+
+@Composable
 fun SupplierDebtItem(
     debt: SupplierDebtWithSupplier,
     onMarkPaid: (String) -> Unit
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (debt.isPaid) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.secondaryContainer
         )
@@ -433,7 +524,11 @@ fun AppointmentItem(details: AppointmentWithDetails, onStatusChange: (String) ->
         APPOINTMENT_STATUS_CANCELLED -> "Cancelada"
         else -> "Pendiente"
     }
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("${timeFormat.format(Date(details.appointment.appointmentDate))} - ${details.pet.name}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text(stringResource(R.string.owner_label, details.client.name), style = MaterialTheme.typography.bodyMedium)

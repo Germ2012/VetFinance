@@ -1,17 +1,25 @@
 package com.example.vetfinance.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddShoppingCart
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
@@ -33,6 +41,8 @@ fun InventoryScreen(viewModel: VetViewModel) {
     val showDialog by viewModel.showAddProductDialog.collectAsState()
     val filter by viewModel.inventoryFilter.collectAsState()
     val inventory by viewModel.inventory.collectAsState()
+    val searchQuery by viewModel.productSearchQuery.collectAsState()
+    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
     val suppliers by viewModel.suppliers.collectAsState()
     var productToEdit by remember { mutableStateOf<Product?>(null) }
     var productToDelete by remember { mutableStateOf<Product?>(null) }
@@ -47,13 +57,24 @@ fun InventoryScreen(viewModel: VetViewModel) {
     val productsFilterText = stringResource(R.string.inventory_filter_products)
     val servicesFilterText = stringResource(R.string.inventory_filter_services)
 
-    val filteredProducts = remember(inventory, filter, productsFilterText, servicesFilterText) {
-        when (filter) {
+    val filteredProducts = remember(inventory, filter, searchQuery, productsFilterText, servicesFilterText) {
+        val byType = when (filter) {
             productsFilterText -> inventory.filter { !it.isService }
             servicesFilterText -> inventory.filter { it.isService }
             else -> inventory
         }
+        if (searchQuery.isBlank()) {
+            byType
+        } else {
+            byType.filter { product ->
+                product.name.contains(searchQuery, ignoreCase = true) ||
+                    product.category.orEmpty().contains(searchQuery, ignoreCase = true) ||
+                    product.supplierIdFk.orEmpty().contains(searchQuery, ignoreCase = true)
+            }
+        }
     }
+    val productCount = remember(inventory) { inventory.count { !it.isService } }
+    val serviceCount = remember(inventory) { inventory.count { it.isService } }
 
     if (showDialog) {
         ProductDialog(
@@ -146,18 +167,58 @@ fun InventoryScreen(viewModel: VetViewModel) {
             }
         }
     ) { paddingValues ->
-        Column(modifier = Modifier.padding(paddingValues).padding(16.dp)) {
-            Text(stringResource(R.string.tab_inventory), style = MaterialTheme.typography.headlineMedium)
-            Spacer(modifier = Modifier.height(16.dp))
+        Column(
+            modifier = Modifier
+                .padding(paddingValues)
+                .padding(horizontal = 16.dp)
+        ) {
+            Text(
+                stringResource(R.string.tab_inventory),
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(top = 18.dp)
+            )
+            Text(
+                text = "Busca, filtra y corrige stock desde una sola vista.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+            )
+            InventoryOverview(
+                productCount = productCount,
+                serviceCount = serviceCount,
+                lowStockCount = lowStockProducts.size
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { viewModel.onProductSearchQueryChange(it) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.search_product_hint)) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotBlank()) {
+                        IconButton(onClick = { viewModel.clearProductSearchQuery() }) {
+                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.clear_search_content_description))
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(8.dp)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
             InventoryFilter(selectedFilter = filter, onFilterSelected = { viewModel.onInventoryFilterChanged(it) })
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             if (isLoading && inventory.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 96.dp)
+                ) {
                     items(filteredProducts, key = { it.productId }) { product ->
                         InventoryItem(
                             product = product,
@@ -177,16 +238,81 @@ fun InventoryScreen(viewModel: VetViewModel) {
                     }
                     if (filteredProducts.isEmpty() && !isLoading) {
                         item {
-                            Box(
-                                modifier = Modifier.fillParentMaxSize().padding(top = 100.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(stringResource(R.string.inventory_no_products_matching_filter))
-                            }
+                            InventoryEmptyState(
+                                message = stringResource(R.string.inventory_no_products_matching_filter),
+                                onAddClick = { viewModel.onShowAddProductDialog() }
+                            )
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun InventoryOverview(
+    productCount: Int,
+    serviceCount: Int,
+    lowStockCount: Int
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        InventoryMetric(
+            modifier = Modifier.weight(1f),
+            label = "Productos",
+            value = productCount.toString(),
+            icon = Icons.Default.Inventory
+        )
+        InventoryMetric(
+            modifier = Modifier.weight(1f),
+            label = "Servicios",
+            value = serviceCount.toString(),
+            icon = Icons.Default.AddShoppingCart
+        )
+        InventoryMetric(
+            modifier = Modifier.weight(1f),
+            label = "Alertas",
+            value = lowStockCount.toString(),
+            icon = Icons.Default.WarningAmber,
+            isWarning = lowStockCount > 0
+        )
+    }
+}
+
+@Composable
+private fun InventoryMetric(
+    modifier: Modifier,
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    isWarning: Boolean = false
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isWarning) {
+                MaterialTheme.colorScheme.errorContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerHigh
+            }
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -225,25 +351,59 @@ fun InventoryItem(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onEdit(product) },
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
         Row(
-            modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 16.dp, end = 0.dp),
+            modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 0.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(product.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
                 Text(
-                    text = if (product.isService) stringResource(R.string.inventory_item_type_service)
-                    else stringResource(R.string.inventory_item_type_product) + ": " + product.sellingMethod,
-                    style = MaterialTheme.typography.bodySmall
+                    product.name,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AssistChip(
+                        onClick = {},
+                        label = {
+                            Text(
+                                if (product.isService) stringResource(R.string.inventory_item_type_service)
+                                else stringResource(R.string.inventory_item_type_product)
+                            )
+                        }
+                    )
+                    if (!product.isService) {
+                        AssistChip(onClick = {}, label = { Text(product.sellingMethod) })
+                    }
+                }
                 product.category?.takeIf { it.isNotBlank() }?.let {
-                    Text("Categoria: $it", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "Categor\u00eda: $it",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
                 if (product.isContainer) {
                     Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = { onOpenContainer(product) }, enabled = product.stock >= 1) {
+                    FilledTonalButton(
+                        onClick = { onOpenContainer(product) },
+                        enabled = product.stock >= 1,
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text("Abrir 1 para Venta a Granel")
                     }
                 }
@@ -259,6 +419,15 @@ fun InventoryItem(
                         text = "Stock: ${formatCurrency(product.stock).replace(",00","")}$unit",
                         style = MaterialTheme.typography.bodyMedium
                     )
+                    product.lowStockThreshold?.let { threshold ->
+                        if (threshold > 0 && product.stock < threshold) {
+                            Text(
+                                text = "Bajo stock",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
             }
             Box(modifier = Modifier.align(Alignment.Top)) {
@@ -307,6 +476,39 @@ fun InventoryItem(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InventoryEmptyState(
+    message: String,
+    onAddClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 24.dp),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                Icons.Default.Inventory,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
+            )
+            Text(message, style = MaterialTheme.typography.bodyLarge)
+            Button(onClick = onAddClick, shape = RoundedCornerShape(8.dp)) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(stringResource(R.string.content_description_add_product))
             }
         }
     }

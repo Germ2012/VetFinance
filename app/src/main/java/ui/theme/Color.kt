@@ -1,13 +1,24 @@
-// ruta: app/src/main/java/com/example/vetfinance/ui/theme/Color.kt
-
 package com.example.vetfinance.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Define aquí tus colores principales para usarlos en el tema.
-val GreenPrimary = Color(0xFF388E3C) // Verde principal más oscuro
-val GreenSecondary = Color(0xFF66BB6A) // Verde secundario más claro
-val GreenContainer = Color(0xFFC8E6C9) // Un verde muy pálido para fondos
-val OnPrimaryTitle = Color.White // Texto sobre el color primario
-val TextPrimary = Color(0xFF212121) // Texto principal oscuro
-val TextSecondary = Color(0xFF757575) // Texto secundario gris
+val GreenPrimary = Color(0xFF236C43)
+val GreenOnPrimary = Color.White
+val GreenPrimaryContainer = Color(0xFFD8F0DE)
+val GreenOnPrimaryContainer = Color(0xFF123522)
+
+val TealSecondary = Color(0xFF246A73)
+val TealSecondaryContainer = Color(0xFFCDEEF1)
+val TealOnSecondaryContainer = Color(0xFF0A3439)
+
+val AmberTertiary = Color(0xFF8A5A00)
+val AmberTertiaryContainer = Color(0xFFFFE3A5)
+val AmberOnTertiaryContainer = Color(0xFF422C00)
+
+val ErrorContainer = Color(0xFFFFDAD6)
+val OnErrorContainer = Color(0xFF410002)
+val AppBackground = Color(0xFFF7FBF7)
+val AppSurface = Color(0xFFFFFCF7)
+val AppSurfaceVariant = Color(0xFFE0E8E1)
+val TextPrimary = Color(0xFF17201A)
+val TextSecondary = Color(0xFF5D6B61)
