@@ -6,19 +6,24 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AddShoppingCart
+import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.RestockOrderItem
+import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.data.Supplier
 import com.example.vetfinance.viewmodel.VetViewModel
 import kotlinx.coroutines.launch
@@ -26,6 +31,7 @@ import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.util.*
+import kotlin.math.ceil
 import ui.utils.NumberTransformation
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -36,6 +42,7 @@ fun AddRestockScreen( // Renamed
 ) {
     val suppliers by viewModel.suppliers.collectAsState()
     val allProducts by viewModel.inventory.collectAsState()
+    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
     val searchQuery by viewModel.restockSearchQuery.collectAsState()
     var selectedDate by remember { mutableStateOf(System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -53,6 +60,15 @@ fun AddRestockScreen( // Renamed
     }
 
     val restockQuantitiesAndCosts = remember { mutableStateMapOf<String, Pair<String, String>>() }
+    val suggestedLowStockProducts = remember(lowStockProducts, selectedSupplierId) {
+        if (selectedSupplierId == null) {
+            lowStockProducts.sortedBy { it.name.lowercase(Locale.getDefault()) }
+        } else {
+            lowStockProducts
+                .filter { it.supplierIdFk == selectedSupplierId }
+                .sortedBy { it.name.lowercase(Locale.getDefault()) }
+        }
+    }
 
     val productsToShow by remember(selectedSupplierId, allProducts, searchQuery) {
         derivedStateOf {
@@ -251,6 +267,34 @@ fun AddRestockScreen( // Renamed
                 }
             }
 
+            if (lowStockProducts.isNotEmpty()) {
+                SuggestedRestockCard(
+                    selectedSupplier = selectedSupplier,
+                    lowStockCount = lowStockProducts.size,
+                    suggestedProducts = suggestedLowStockProducts,
+                    onApplySuggestions = {
+                        when {
+                            selectedSupplierId == null -> {
+                                scope.launch { snackbarHostState.showSnackbar("Elegi un proveedor para aplicar una sugerencia precisa.") }
+                            }
+                            suggestedLowStockProducts.isEmpty() -> {
+                                scope.launch { snackbarHostState.showSnackbar("Este proveedor no tiene productos en alerta de stock bajo.") }
+                            }
+                            else -> {
+                                suggestedLowStockProducts.forEach { product ->
+                                    restockQuantitiesAndCosts[product.productId] = Pair(
+                                        suggestedRestockQuantity(product),
+                                        product.cost.takeIf { it > 0.0 }?.let { formatRestockNumber(it) } ?: ""
+                                    )
+                                }
+                                scope.launch { snackbarHostState.showSnackbar("Sugerencia aplicada para ${suggestedLowStockProducts.size} productos.") }
+                            }
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             if (productsToShow.isEmpty()){
                  Text(
                     text = stringResource(R.string.products_from_supplier_empty),
@@ -279,6 +323,94 @@ fun AddRestockScreen( // Renamed
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SuggestedRestockCard(
+    selectedSupplier: Supplier?,
+    lowStockCount: Int,
+    suggestedProducts: List<Product>,
+    onApplySuggestions: () -> Unit
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    Icons.Default.WarningAmber,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(24.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Reposicion sugerida", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (selectedSupplier == null) {
+                            "$lowStockCount productos en alerta. Selecciona proveedor para precargar."
+                        } else {
+                            "${suggestedProducts.size} alertas vinculadas a ${selectedSupplier.name}."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (suggestedProducts.isNotEmpty()) {
+                suggestedProducts.take(3).forEach { product ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.Inventory, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Text(product.name, style = MaterialTheme.typography.bodyMedium)
+                        }
+                        Text(
+                            "Sugerido ${suggestedRestockQuantity(product)}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+                if (suggestedProducts.size > 3) {
+                    Text(
+                        "+${suggestedProducts.size - 3} productos mas",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            FilledTonalButton(
+                onClick = onApplySuggestions,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Aplicar sugerencia")
+            }
+        }
+    }
+}
+
+private fun suggestedRestockQuantity(product: Product): String {
+    val threshold = product.lowStockThreshold ?: 0.0
+    val missing = (threshold - product.stock).coerceAtLeast(1.0)
+    val suggested = if (product.sellingMethod == SELLING_METHOD_BY_UNIT) ceil(missing) else missing
+    return formatRestockNumber(suggested)
+}
+
+private fun formatRestockNumber(value: Double): String {
+    return if (value % 1.0 == 0.0) {
+        value.toLong().toString()
+    } else {
+        String.format(Locale.getDefault(), "%.2f", value)
     }
 }
 

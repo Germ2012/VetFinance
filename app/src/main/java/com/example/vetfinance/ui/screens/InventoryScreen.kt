@@ -51,11 +51,16 @@ fun InventoryScreen(viewModel: VetViewModel) {
     val searchQuery by viewModel.productSearchQuery.collectAsState()
     val lowStockProducts by viewModel.lowStockProducts.collectAsState()
     val suppliers by viewModel.suppliers.collectAsState()
+    val appSettings by viewModel.appSettings.collectAsState()
     var productToEdit by remember { mutableStateOf<Product?>(null) }
     var productToDelete by remember { mutableStateOf<Product?>(null) }
+    var secureProductToDelete by remember { mutableStateOf<Product?>(null) }
     var productForCostHistory by remember { mutableStateOf<Product?>(null) }
     var productForStockHistory by remember { mutableStateOf<Product?>(null) }
     var productForStockAdjustment by remember { mutableStateOf<Product?>(null) }
+    var secureStockProduct by remember { mutableStateOf<Product?>(null) }
+    var secureStockValue by remember { mutableStateOf<Double?>(null) }
+    var secureStockNote by remember { mutableStateOf("") }
     var lowStockAlertExpanded by remember { mutableStateOf(false) }
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -129,7 +134,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteProduct(product)
+                        secureProductToDelete = product
                         productToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -141,6 +146,18 @@ fun InventoryScreen(viewModel: VetViewModel) {
                 TextButton(onClick = { productToDelete = null }) {
                     Text(stringResource(R.string.cancel_button))
                 }
+            }
+        )
+    }
+
+    secureProductToDelete?.let { product ->
+        SecurityPinDialog(
+            settings = appSettings,
+            actionLabel = "eliminar producto",
+            onDismiss = { secureProductToDelete = null },
+            onAuthorized = {
+                viewModel.deleteProduct(product)
+                secureProductToDelete = null
             }
         )
     }
@@ -166,8 +183,30 @@ fun InventoryScreen(viewModel: VetViewModel) {
             product = product,
             onDismiss = { productForStockAdjustment = null },
             onConfirm = { newStock, note ->
-                viewModel.adjustProductStock(product, newStock, note)
+                secureStockProduct = product
+                secureStockValue = newStock
+                secureStockNote = note
                 productForStockAdjustment = null
+            }
+        )
+    }
+
+    val stockProduct = secureStockProduct
+    val stockValue = secureStockValue
+    if (stockProduct != null && stockValue != null) {
+        SecurityPinDialog(
+            settings = appSettings,
+            actionLabel = "ajustar stock",
+            onDismiss = {
+                secureStockProduct = null
+                secureStockValue = null
+                secureStockNote = ""
+            },
+            onAuthorized = {
+                viewModel.adjustProductStock(stockProduct, stockValue, secureStockNote)
+                secureStockProduct = null
+                secureStockValue = null
+                secureStockNote = ""
             }
         )
     }

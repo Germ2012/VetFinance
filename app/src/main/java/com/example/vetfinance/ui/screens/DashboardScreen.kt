@@ -1,5 +1,17 @@
 package com.example.vetfinance.ui.screens
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
+import android.graphics.pdf.PdfDocument
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,11 +37,14 @@ import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Inventory
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Pets
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -50,11 +65,13 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +79,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -70,10 +88,12 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.AppointmentWithDetails
+import com.example.vetfinance.data.Client
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SupplierDebtWithSupplier
 import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.navigation.Screen
+import com.example.vetfinance.viewmodel.DebtCollectionRow
 import com.example.vetfinance.viewmodel.GlobalSearchResult
 import com.example.vetfinance.viewmodel.VetViewModel
 import java.time.Instant
@@ -81,8 +101,12 @@ import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 import ui.utils.formatCurrency
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val DashboardCardShape = RoundedCornerShape(8.dp)
 
@@ -96,14 +120,38 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val inventory by viewModel.inventory.collectAsState()
     val suppliers by viewModel.suppliers.collectAsState()
     val lowStockProducts by viewModel.lowStockProducts.collectAsState()
+    val pendingCollectionRows by viewModel.pendingCollectionRows.collectAsState()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
     val globalSearchQuery by viewModel.globalSearchQuery.collectAsState()
     val globalSearchResults by viewModel.globalSearchResults.collectAsState()
     val appSettings by viewModel.appSettings.collectAsState()
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
+    val showPaymentDialog by viewModel.showPaymentDialog.collectAsState()
+    val clientForPayment by viewModel.clientForPayment.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var treatmentForNextDialog by remember { mutableStateOf<Treatment?>(null) }
+    val sortedLowStockProducts = remember(lowStockProducts) {
+        lowStockProducts.sortedBy { it.name.lowercase(Locale.getDefault()) }
+    }
+    val pngExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
+        uri?.let {
+            scope.launch {
+                val exported = exportLowStockPng(context, it, sortedLowStockProducts)
+                Toast.makeText(context, if (exported) "Lista PNG guardada." else "No se pudo guardar el PNG.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    val pdfExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/pdf")) { uri ->
+        uri?.let {
+            scope.launch {
+                val exported = exportLowStockPdf(context, it, sortedLowStockProducts)
+                Toast.makeText(context, if (exported) "Lista PDF guardada." else "No se pudo guardar el PDF.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
     val services = remember(inventory) { inventory.filter { it.isService } }
     val petIdToNameMap = remember(petsWithOwners) { petsWithOwners.associate { it.pet.petId to it.pet.name } }
     val petForDialog = remember(treatmentForNextDialog, petsWithOwners) {
@@ -114,7 +162,8 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val pendingItemsCount = lowStockProducts.size +
         upcomingAppointments.size +
         upcomingSupplierDebts.size +
-        upcomingTreatments.size
+        upcomingTreatments.size +
+        pendingCollectionRows.size
     val defaultClinicName = stringResource(R.string.dashboard_summary_of_the_day)
     val clinicName = appSettings.clinicName.ifBlank { defaultClinicName }
 
@@ -151,6 +200,15 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
             suppliers = suppliers
+        )
+    }
+
+    val currentClientForPayment = clientForPayment
+    if (showPaymentDialog && currentClientForPayment != null) {
+        PaymentDialog(
+            client = currentClientForPayment,
+            onDismiss = { viewModel.onDismissPaymentDialog() },
+            onConfirm = { amount -> viewModel.makePayment(amount) }
         )
     }
 
@@ -216,6 +274,17 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                 )
             }
 
+            if (pendingCollectionRows.isNotEmpty()) {
+                item {
+                    DashboardCollectionPreview(
+                        rows = pendingCollectionRows.sortedByDescending { it.balance }.take(3),
+                        totalPending = pendingCollectionRows.sumOf { it.balance },
+                        onCollect = { row -> viewModel.onShowPaymentDialog(row.client) },
+                        onViewAll = { navController.navigate(Screen.DebtClients.route) }
+                    )
+                }
+            }
+
             if (isLoading) {
                 item {
                     Box(
@@ -233,7 +302,17 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                 }
 
                 if (lowStockProducts.isNotEmpty()) {
-                    item { LowStockAlert(lowStockProducts = lowStockProducts) }
+                    item {
+                        LowStockAlert(
+                            lowStockProducts = sortedLowStockProducts,
+                            onExportPng = {
+                                pngExportLauncher.launch("stock_bajo_${LocalDate.now()}.png")
+                            },
+                            onExportPdf = {
+                                pdfExportLauncher.launch("stock_bajo_${LocalDate.now()}.pdf")
+                            }
+                        )
+                    }
                 }
 
                 if (upcomingAppointments.isNotEmpty()) {
@@ -558,6 +637,64 @@ private fun DashboardQuickActions(
 }
 
 @Composable
+private fun DashboardCollectionPreview(
+    rows: List<DebtCollectionRow>,
+    totalPending: Double,
+    onCollect: (DebtCollectionRow) -> Unit,
+    onViewAll: () -> Unit
+) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = DashboardCardShape,
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Payments, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text("Cobros pendientes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("Total Gs. ${formatCurrency(totalPending)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                TextButton(onClick = onViewAll) {
+                    Text("Ver todo")
+                }
+            }
+            rows.forEach { row ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(row.client.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("Debe Gs. ${formatCurrency(row.balance)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    FilledTonalButton(
+                        onClick = { onCollect(row) },
+                        shape = DashboardCardShape,
+                        contentPadding = PaddingValues(horizontal = 12.dp)
+                    ) {
+                        Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Cobrar")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun DashboardSectionHeader(
     title: String,
     count: Int,
@@ -711,34 +848,87 @@ fun AppointmentReminderItem(details: AppointmentWithDetails) {
 }
 
 @Composable
-fun LowStockAlert(lowStockProducts: List<Product>) {
+fun LowStockAlert(
+    lowStockProducts: List<Product>,
+    onExportPng: () -> Unit,
+    onExportPdf: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
     ReminderCard(
         icon = Icons.Default.WarningAmber,
         title = stringResource(R.string.dashboard_low_stock_alert_title),
         status = lowStockProducts.size.toString(),
         statusColor = MaterialTheme.colorScheme.error,
         containerColor = MaterialTheme.colorScheme.errorContainer,
-        contentColor = MaterialTheme.colorScheme.onErrorContainer
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = Modifier
+            .animateContentSize()
+            .clickable { expanded = !expanded },
+        trailingIcon = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown
     ) {
-        lowStockProducts.take(4).forEach { product ->
+        Text(
+            text = if (expanded) "Lista ordenada por nombre. Puedes guardarla como imagen o PDF." else "Toca para ver la lista y exportarla.",
+            style = MaterialTheme.typography.bodyMedium
+        )
+        AnimatedVisibility(visible = expanded) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilledTonalButton(
+                        onClick = onExportPng,
+                        modifier = Modifier.weight(1f),
+                        shape = DashboardCardShape,
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Icon(Icons.Default.Inventory, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("PNG")
+                    }
+                    Button(
+                        onClick = onExportPdf,
+                        modifier = Modifier.weight(1f),
+                        shape = DashboardCardShape,
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("PDF")
+                    }
+                }
+                lowStockProducts.forEach { product ->
+                    LowStockDashboardRow(product = product)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LowStockDashboardRow(product: Product) {
+    val unit = product.unitMeasure?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
+    val threshold = product.lowStockThreshold ?: 0.0
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = stringResource(
-                    R.string.dashboard_low_stock_product_item,
-                    product.name,
-                    formatCurrency(product.stock).replace(",00", "")
-                ),
+                text = product.name,
                 style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
-        }
-        if (lowStockProducts.size > 4) {
             Text(
-                text = "+${lowStockProducts.size - 4} productos m\u00e1s",
-                style = MaterialTheme.typography.bodySmall,
-                fontWeight = FontWeight.SemiBold
+                text = "Minimo: ${formatCurrency(threshold).replace(",00", "")}$unit",
+                style = MaterialTheme.typography.labelMedium
             )
         }
+        Text(
+            text = "${formatCurrency(product.stock).replace(",00", "")}$unit",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -799,10 +989,12 @@ private fun ReminderCard(
     statusColor: Color,
     containerColor: Color,
     contentColor: Color,
+    modifier: Modifier = Modifier,
+    trailingIcon: ImageVector? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = DashboardCardShape,
         colors = CardDefaults.cardColors(
             containerColor = containerColor,
@@ -832,7 +1024,13 @@ private fun ReminderCard(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                StatusPill(text = status, color = statusColor)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    StatusPill(text = status, color = statusColor)
+                    trailingIcon?.let {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(it, contentDescription = null, modifier = Modifier.size(22.dp))
+                    }
+                }
             }
             content()
         }
@@ -905,4 +1103,156 @@ private fun GlobalSearchResult.iconForType(): ImageVector {
         "product" -> Icons.Default.Inventory
         else -> Icons.Default.Search
     }
+}
+
+private suspend fun exportLowStockPng(
+    context: Context,
+    uri: Uri,
+    products: List<Product>
+): Boolean = withContext(Dispatchers.IO) {
+    runCatching {
+        val sortedProducts = products.sortedBy { it.name.lowercase(Locale.getDefault()) }
+        val width = 1200
+        val rowHeight = 72
+        val headerHeight = 180
+        val footerHeight = 56
+        val height = (headerHeight + sortedProducts.size * rowHeight + footerHeight).coerceAtLeast(360)
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawLowStockPage(
+            canvas = canvas,
+            width = width,
+            height = height,
+            products = sortedProducts,
+            startIndex = 0,
+            maxItems = sortedProducts.size,
+            pageNumber = 1,
+            totalPages = 1
+        )
+        context.contentResolver.openOutputStream(uri)?.use { output ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+        } ?: error("No se pudo abrir el destino del PNG.")
+        bitmap.recycle()
+    }.isSuccess
+}
+
+private suspend fun exportLowStockPdf(
+    context: Context,
+    uri: Uri,
+    products: List<Product>
+): Boolean = withContext(Dispatchers.IO) {
+    runCatching {
+        val sortedProducts = products.sortedBy { it.name.lowercase(Locale.getDefault()) }
+        val pageWidth = 595
+        val pageHeight = 842
+        val itemsPerPage = 12
+        val totalPages = maxOf(1, kotlin.math.ceil(sortedProducts.size / itemsPerPage.toDouble()).toInt())
+        val document = PdfDocument()
+
+        for (pageIndex in 0 until totalPages) {
+            val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageIndex + 1).create()
+            val page = document.startPage(pageInfo)
+            drawLowStockPage(
+                canvas = page.canvas,
+                width = pageWidth,
+                height = pageHeight,
+                products = sortedProducts,
+                startIndex = pageIndex * itemsPerPage,
+                maxItems = itemsPerPage,
+                pageNumber = pageIndex + 1,
+                totalPages = totalPages
+            )
+            document.finishPage(page)
+        }
+
+        context.contentResolver.openOutputStream(uri)?.use { output ->
+            document.writeTo(output)
+        } ?: error("No se pudo abrir el destino del PDF.")
+        document.close()
+    }.isSuccess
+}
+
+private fun drawLowStockPage(
+    canvas: Canvas,
+    width: Int,
+    height: Int,
+    products: List<Product>,
+    startIndex: Int,
+    maxItems: Int,
+    pageNumber: Int,
+    totalPages: Int
+) {
+    val background = Paint().apply {
+        style = Paint.Style.FILL
+        color = android.graphics.Color.rgb(250, 252, 250)
+    }
+    val primary = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(23, 106, 87)
+        textSize = if (width > 700) 42f else 24f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val subtitle = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(85, 99, 94)
+        textSize = if (width > 700) 24f else 14f
+    }
+    val headerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(224, 244, 235)
+        style = Paint.Style.FILL
+    }
+    val rowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.WHITE
+        style = Paint.Style.FILL
+    }
+    val warningPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(186, 26, 26)
+        textSize = if (width > 700) 23f else 13f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(31, 41, 37)
+        textSize = if (width > 700) 25f else 14f
+        typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+    }
+    val smallPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(87, 99, 95)
+        textSize = if (width > 700) 19f else 11f
+    }
+    val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = android.graphics.Color.rgb(218, 226, 221)
+        strokeWidth = 1f
+    }
+
+    canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), background)
+    canvas.drawRoundRect(24f, 24f, width - 24f, 132f, 18f, 18f, headerPaint)
+    canvas.drawText("Alerta de stock bajo", 48f, 72f, primary)
+    canvas.drawText("${products.size} productos ordenados por nombre", 48f, 108f, subtitle)
+    canvas.drawText(LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")), width - 170f, 72f, subtitle)
+
+    val rows = products.drop(startIndex).take(maxItems)
+    var y = 170f
+    val rowHeight = if (width > 700) 72f else 50f
+    rows.forEachIndexed { index, product ->
+        val top = y + index * rowHeight
+        canvas.drawRoundRect(24f, top - 34f, width - 24f, top + 22f, 10f, 10f, rowPaint)
+        canvas.drawLine(40f, top + 26f, width - 40f, top + 26f, linePaint)
+        val name = product.name.take(if (width > 700) 38 else 28)
+        val unit = product.unitMeasure?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
+        val threshold = product.lowStockThreshold ?: 0.0
+        canvas.drawText(name, 48f, top, textPaint)
+        canvas.drawText(
+            "Minimo ${formatCurrency(threshold).replace(",00", "")}$unit",
+            48f,
+            top + 24f,
+            smallPaint
+        )
+        canvas.drawText(
+            "Stock ${formatCurrency(product.stock).replace(",00", "")}$unit",
+            width - 230f,
+            top + 6f,
+            warningPaint
+        )
+    }
+
+    canvas.drawText("Pagina $pageNumber de $totalPages", 48f, height - 32f, subtitle)
+    canvas.drawText("VetFinance", width - 150f, height - 32f, subtitle)
 }

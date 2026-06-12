@@ -42,13 +42,18 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
     val showPaymentDialog by viewModel.showPaymentDialog.collectAsState()
     val clientForPayment by viewModel.clientForPayment.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val appSettings by viewModel.appSettings.collectAsState()
 
     var showOnlyWithDebt by remember { mutableStateOf(true) }
     var minimumDebtText by remember { mutableStateOf("") }
     var selectedSort by remember { mutableStateOf("Mayor deuda") }
     var showFilters by remember { mutableStateOf(false) }
     var clientToDelete by remember { mutableStateOf<Client?>(null) }
+    var secureClientToDelete by remember { mutableStateOf<Client?>(null) }
     var clientToAdjustDebt by remember { mutableStateOf<Client?>(null) }
+    var secureDebtClient by remember { mutableStateOf<Client?>(null) }
+    var secureDebtValue by remember { mutableStateOf<Double?>(null) }
+    var secureDebtNote by remember { mutableStateOf<String?>(null) }
     val sortOptions = remember { listOf("Mayor deuda", "Menor deuda", "Nombre") }
 
     DisposableEffect(Unit) {
@@ -108,7 +113,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.deleteClient(client)
+                        secureClientToDelete = client
                         clientToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -124,13 +129,47 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
         )
     }
 
+    secureClientToDelete?.let { client ->
+        SecurityPinDialog(
+            settings = appSettings,
+            actionLabel = "eliminar cliente",
+            onDismiss = { secureClientToDelete = null },
+            onAuthorized = {
+                viewModel.deleteClient(client)
+                secureClientToDelete = null
+            }
+        )
+    }
+
     clientToAdjustDebt?.let { client ->
         DebtAdjustmentDialog(
             client = client,
             onDismiss = { clientToAdjustDebt = null },
             onConfirm = { newDebt, note ->
-                viewModel.adjustClientDebt(client, newDebt, note)
+                secureDebtClient = client
+                secureDebtValue = newDebt
+                secureDebtNote = note
                 clientToAdjustDebt = null
+            }
+        )
+    }
+
+    val debtClient = secureDebtClient
+    val debtValue = secureDebtValue
+    if (debtClient != null && debtValue != null) {
+        SecurityPinDialog(
+            settings = appSettings,
+            actionLabel = "ajustar deuda",
+            onDismiss = {
+                secureDebtClient = null
+                secureDebtValue = null
+                secureDebtNote = null
+            },
+            onAuthorized = {
+                viewModel.adjustClientDebt(debtClient, debtValue, secureDebtNote)
+                secureDebtClient = null
+                secureDebtValue = null
+                secureDebtNote = null
             }
         )
     }

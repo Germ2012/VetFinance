@@ -38,11 +38,13 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
     val filteredSales by viewModel.filteredSales.collectAsState()
     val selectedDate by viewModel.selectedSaleDateFilter.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val appSettings by viewModel.appSettings.collectAsState()
     val visibleSalesTotal = remember(filteredSales) { filteredSales.sumOf { it.sale.totalAmount } }
 
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
     var saleToDelete by remember { mutableStateOf<SaleWithProducts?>(null) }
+    var secureSaleToDelete by remember { mutableStateOf<SaleWithProducts?>(null) }
 
     // --- DIÁLOGOS ---
     if (saleToDelete != null) {
@@ -53,7 +55,7 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
             confirmButton = {
                 Button(
                     onClick = {
-                        saleToDelete?.let { viewModel.deleteSale(it) }
+                        secureSaleToDelete = saleToDelete
                         saleToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -61,6 +63,18 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
             },
             dismissButton = {
                 TextButton(onClick = { saleToDelete = null }) { Text(stringResource(R.string.cancel_button)) }
+            }
+        )
+    }
+
+    secureSaleToDelete?.let { sale ->
+        SecurityPinDialog(
+            settings = appSettings,
+            actionLabel = "eliminar venta",
+            onDismiss = { secureSaleToDelete = null },
+            onAuthorized = {
+                viewModel.deleteSale(sale)
+                secureSaleToDelete = null
             }
         )
     }

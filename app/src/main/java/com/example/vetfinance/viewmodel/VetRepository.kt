@@ -83,6 +83,7 @@ class VetRepository @Inject constructor(
         const val SETTINGS_LARGE_TEXT = "largeText"
         const val SETTINGS_BACKUP_FREQUENCY_DAYS = "backupFrequencyDays"
         const val SETTINGS_LAST_BACKUP_AT = "lastBackupAt"
+        const val SETTINGS_SECURITY_PIN = "securityPin"
         val ALLOWED_BACKUP_FILES = setOf(
             "clients.csv",
             "suppliers.csv",
@@ -117,7 +118,8 @@ class VetRepository @Inject constructor(
             remindersEnabled = prefs.getBoolean(SETTINGS_REMINDERS_ENABLED, true),
             largeText = prefs.getBoolean(SETTINGS_LARGE_TEXT, false),
             backupFrequencyDays = prefs.getInt(SETTINGS_BACKUP_FREQUENCY_DAYS, 7),
-            lastBackupAt = lastBackup
+            lastBackupAt = lastBackup,
+            securityPin = prefs.getString(SETTINGS_SECURITY_PIN, "") ?: ""
         )
     }
 
@@ -132,6 +134,7 @@ class VetRepository @Inject constructor(
             .putBoolean(SETTINGS_LARGE_TEXT, settings.largeText)
             .putInt(SETTINGS_BACKUP_FREQUENCY_DAYS, settings.backupFrequencyDays.coerceAtLeast(1))
             .putLong(SETTINGS_LAST_BACKUP_AT, settings.lastBackupAt ?: 0L)
+            .putString(SETTINGS_SECURITY_PIN, settings.securityPin.filter { it.isDigit() })
             .apply()
     }
 
@@ -275,13 +278,18 @@ class VetRepository @Inject constructor(
         return appointmentDao.getAppointmentsForDateRange(startDate, endDate)
     }
 
-    fun getTopSellingProducts(startDate: Long, endDate: Long, limit: Int): Flow<List<TopSellingProduct>> = saleDao.getTopSellingProducts(startDate, endDate, limit)
+    fun getTopSellingProductsByQuantity(startDate: Long, endDate: Long, limit: Int): Flow<List<TopSellingProduct>> =
+        saleDao.getTopSellingProductsByQuantity(startDate, endDate, limit)
+
+    fun getTopSellingProductsByRevenue(startDate: Long, endDate: Long, limit: Int): Flow<List<TopSellingProduct>> =
+        saleDao.getTopSellingProductsByRevenue(startDate, endDate, limit)
     fun getTotalDebt(): Flow<Double?> = clientDao.getTotalDebt()
     fun getTotalInventoryValue(): Flow<Double?> = productDao.getTotalInventoryValue()
     fun getAllProducts(): Flow<List<Product>> = productDao.getAllProducts()
     fun getAllSales(): Flow<List<SaleWithProducts>> = saleDao.getAllSalesWithProducts()
     fun getAllClients(): Flow<List<Client>> = clientDao.getAllClients()
     fun getAllPayments(): Flow<List<Payment>> = paymentDao.getAllPaymentsSimple()
+    fun getAllDebtHistory(): Flow<List<ClientDebtHistory>> = clientDebtHistoryDao.getAllDebtHistorySimple()
     fun getAllSuppliers(): Flow<List<Supplier>> = supplierDao.getAllSuppliers()
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>> = paymentDao.getPaymentsForClient(clientId)
     fun getDebtHistoryForClient(clientId: String): Flow<List<ClientDebtHistory>> = clientDebtHistoryDao.getHistoryForClient(clientId)

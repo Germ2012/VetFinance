@@ -53,8 +53,11 @@ import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.TopSellingProduct
+import com.example.vetfinance.viewmodel.ClientPurchaseReport
+import com.example.vetfinance.viewmodel.ProductProfitReport
 import com.example.vetfinance.viewmodel.HistoricalPeriod
 import com.example.vetfinance.viewmodel.ReportPeriodType
+import com.example.vetfinance.viewmodel.TopProductsMetric
 import com.example.vetfinance.viewmodel.TopProductsPeriod
 import com.example.vetfinance.viewmodel.VetViewModel
 import androidx.compose.runtime.collectAsState
@@ -69,17 +72,21 @@ import java.util.zip.ZipOutputStream
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ReportsScreen(viewModel: VetViewModel) {
-    val pagerState = rememberPagerState(pageCount = { 4 })
+    val pagerState = rememberPagerState(pageCount = { 6 })
     val scope = rememberCoroutineScope()
     val tabTitles = listOf(
+        "Caja",
         stringResource(R.string.tab_sales_and_backups),
         stringResource(R.string.tab_top_products),
+        "Rentabilidad",
         stringResource(R.string.tab_debts),
         stringResource(R.string.tab_inventory)
     )
     val tabIcons = listOf(
+        Icons.Default.Payments,
         Icons.Default.PointOfSale,
         Icons.Default.Assessment,
+        Icons.Default.AddShoppingCart,
         Icons.Default.People,
         Icons.Default.Inventory
     )
@@ -90,10 +97,11 @@ fun ReportsScreen(viewModel: VetViewModel) {
             .background(MaterialTheme.colorScheme.background)
     ) {
         ReportsHeader()
-        TabRow(
+        ScrollableTabRow(
             selectedTabIndex = pagerState.currentPage,
             containerColor = MaterialTheme.colorScheme.background,
-            contentColor = MaterialTheme.colorScheme.primary
+            contentColor = MaterialTheme.colorScheme.primary,
+            edgePadding = 12.dp
         ) {
             tabTitles.forEachIndexed { index, title ->
                 Tab(
@@ -113,10 +121,12 @@ fun ReportsScreen(viewModel: VetViewModel) {
             verticalAlignment = Alignment.Top
         ) { page ->
             when (page) {
-                0 -> SalesAndBackupTab(viewModel)
-                1 -> TopProductsReportTab(viewModel)
-                2 -> DebtsReportTab(viewModel)
-                3 -> InventoryReportTab(viewModel)
+                0 -> CashClosingTab(viewModel)
+                1 -> SalesAndBackupTab(viewModel)
+                2 -> TopProductsReportTab(viewModel)
+                3 -> ProfitabilityReportTab(viewModel)
+                4 -> DebtsReportTab(viewModel)
+                5 -> InventoryReportTab(viewModel)
             }
         }
     }
@@ -150,9 +160,96 @@ private fun ReportsHeader() {
             Column(modifier = Modifier.weight(1f)) {
                 Text("Reportes", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    "Ventas, respaldo, deuda e inventario en una vista de control.",
+                    "Caja, ventas, rentabilidad, deuda e inventario en una vista de control.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CashClosingTab(viewModel: VetViewModel) {
+    val summary by viewModel.cashClosingSummary.collectAsState()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            ReportModuleHeader(
+                icon = Icons.Default.Payments,
+                title = "Cierre de caja diario",
+                body = "Resume lo registrado hoy para revisar ventas, cobros y ajustes antes de cerrar el dia."
+            )
+        }
+        item {
+            SummaryCard(
+                title = "Actividad registrada hoy",
+                value = "Gs. ${formatCurrency(summary.operationalTotal)}",
+                icon = Icons.Default.Payments
+            )
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ReportMiniMetric(
+                    label = "Ventas",
+                    value = summary.salesCount.toString(),
+                    icon = Icons.Default.PointOfSale,
+                    modifier = Modifier.weight(1f)
+                )
+                ReportMiniMetric(
+                    label = "Facturado",
+                    value = "Gs. ${formatCurrency(summary.salesTotal)}",
+                    icon = Icons.Default.Assessment,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                ReportMiniMetric(
+                    label = "Cobros",
+                    value = "Gs. ${formatCurrency(summary.paymentsTotal)}",
+                    icon = Icons.Default.Payments,
+                    modifier = Modifier.weight(1f)
+                )
+                ReportMiniMetric(
+                    label = "Aumentos deuda",
+                    value = "Gs. ${formatCurrency(summary.debtIncreases)}",
+                    icon = Icons.Default.People,
+                    modifier = Modifier.weight(1f),
+                    isWarning = summary.debtIncreases > 0.0
+                )
+                ReportMiniMetric(
+                    label = "Ajustes deuda",
+                    value = "Gs. ${formatCurrency(summary.debtAdjustments)}",
+                    icon = Icons.Default.WarningAmber,
+                    modifier = Modifier.weight(1f),
+                    isWarning = summary.debtAdjustments != 0.0
+                )
+            }
+        }
+        item {
+            ReportInlineNote(
+                icon = Icons.Default.CheckCircle,
+                text = "El cierre usa los registros del dia: ventas como facturacion, pagos como cobros y ajustes como movimientos de deuda."
+            )
+        }
+        if (summary.salesCount == 0 && summary.paymentsTotal == 0.0 && summary.debtIncreases == 0.0) {
+            item {
+                ReportEmptyState(
+                    icon = Icons.Default.PointOfSale,
+                    title = "Sin actividad para cerrar",
+                    body = "Cuando registres ventas, pagos o ajustes, el cierre se armara automaticamente."
                 )
             }
         }
@@ -368,6 +465,7 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
     val topProducts by viewModel.topSellingProducts.collectAsState()
     val selectedProduct by viewModel.selectedTopProduct.collectAsState()
     val selectedPeriod by viewModel.topProductsPeriod.collectAsState()
+    val selectedMetric by viewModel.topProductsMetric.collectAsState()
     val selectedDate by viewModel.topProductsDate.collectAsState()
 
     var showDatePicker by remember { mutableStateOf(false) }
@@ -405,15 +503,22 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
 
         TopProductsFilterControls(
             selectedPeriod = selectedPeriod,
+            selectedMetric = selectedMetric,
             selectedDate = selectedDate,
             onPeriodSelected = { viewModel.onTopProductsPeriodSelected(it) },
+            onMetricSelected = { viewModel.onTopProductsMetricSelected(it) },
             onDateSelectorClick = { showDatePicker = true }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
         if (topProducts.isNotEmpty()) {
-            val totalSold = topProducts.sumOf { it.totalSold }
+            val totalMetricValue = topProducts.sumOf { it.metricValue(selectedMetric) }
+            val chartTitle = if (selectedMetric == TopProductsMetric.QUANTITY) {
+                "Unidades vendidas por posicion"
+            } else {
+                "Ingreso generado por posicion"
+            }
             val chartColors = remember {
                 listOf(Color(0xFF4CAF50), Color(0xFF2196F3), Color(0xFFFFC107), Color(0xFFE91E63), Color(0xFF9C27B0), Color(0xFFFF5722), Color(0xFF009688), Color(0xFF795548), Color(0xFF607D8B), Color(0xFF3F51B5))
             }
@@ -422,7 +527,7 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
                 chartData = topProducts.mapIndexed { index, product ->
                     val isSelected = selectedProduct == product
                     BarData(
-                        point = Point(index.toFloat(), product.totalSold.toFloat()),
+                        point = Point(index.toFloat(), product.metricValue(selectedMetric).toFloat()),
                         label = "",
                         color = chartColors[index % chartColors.size].copy(alpha = if (isSelected) 1f else 0.4f)
                     )
@@ -433,7 +538,9 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
                     .labelAndAxisLinePadding(20.dp)
                     .labelData { value ->
                         // CORREGIDO: Se usa el operador módulo (%) que es más estándar y robusto.
-                        if (value % 1.0f == 0f) {
+                        if (selectedMetric == TopProductsMetric.REVENUE) {
+                            "Gs. ${formatCurrency(value.toDouble()).replace(",00", "")}"
+                        } else if (value % 1.0f == 0f) {
                             value.toInt().toString()
                         } else {
                             String.format(Locale.US, "%.2f", value)
@@ -443,7 +550,7 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
                 barStyle = BarStyle(barWidth = 35.dp)
             )
 
-            ReportChartPanel(title = "Unidades vendidas por posicion") {
+            ReportChartPanel(title = chartTitle) {
                 BarChart(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -455,8 +562,8 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
 
             AnimatedVisibility(visible = selectedProduct != null) {
                 selectedProduct?.let { product ->
-                    val percentage = if(totalSold > 0) (product.totalSold / totalSold) * 100 else 0.0
-                    SelectedTopProductCard(product = product, percentage = percentage)
+                    val percentage = if(totalMetricValue > 0) (product.metricValue(selectedMetric) / totalMetricValue) * 100 else 0.0
+                    SelectedTopProductCard(product = product, metric = selectedMetric, percentage = percentage)
                 }
             }
 
@@ -474,6 +581,7 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
                     val isSelected = selectedProduct == product
                     LegendItem(
                         name = product.name,
+                        supportingText = product.metricLabel(selectedMetric),
                         color = chartColors[index % chartColors.size],
                         isSelected = isSelected,
                         onClick = { viewModel.onTopProductSelected(product) }
@@ -491,12 +599,122 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
     }
 }
 
+@Composable
+fun ProfitabilityReportTab(viewModel: VetViewModel) {
+    val productReports by viewModel.productProfitReports.collectAsState()
+    val clientReports by viewModel.clientPurchaseReports.collectAsState()
+    val totalRevenue = remember(productReports) { productReports.sumOf { it.revenue } }
+    val totalProfit = remember(productReports) { productReports.sumOf { it.profit } }
+    val averageMargin = remember(productReports, totalRevenue) {
+        if (totalRevenue > 0.0) (totalProfit / totalRevenue) * 100.0 else 0.0
+    }
+    val topProfit = remember(productReports) { productReports.take(5) }
+    val topMargin = remember(productReports) {
+        productReports.filter { it.revenue > 0.0 }.sortedByDescending { it.marginPercent }.take(5)
+    }
+    val topServices = remember(productReports) {
+        productReports.filter { it.isService }.sortedByDescending { it.profit }.take(5)
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            ReportModuleHeader(
+                icon = Icons.Default.AddShoppingCart,
+                title = "Rentabilidad",
+                body = "Compara ganancia, margen, servicios y clientes con mayor compra acumulada."
+            )
+        }
+        if (productReports.isEmpty()) {
+            item {
+                ReportEmptyState(
+                    icon = Icons.Default.Assessment,
+                    title = "Sin datos de rentabilidad",
+                    body = "Cuando haya ventas registradas, este modulo calculara ingresos, costos y margen."
+                )
+            }
+        } else {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SummaryCard(
+                        title = "Ingresos analizados",
+                        value = "Gs. ${formatCurrency(totalRevenue)}",
+                        icon = Icons.Default.PointOfSale,
+                        modifier = Modifier.weight(1f)
+                    )
+                    SummaryCard(
+                        title = "Ganancia estimada",
+                        value = "Gs. ${formatCurrency(totalProfit)}",
+                        icon = Icons.Default.Payments,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            item {
+                ReportMiniMetric(
+                    label = "Margen promedio",
+                    value = "${String.format(Locale.getDefault(), "%.1f", averageMargin)}%",
+                    icon = Icons.Default.Assessment
+                )
+            }
+            item {
+                ReportSectionTitle("Productos con mayor ganancia")
+            }
+            items(topProfit) { row ->
+                ProductProfitReportRow(
+                    report = row,
+                    primaryLabel = "Ganancia Gs. ${formatCurrency(row.profit)}",
+                    secondaryLabel = "Ingreso Gs. ${formatCurrency(row.revenue)}"
+                )
+            }
+            item {
+                ReportSectionTitle("Mejor margen")
+            }
+            items(topMargin) { row ->
+                ProductProfitReportRow(
+                    report = row,
+                    primaryLabel = "${String.format(Locale.getDefault(), "%.1f", row.marginPercent)}% margen",
+                    secondaryLabel = "Costo Gs. ${formatCurrency(row.cost)}"
+                )
+            }
+            if (topServices.isNotEmpty()) {
+                item {
+                    ReportSectionTitle("Servicios mas rentables")
+                }
+                items(topServices) { row ->
+                    ProductProfitReportRow(
+                        report = row,
+                        primaryLabel = "Ganancia Gs. ${formatCurrency(row.profit)}",
+                        secondaryLabel = "Servicios vendidos ${formatCurrency(row.quantitySold).replace(",00", "")}"
+                    )
+                }
+            }
+            if (clientReports.isNotEmpty()) {
+                item {
+                    ReportSectionTitle("Clientes que mas compran")
+                }
+                items(clientReports.take(5), key = { it.client.clientId }) { row ->
+                    ClientPurchaseReportRow(row)
+                }
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TopProductsFilterControls(
     selectedPeriod: TopProductsPeriod,
+    selectedMetric: TopProductsMetric,
     selectedDate: java.time.LocalDate,
     onPeriodSelected: (TopProductsPeriod) -> Unit,
+    onMetricSelected: (TopProductsMetric) -> Unit,
     onDateSelectorClick: () -> Unit
 ) {
     val wordDe = stringResource(R.string.word_de)
@@ -521,6 +739,18 @@ fun TopProductsFilterControls(
                     }
                 }
             }
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                val metricOptions = listOf(TopProductsMetric.QUANTITY, TopProductsMetric.REVENUE)
+                metricOptions.forEachIndexed { index, metric ->
+                    SegmentedButton(
+                        onClick = { onMetricSelected(metric) },
+                        selected = metric == selectedMetric,
+                        shape = SegmentedButtonDefaults.itemShape(index = index, count = metricOptions.size)
+                    ) {
+                        Text(if (metric == TopProductsMetric.QUANTITY) "Cantidad vendida" else "Monto ingresado")
+                    }
+                }
+            }
             val formatter = when (selectedPeriod) {
                 TopProductsPeriod.WEEK -> DateTimeFormatter.ofPattern("w '${wordDe}' YYYY", Locale("es", "ES"))
                 TopProductsPeriod.MONTH -> DateTimeFormatter.ofPattern("MMMM '${wordDe}' yyyy", Locale("es", "ES"))
@@ -538,6 +768,7 @@ fun TopProductsFilterControls(
 @Composable
 fun LegendItem(
     name: String,
+    supportingText: String,
     color: Color,
     isSelected: Boolean,
     onClick: () -> Unit
@@ -556,7 +787,10 @@ fun LegendItem(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Box(modifier = Modifier.size(14.dp).background(color, CircleShape))
-            Text(name, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(supportingText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            }
         }
     }
 }
@@ -710,6 +944,96 @@ fun InventoryReportTab(viewModel: VetViewModel) {
 }
 
 @Composable
+private fun ReportSectionTitle(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(top = 4.dp)
+    )
+}
+
+@Composable
+private fun ProductProfitReportRow(
+    report: ProductProfitReport,
+    primaryLabel: String,
+    secondaryLabel: String
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (report.isService) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Icon(
+                    if (report.isService) Icons.Default.CheckCircle else Icons.Default.Inventory,
+                    contentDescription = null,
+                    tint = if (report.isService) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(9.dp).size(20.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(report.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    if (report.isService) "Servicio" else "Producto",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(secondaryLabel, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                primaryLabel,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun ClientPurchaseReportRow(report: ClientPurchaseReport) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primaryContainer) {
+                Icon(
+                    Icons.Default.People,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(9.dp).size(20.dp)
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(report.client.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("${report.saleCount} compras registradas", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text(
+                "Gs. ${formatCurrency(report.totalPurchased)}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
 private fun ReportModuleHeader(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     title: String,
@@ -821,6 +1145,7 @@ private fun ReportChartPanel(
 @Composable
 private fun SelectedTopProductCard(
     product: TopSellingProduct,
+    metric: TopProductsMetric,
     percentage: Double
 ) {
     Surface(
@@ -835,8 +1160,30 @@ private fun SelectedTopProductCard(
         ) {
             Text(product.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.text_quantity_sold, product.totalSold.toString()), style = MaterialTheme.typography.bodyMedium)
-            Text(stringResource(R.string.text_represents_percentage_sales, percentage), style = MaterialTheme.typography.bodyMedium)
+            Text("Monto ingresado: Gs. ${formatCurrency(product.totalRevenue)}", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = if (metric == TopProductsMetric.QUANTITY) {
+                    stringResource(R.string.text_represents_percentage_sales, percentage)
+                } else {
+                    "Representa ${String.format(Locale.getDefault(), "%.1f", percentage)}% del ingreso del ranking"
+                },
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
+    }
+}
+
+private fun TopSellingProduct.metricValue(metric: TopProductsMetric): Double {
+    return when (metric) {
+        TopProductsMetric.QUANTITY -> totalSold
+        TopProductsMetric.REVENUE -> totalRevenue
+    }
+}
+
+private fun TopSellingProduct.metricLabel(metric: TopProductsMetric): String {
+    return when (metric) {
+        TopProductsMetric.QUANTITY -> "${formatCurrency(totalSold).replace(",00", "")} vendidos"
+        TopProductsMetric.REVENUE -> "Gs. ${formatCurrency(totalRevenue)}"
     }
 }
 

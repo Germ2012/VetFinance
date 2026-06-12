@@ -20,7 +20,11 @@ data class AppointmentWithDetails(
     val client: Client
 )
 
-data class TopSellingProduct(val name: String, val totalSold: Double)
+data class TopSellingProduct(
+    val name: String,
+    val totalSold: Double,
+    val totalRevenue: Double
+)
 
 
 // --- DAOs ---
@@ -95,7 +99,10 @@ interface SaleDao {
     fun getAllSalesWithProducts(): Flow<List<SaleWithProducts>>
 
     @Query("""
-        SELECT p.name, SUM(sp.quantitySold) as totalSold
+        SELECT
+            p.name,
+            SUM(sp.quantitySold) as totalSold,
+            SUM(COALESCE(sp.overridePrice, sp.priceAtTimeOfSale * sp.quantitySold)) as totalRevenue
         FROM sales_products_cross_ref AS sp
         JOIN sales AS s ON sp.saleId = s.saleId
         JOIN products AS p ON sp.productId = p.productId
@@ -104,7 +111,22 @@ interface SaleDao {
         ORDER BY totalSold DESC
         LIMIT :limit
     """)
-    fun getTopSellingProducts(startDate: Long, endDate: Long, limit: Int = 10): Flow<List<TopSellingProduct>>
+    fun getTopSellingProductsByQuantity(startDate: Long, endDate: Long, limit: Int = 10): Flow<List<TopSellingProduct>>
+
+    @Query("""
+        SELECT
+            p.name,
+            SUM(sp.quantitySold) as totalSold,
+            SUM(COALESCE(sp.overridePrice, sp.priceAtTimeOfSale * sp.quantitySold)) as totalRevenue
+        FROM sales_products_cross_ref AS sp
+        JOIN sales AS s ON sp.saleId = s.saleId
+        JOIN products AS p ON sp.productId = p.productId
+        WHERE s.date BETWEEN :startDate AND :endDate
+        GROUP BY p.name
+        ORDER BY totalRevenue DESC
+        LIMIT :limit
+    """)
+    fun getTopSellingProductsByRevenue(startDate: Long, endDate: Long, limit: Int = 10): Flow<List<TopSellingProduct>>
 
     @Query("SELECT * FROM sales")
     fun getAllSalesSimple(): Flow<List<Sale>>

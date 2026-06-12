@@ -6,7 +6,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -16,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
+import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.RestockHistoryItem
 import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.VetViewModel
@@ -32,6 +35,7 @@ fun RestockScreen(
     navController: NavController
 ) {
     val restockHistory by viewModel.restockHistory.collectAsState()
+    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var showDatePicker by remember { mutableStateOf(false) }
 
@@ -95,6 +99,13 @@ fun RestockScreen(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(vertical = 16.dp)
             )
+            if (lowStockProducts.isNotEmpty()) {
+                RestockSuggestionEntry(
+                    lowStockProducts = lowStockProducts,
+                    onOpenRestock = { navController.navigate(Screen.AddRestock.route) }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+            }
 
             if (restockHistory.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -106,6 +117,38 @@ fun RestockScreen(
                         RestockHistoryListItem(item = item)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RestockSuggestionEntry(
+    lowStockProducts: List<Product>,
+    onOpenRestock: () -> Unit
+) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                Icons.Default.WarningAmber,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(26.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Stock bajo detectado", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    "${lowStockProducts.size} productos pueden cargarse como reposicion sugerida.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            FilledTonalIconButton(onClick = onOpenRestock) {
+                Icon(Icons.Default.AddShoppingCart, contentDescription = "Abrir reposicion sugerida")
             }
         }
     }
