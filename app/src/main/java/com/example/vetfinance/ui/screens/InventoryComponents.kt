@@ -1,6 +1,8 @@
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -12,7 +14,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddShoppingCart
+import androidx.compose.material.icons.filled.Inventory
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,6 +27,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.vetfinance.R
@@ -69,6 +76,58 @@ fun ProductDialog(
     val selectedSupplier = remember(selectedSupplierId, suppliers) {
         suppliers.find { it.supplierId == selectedSupplierId }
     }
+    var showUnsavedChangesDialog by remember(product) { mutableStateOf(false) }
+    val hasUnsavedChanges = remember(
+        product,
+        name,
+        price,
+        stock,
+        cost,
+        isService,
+        selectedSellingMethod,
+        lowStockThreshold,
+        category,
+        unitMeasure,
+        isContainer,
+        containerSize,
+        selectedContainedProductId,
+        selectedSupplierId
+    ) {
+        val initialName = product?.name ?: ""
+        val initialPrice = product?.price?.toLong()?.toString() ?: ""
+        val initialStock = product?.stock?.let { if (it % 1.0 == 0.0) it.toLong().toString() else it.toString() } ?: ""
+        val initialCost = product?.cost?.toLong()?.toString() ?: ""
+        val initialIsService = product?.isService ?: false
+        val initialSellingMethod = product?.sellingMethod ?: SELLING_METHOD_BY_UNIT
+        val initialLowStockThreshold = product?.lowStockThreshold?.toString() ?: ""
+        val initialCategory = product?.category ?: ""
+        val initialUnitMeasure = product?.unitMeasure ?: ""
+        val initialIsContainer = product?.isContainer ?: false
+        val initialContainerSize = product?.containerSize?.toString() ?: ""
+        val initialContainedProductId = product?.containedProductId
+        val initialSupplierId = product?.supplierIdFk
+
+        name != initialName ||
+            price != initialPrice ||
+            stock != initialStock ||
+            cost != initialCost ||
+            isService != initialIsService ||
+            selectedSellingMethod != initialSellingMethod ||
+            lowStockThreshold != initialLowStockThreshold ||
+            category != initialCategory ||
+            unitMeasure != initialUnitMeasure ||
+            isContainer != initialIsContainer ||
+            containerSize != initialContainerSize ||
+            selectedContainedProductId != initialContainedProductId ||
+            selectedSupplierId != initialSupplierId
+    }
+    val requestDismiss: () -> Unit = {
+        if (hasUnsavedChanges) {
+            showUnsavedChangesDialog = true
+        } else {
+            onDismiss()
+        }
+    }
 
     if (showDeleteConfirmation && product != null) {
         AlertDialog(
@@ -91,7 +150,7 @@ fun ProductDialog(
     }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = requestDismiss,
         title = { Text(if (isEditing) stringResource(R.string.product_dialog_edit_title) else stringResource(R.string.product_dialog_add_title)) },
         text = {
             Column(
@@ -339,12 +398,36 @@ fun ProductDialog(
                         Text(stringResource(R.string.delete_button).uppercase(Locale.getDefault()))
                     }
                 }
-                TextButton(onClick = onDismiss) {
+                TextButton(onClick = requestDismiss) {
                     Text(stringResource(R.string.cancel_button).uppercase(Locale.getDefault()))
                 }
             }
         }
     )
+
+    if (showUnsavedChangesDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedChangesDialog = false },
+            title = { Text("Cambios sin guardar") },
+            text = { Text("Hay datos editados en este formulario. Si sales ahora, se perderan los cambios.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUnsavedChangesDialog = false
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Salir sin guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedChangesDialog = false }) {
+                    Text("Seguir editando")
+                }
+            }
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -435,33 +518,135 @@ fun ProductSelectionItem(
     onAdd: () -> Unit,
     onRemove: () -> Unit
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    val isDose = product.sellingMethod == SELLING_METHOD_DOSE_ONLY
+    val typeLabel = when {
+        product.isService -> "Servicio"
+        isDose -> "Dosis"
+        else -> "Producto"
+    }
+    val itemIcon = when {
+        product.isService -> Icons.Default.MedicalServices
+        isDose -> Icons.Default.WarningAmber
+        else -> Icons.Default.Inventory
+    }
+    val isLowStock = !product.isService && product.lowStockThreshold?.let { threshold ->
+        threshold > 0 && product.stock < threshold
+    } == true
+    val stockReference = (product.lowStockThreshold ?: product.stock.coerceAtLeast(1.0)).coerceAtLeast(1.0)
+    val stockRatio = (product.stock / stockReference).coerceIn(0.0, 1.0).toFloat()
+    val isInCart = quantityInCart > 0.0
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isInCart) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
+        ),
+        border = if (isInCart) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+    ) {
         Row(
-            modifier = Modifier.padding(8.dp).fillMaxWidth(),
+            modifier = Modifier
+                .padding(12.dp)
+                .fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Surface(
+                shape = RoundedCornerShape(8.dp),
+                color = if (isInCart) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
+                tonalElevation = 1.dp
+            ) {
+                Icon(
+                    imageVector = itemIcon,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .padding(10.dp)
+                        .size(22.dp),
+                    tint = if (isInCart) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
-                Text(product.name, fontWeight = FontWeight.Bold)
-                Text(stringResource(R.string.product_selection_price_label_gs, formatCurrency(product.price)), fontSize = 14.sp)
-                product.category?.takeIf { it.isNotBlank() }?.let {
-                    Text("Categoria: $it", fontSize = 12.sp)
+                Text(
+                    product.name,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    AssistChip(onClick = {}, label = { Text(typeLabel) })
+                    product.category?.takeIf { it.isNotBlank() }?.let {
+                        AssistChip(
+                            onClick = {},
+                            label = { Text(it, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        )
+                    }
                 }
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.product_selection_price_label_gs, formatCurrency(product.price)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
                 if (product.sellingMethod != SELLING_METHOD_DOSE_ONLY && !product.isService) {
                     val unit = product.unitMeasure?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
-                    Text("Stock: ${formatCurrency(product.stock).replace(",00","")}$unit", fontSize = 12.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        LinearProgressIndicator(
+                            progress = { stockRatio },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(6.dp),
+                            color = if (isLowStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.outlineVariant
+                        )
+                        Text(
+                            "Stock ${formatCurrency(product.stock).replace(",00","")}$unit",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isLowStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onRemove, enabled = quantityInCart > 0.0) {
-                    Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.product_selection_remove_content_description))
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (isInCart) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceContainer
+                ) {
+                    Row(
+                        modifier = Modifier.widthIn(min = 116.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        IconButton(onClick = onRemove, enabled = isInCart, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.product_selection_remove_content_description))
+                        }
+                        Text(
+                            text = if (isInCart) formatCurrency(quantityInCart).replace(",00", "") else "0",
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = onAdd, modifier = Modifier.size(36.dp)) {
+                            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.product_selection_add_content_description))
+                        }
+                    }
                 }
-                Text(
-                    text = if (quantityInCart > 0) formatCurrency(quantityInCart).replace(",00", "") else "0",
-                    modifier = Modifier.padding(horizontal = 8.dp)
-                )
-                IconButton(onClick = onAdd) {
-                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.product_selection_add_content_description))
+                if (isInCart) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
+                        Text("En carrito", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
         }

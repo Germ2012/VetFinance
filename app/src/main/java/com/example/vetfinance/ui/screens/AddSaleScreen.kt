@@ -1,24 +1,35 @@
 package com.example.vetfinance.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Inventory
+import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -26,6 +37,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavHostController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.CartItem
+import com.example.vetfinance.data.Client
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
@@ -178,6 +190,29 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         )
     }
 
+    val lowStockIds = lowStockProducts.map { it.productId }.toSet()
+    val frequentIds = frequentProducts.map { it.productId }
+    val visibleInventory = inventory
+        .filter { product ->
+            when (saleFilter) {
+                "Productos" -> !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
+                "Servicios" -> product.isService
+                "Dosis" -> !product.isService && product.sellingMethod == SELLING_METHOD_DOSE_ONLY
+                "Bajo stock" -> product.productId in lowStockIds
+                else -> true
+            }
+        }
+        .sortedWith(
+            compareBy<Product> {
+                val rank = frequentIds.indexOf(it.productId)
+                if (rank >= 0) rank else Int.MAX_VALUE
+            }.thenBy { it.name.lowercase(Locale.getDefault()) }
+        )
+    val visibleProducts = visibleInventory.count { !it.isService && it.sellingMethod != SELLING_METHOD_DOSE_ONLY }
+    val visibleServices = visibleInventory.count { it.isService }
+    val visibleDoses = visibleInventory.count { !it.isService && it.sellingMethod == SELLING_METHOD_DOSE_ONLY }
+    val cartUnits = cart.sumOf { it.quantity }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -195,169 +230,313 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             )
         },
         bottomBar = {
-            BottomAppBar(containerColor = MaterialTheme.colorScheme.surfaceVariant) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = stringResource(R.string.label_total_sale_amount, formatCurrency(total)),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Button(
-                        onClick = {
-                            viewModel.finalizeSale(
-                                clientName = saleClientName,
-                                selectedClientId = selectedSaleClientId
-                            ) { navController.popBackStack() }
-                        },
-                        enabled = cart.isNotEmpty()
-                    ) {
-                        Text(stringResource(R.string.button_confirm_sale))
-                    }
+            SaleCheckoutBar(
+                total = total,
+                itemCount = cartUnits,
+                enabled = cart.isNotEmpty(),
+                onConfirm = {
+                    viewModel.finalizeSale(
+                        clientName = saleClientName,
+                        selectedClientId = selectedSaleClientId
+                    ) { navController.popBackStack() }
                 }
-            }
+            )
         }
     ) { paddingValues ->
-        Column(modifier = Modifier.padding(paddingValues)) {
-            OutlinedTextField(
-                value = saleClientName,
-                onValueChange = {
+        Column(
+            modifier = Modifier
+                .padding(paddingValues)
+                .fillMaxSize()
+        ) {
+            SaleCustomerPanel(
+                clientName = saleClientName,
+                selectedClientPhone = clients.find { it.clientId == selectedSaleClientId }?.phone,
+                onClientNameChange = {
                     saleClientName = it
                     selectedSaleClientId = null
                     viewModel.onClientNameChange(it)
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                label = { Text(stringResource(R.string.sale_client_label)) },
-                supportingText = {
-                    val selectedClient = clients.find { it.clientId == selectedSaleClientId }
-                    Text(selectedClient?.phone ?: stringResource(R.string.sale_client_general_hint))
-                },
-                singleLine = true
+                }
             )
 
-            if (clientNameSuggestions.isNotEmpty() && saleClientName.isNotBlank()) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 120.dp)
-                        .padding(horizontal = 16.dp)
-                ) {
-                    items(clientNameSuggestions, key = { it.clientId }) { client ->
-                        ListItem(
-                            headlineContent = { Text(client.name) },
-                            supportingContent = {
-                                Text(client.phone ?: stringResource(R.string.client_suggestion_no_phone))
-                            },
-                            modifier = Modifier.clickable {
-                                saleClientName = client.name
-                                selectedSaleClientId = client.clientId
-                                viewModel.clearClientNameSuggestions()
-                            }
-                        )
+            AnimatedVisibility(visible = clientNameSuggestions.isNotEmpty() && saleClientName.isNotBlank()) {
+                ClientSuggestionPanel(
+                    suggestions = clientNameSuggestions,
+                    onClientSelected = { client ->
+                        saleClientName = client.name
+                        selectedSaleClientId = client.clientId
+                        viewModel.clearClientNameSuggestions()
                     }
-                }
+                )
             }
 
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.onProductSearchQueryChange(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                label = { Text(stringResource(R.string.placeholder_search_product_service)) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.content_description_search)) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.clearProductSearchQuery() }) {
-                            Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.content_description_clear_search))
-                        }
-                    }
-                },
-                singleLine = true
+            SaleSearchPanel(
+                searchQuery = searchQuery,
+                onSearchChange = { viewModel.onProductSearchQueryChange(it) },
+                onClearSearch = { viewModel.clearProductSearchQuery() }
             )
 
-            if (cart.isNotEmpty()) {
-                Text(
-                    text = stringResource(R.string.shopping_cart_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            AnimatedVisibility(visible = cart.isNotEmpty()) {
+                SaleCartPanel(
+                    cart = cart,
+                    total = total,
+                    onRemove = { viewModel.removeFromCart(it) },
+                    onAdd = { viewModel.addToCart(it.product) },
+                    onEditPrice = { cartItemToEditPrice = it }
                 )
-                LazyColumn(
-                    modifier = Modifier.heightIn(max = 150.dp),
-                    contentPadding = PaddingValues(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(cart, key = { it.cartItemId }) { cartItem ->
-                        CartItemRow(
-                            cartItem = cartItem,
-                            onRemove = { viewModel.removeFromCart(cartItem) },
-                            onAdd = { viewModel.addToCart(cartItem.product) },
-                            onEditPrice = { cartItemToEditPrice = cartItem }
-                        )
-                    }
-                }
-                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
             }
 
             LazyColumn(
                 modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                item {
+                    SaleSelectorHeader(
+                        visibleCount = visibleInventory.size,
+                        productCount = visibleProducts,
+                        serviceCount = visibleServices,
+                        doseCount = visibleDoses
+                    )
+                }
                 item {
                     SaleProductFilterRow(
                         selectedFilter = saleFilter,
                         onFilterSelected = { saleFilter = it }
                     )
                 }
-                val lowStockIds = lowStockProducts.map { it.productId }.toSet()
-                val frequentIds = frequentProducts.map { it.productId }
-                val visibleInventory = inventory
-                    .filter { product ->
-                        when (saleFilter) {
-                            "Productos" -> !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
-                            "Servicios" -> product.isService
-                            "Dosis" -> product.sellingMethod == SELLING_METHOD_DOSE_ONLY
-                            "Bajo stock" -> product.productId in lowStockIds
-                            else -> true
-                        }
-                    }
-                    .sortedWith(
-                        compareBy<Product> {
-                            val rank = frequentIds.indexOf(it.productId)
-                            if (rank >= 0) rank else Int.MAX_VALUE
-                        }.thenBy { it.name.lowercase(Locale.getDefault()) }
-                    )
                 if (frequentProducts.isNotEmpty() && saleFilter == "Todos" && searchQuery.isBlank()) {
                     item {
-                        Text("Frecuentes", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        SaleInlineBanner(
+                            icon = Icons.Default.PointOfSale,
+                            title = "Frecuentes primero",
+                            body = "Ordenados segun lo que mas vendes para cargar mas rapido."
+                        )
                     }
                 }
-                items(visibleInventory, key = { it.productId }) { product ->
-                    ProductSelectionItem(
-                        product = product,
-                        quantityInCart = cart.filter { it.product.productId == product.productId }.sumOf { it.quantity },
-                        onAdd = {
-                            when {
-                                product.isContainer -> viewModel.openSaleTypeDialog(product)
-                                product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> viewModel.openFractionalSaleDialog(product)
-                                product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> viewModel.openDoseSaleDialog(product)
-                                else -> viewModel.addToCart(product)
+                if (visibleInventory.isEmpty()) {
+                    item {
+                        SaleEmptyProductState(
+                            searchQuery = searchQuery,
+                            onAddProduct = { viewModel.onShowAddProductDialog() }
+                        )
+                    }
+                } else {
+                    items(visibleInventory, key = { it.productId }) { product ->
+                        ProductSelectionItem(
+                            product = product,
+                            quantityInCart = cart.filter { it.product.productId == product.productId }.sumOf { it.quantity },
+                            onAdd = {
+                                when {
+                                    product.isContainer -> viewModel.openSaleTypeDialog(product)
+                                    product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> viewModel.openFractionalSaleDialog(product)
+                                    product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> viewModel.openDoseSaleDialog(product)
+                                    else -> viewModel.addToCart(product)
+                                }
+                            },
+                            onRemove = {
+                                val itemToRemove = cart.findLast { it.product.productId == product.productId }
+                                if (itemToRemove != null) {
+                                    viewModel.removeFromCart(itemToRemove)
+                                }
                             }
-                        },
-                        onRemove = {
-                            val itemToRemove = cart.findLast { it.product.productId == product.productId }
-                            if (itemToRemove != null) {
-                                viewModel.removeFromCart(itemToRemove)
-                            }
-                        }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaleCheckoutBar(
+    total: Double,
+    itemCount: Double,
+    enabled: Boolean,
+    onConfirm: () -> Unit
+) {
+    Surface(
+        shadowElevation = 8.dp,
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (enabled) "${formatCompactQuantity(itemCount)} items en carrito" else "Carrito vacio",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = stringResource(R.string.label_total_sale_amount, formatCurrency(total)),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
+            Button(
+                onClick = onConfirm,
+                enabled = enabled,
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Icon(Icons.Default.PointOfSale, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(stringResource(R.string.button_confirm_sale))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaleCustomerPanel(
+    clientName: String,
+    selectedClientPhone: String?,
+    onClientNameChange: (String) -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, top = 12.dp, end = 16.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(Icons.Default.People, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Column {
+                    Text("Cliente de la venta", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text("Puedes asociarlo ahora o dejarlo como venta general.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            OutlinedTextField(
+                value = clientName,
+                onValueChange = onClientNameChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.sale_client_label)) },
+                supportingText = {
+                    Text(selectedClientPhone ?: stringResource(R.string.sale_client_general_hint))
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ClientSuggestionPanel(
+    suggestions: List<Client>,
+    onClientSelected: (Client) -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(8.dp),
+        tonalElevation = 2.dp,
+        color = MaterialTheme.colorScheme.surface
+    ) {
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 136.dp)
+        ) {
+            items(suggestions, key = { it.clientId }) { client ->
+                ListItem(
+                    headlineContent = { Text(client.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    supportingContent = {
+                        Text(client.phone ?: stringResource(R.string.client_suggestion_no_phone))
+                    },
+                    leadingContent = {
+                        Icon(Icons.Default.People, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    },
+                    modifier = Modifier.clickable { onClientSelected(client) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaleSearchPanel(
+    searchQuery: String,
+    onSearchChange: (String) -> Unit,
+    onClearSearch: () -> Unit
+) {
+    OutlinedTextField(
+        value = searchQuery,
+        onValueChange = onSearchChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        label = { Text(stringResource(R.string.placeholder_search_product_service)) },
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = stringResource(R.string.content_description_search)) },
+        trailingIcon = {
+            if (searchQuery.isNotEmpty()) {
+                IconButton(onClick = onClearSearch) {
+                    Icon(Icons.Default.Clear, contentDescription = stringResource(R.string.content_description_clear_search))
+                }
+            }
+        },
+        singleLine = true,
+        shape = RoundedCornerShape(8.dp)
+    )
+}
+
+@Composable
+private fun SaleCartPanel(
+    cart: List<CartItem>,
+    total: Double,
+    onRemove: (CartItem) -> Unit,
+    onAdd: (CartItem) -> Unit,
+    onEditPrice: (CartItem) -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+            .animateContentSize(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.AddShoppingCart, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Column {
+                        Text(stringResource(R.string.shopping_cart_title), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("${cart.size} lineas cargadas", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                }
+                Text(
+                    text = "Gs. ${formatCurrency(total)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 184.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(cart, key = { it.cartItemId }) { cartItem ->
+                    CartItemRow(
+                        cartItem = cartItem,
+                        onRemove = { onRemove(cartItem) },
+                        onAdd = { onAdd(cartItem) },
+                        onEditPrice = { onEditPrice(cartItem) }
                     )
                 }
             }
@@ -366,21 +545,145 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
 }
 
 @Composable
-fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit, onEditPrice: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+private fun SaleSelectorHeader(
+    visibleCount: Int,
+    productCount: Int,
+    serviceCount: Int,
+    doseCount: Int
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
-            modifier = Modifier.padding(8.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            Column {
+                Text("Seleccionar producto o servicio", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("$visibleCount opciones disponibles", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(Icons.Default.Inventory, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SaleMiniMetric("Productos", productCount.toString(), Icons.Default.Inventory, Modifier.weight(1f))
+            SaleMiniMetric("Servicios", serviceCount.toString(), Icons.Default.MedicalServices, Modifier.weight(1f))
+            SaleMiniMetric("Dosis", doseCount.toString(), Icons.Default.WarningAmber, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun SaleMiniMetric(
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            Column {
+                Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaleInlineBanner(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    body: String
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+            Column {
+                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaleEmptyProductState(
+    searchQuery: String,
+    onAddProduct: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(Icons.Default.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
+            Text("No hay coincidencias", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                text = if (searchQuery.isBlank()) "Crea un producto o servicio para iniciar la venta." else "Prueba otro termino o registra esta opcion.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FilledTonalButton(onClick = onAddProduct, shape = RoundedCornerShape(8.dp)) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(stringResource(R.string.content_description_add_new_product))
+            }
+        }
+    }
+}
+
+@Composable
+fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit, onEditPrice: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Row(
+            modifier = Modifier.padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(cartItem.product.name, fontWeight = FontWeight.Bold)
+                Text(
+                    cartItem.product.name,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 val priceText = cartItem.overridePrice?.let {
                     "${formatCurrency(it)} (Precio final)"
                 } ?: formatCurrency(cartItem.product.price * cartItem.quantity)
-                Text(priceText, style = MaterialTheme.typography.bodyMedium)
+                Text("Gs. $priceText", style = MaterialTheme.typography.bodyMedium)
                 cartItem.notes?.takeIf { it.isNotBlank() }?.let {
-                    Text("Motivo: $it", style = MaterialTheme.typography.bodySmall)
+                    Text("Motivo: $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
 
@@ -388,16 +691,24 @@ fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit, onE
                 Icon(Icons.Default.Edit, contentDescription = "Editar precio")
             }
             if (cartItem.product.sellingMethod != SELLING_METHOD_DOSE_ONLY) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                     IconButton(onClick = onRemove, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Default.Remove, contentDescription = "Remove")
                     }
                     Text(
-                        text = formatCurrency(cartItem.quantity).removeSuffix(",00"),
+                            text = formatCompactQuantity(cartItem.quantity),
                         modifier = Modifier.padding(horizontal = 8.dp)
                     )
                     IconButton(onClick = onAdd, modifier = Modifier.size(32.dp)) {
                         Icon(Icons.Default.Add, contentDescription = "Add")
+                    }
                     }
                 }
             } else {
@@ -407,6 +718,10 @@ fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit, onE
             }
         }
     }
+}
+
+private fun formatCompactQuantity(quantity: Double): String {
+    return formatCurrency(quantity).removeSuffix(",00")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

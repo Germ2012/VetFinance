@@ -1,6 +1,8 @@
 package com.example.vetfinance.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -9,8 +11,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Inventory
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WarningAmber
@@ -50,6 +56,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
     var productForCostHistory by remember { mutableStateOf<Product?>(null) }
     var productForStockHistory by remember { mutableStateOf<Product?>(null) }
     var productForStockAdjustment by remember { mutableStateOf<Product?>(null) }
+    var lowStockAlertExpanded by remember { mutableStateOf(false) }
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val productCostHistory by viewModel.productCostHistory.collectAsState()
@@ -76,6 +83,10 @@ fun InventoryScreen(viewModel: VetViewModel) {
     }
     val productCount = remember(inventory) { inventory.count { !it.isService } }
     val serviceCount = remember(inventory) { inventory.count { it.isService } }
+
+    LaunchedEffect(lowStockProducts.isEmpty()) {
+        if (lowStockProducts.isEmpty()) lowStockAlertExpanded = false
+    }
 
     if (showDialog) {
         ProductDialog(
@@ -173,23 +184,19 @@ fun InventoryScreen(viewModel: VetViewModel) {
                 .padding(paddingValues)
                 .padding(horizontal = 16.dp)
         ) {
-            Text(
-                stringResource(R.string.tab_inventory),
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(top = 18.dp)
-            )
-            Text(
-                text = "Busca, filtra y corrige stock desde una sola vista.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
-            )
-            InventoryOverview(
+            InventoryHeader(
                 productCount = productCount,
                 serviceCount = serviceCount,
                 lowStockCount = lowStockProducts.size
             )
+            AnimatedVisibility(visible = lowStockProducts.isNotEmpty()) {
+                InventoryAlertBanner(
+                    lowStockProducts = lowStockProducts,
+                    expanded = lowStockAlertExpanded,
+                    onToggle = { lowStockAlertExpanded = !lowStockAlertExpanded },
+                    onAdjustStock = { productForStockAdjustment = it }
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
             OutlinedTextField(
                 value = searchQuery,
@@ -209,6 +216,11 @@ fun InventoryScreen(viewModel: VetViewModel) {
             )
             Spacer(modifier = Modifier.height(12.dp))
             InventoryFilter(selectedFilter = filter, onFilterSelected = { viewModel.onInventoryFilterChanged(it) })
+            InventoryListHeader(
+                showingCount = filteredProducts.size,
+                totalCount = inventory.size,
+                filter = filter
+            )
             Spacer(modifier = Modifier.height(12.dp))
 
             if (isLoading && inventory.isEmpty()) {
@@ -247,6 +259,209 @@ fun InventoryScreen(viewModel: VetViewModel) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun InventoryHeader(
+    productCount: Int,
+    serviceCount: Int,
+    lowStockCount: Int
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 14.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.primaryContainer
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text(
+                        stringResource(R.string.tab_inventory),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "Busca, filtra y corrige stock desde una sola vista.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+                Icon(
+                    Icons.Default.Inventory,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(34.dp)
+                )
+            }
+            InventoryOverview(
+                productCount = productCount,
+                serviceCount = serviceCount,
+                lowStockCount = lowStockCount
+            )
+        }
+    }
+}
+
+@Composable
+private fun InventoryAlertBanner(
+    lowStockProducts: List<Product>,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onAdjustStock: (Product) -> Unit
+) {
+    val lowStockCount = lowStockProducts.size
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp)
+            .animateContentSize()
+            .clickable(onClick = onToggle),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.errorContainer,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Stock bajo", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    Text(
+                        "$lowStockCount productos necesitan reposicion o ajuste.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+
+            AnimatedVisibility(visible = expanded) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.error.copy(alpha = 0.25f))
+                    lowStockProducts
+                        .sortedWith(
+                            compareBy<Product> { product ->
+                                val threshold = product.lowStockThreshold ?: 1.0
+                                if (threshold > 0) product.stock / threshold else product.stock
+                            }.thenBy { it.name.lowercase(Locale.getDefault()) }
+                        )
+                        .take(8)
+                        .forEach { product ->
+                            LowStockProductRow(product = product, onAdjustStock = onAdjustStock)
+                        }
+                    if (lowStockProducts.size > 8) {
+                        Text(
+                            text = "Mostrando 8 de $lowStockCount alertas. Usa el filtro de inventario para ver el resto.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LowStockProductRow(
+    product: Product,
+    onAdjustStock: (Product) -> Unit
+) {
+    val threshold = product.lowStockThreshold ?: 0.0
+    val stockRatio = if (threshold > 0) (product.stock / threshold).coerceIn(0.0, 1.0).toFloat() else 0f
+    val unit = product.unitMeasure?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.20f))
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        product.name,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "Stock ${formatCurrency(product.stock).replace(",00", "")}$unit de minimo ${formatCurrency(threshold).replace(",00", "")}$unit",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                FilledTonalButton(
+                    onClick = { onAdjustStock(product) },
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Text("Ajustar")
+                }
+            }
+            LinearProgressIndicator(
+                progress = { stockRatio },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp),
+                color = MaterialTheme.colorScheme.error,
+                trackColor = MaterialTheme.colorScheme.outlineVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun InventoryListHeader(
+    showingCount: Int,
+    totalCount: Int,
+    filter: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Default.FilterList, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            Text("Vista: $filter", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+            Text("$showingCount de $totalCount", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -579,9 +794,18 @@ fun AdjustStockDialog(
 ) {
     var stock by remember(product) { mutableStateOf(product.stock.toString()) }
     var note by remember(product) { mutableStateOf("") }
+    var showUnsavedChangesDialog by remember(product) { mutableStateOf(false) }
+    val hasUnsavedChanges = stock != product.stock.toString() || note.isNotBlank()
+    val requestDismiss: () -> Unit = {
+        if (hasUnsavedChanges) {
+            showUnsavedChangesDialog = true
+        } else {
+            onDismiss()
+        }
+    }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = requestDismiss,
         title = { Text("Ajustar stock de ${product.name}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -610,9 +834,33 @@ fun AdjustStockDialog(
             ) { Text(stringResource(R.string.save_button)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel_button)) }
+            TextButton(onClick = requestDismiss) { Text(stringResource(R.string.cancel_button)) }
         }
     )
+
+    if (showUnsavedChangesDialog) {
+        AlertDialog(
+            onDismissRequest = { showUnsavedChangesDialog = false },
+            title = { Text("Cambios sin guardar") },
+            text = { Text("Hay un ajuste de stock en edicion. Si sales ahora, se perderan los cambios.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showUnsavedChangesDialog = false
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Salir sin guardar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUnsavedChangesDialog = false }) {
+                    Text("Seguir editando")
+                }
+            }
+        )
+    }
 }
 
 @Composable
