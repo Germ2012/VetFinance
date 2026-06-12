@@ -1,5 +1,6 @@
 package com.example.vetfinance.ui.screens
 
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -350,10 +351,16 @@ fun InventoryItem(
     onOpenContainer: (Product) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val stockReference = (product.lowStockThreshold ?: product.stock.coerceAtLeast(1.0)).coerceAtLeast(1.0)
+    val stockRatio = (product.stock / stockReference).coerceIn(0.0, 1.0).toFloat()
+    val isLowStock = product.lowStockThreshold?.let { threshold ->
+        threshold > 0 && product.stock < threshold
+    } == true
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .animateContentSize()
             .clickable { onEdit(product) },
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
@@ -419,14 +426,21 @@ fun InventoryItem(
                         text = "Stock: ${formatCurrency(product.stock).replace(",00","")}$unit",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    product.lowStockThreshold?.let { threshold ->
-                        if (threshold > 0 && product.stock < threshold) {
-                            Text(
-                                text = "Bajo stock",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { stockRatio },
+                        modifier = Modifier
+                            .width(112.dp)
+                            .height(6.dp),
+                        color = if (isLowStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                        trackColor = MaterialTheme.colorScheme.outlineVariant
+                    )
+                    if (isLowStock) {
+                        Text(
+                            text = "Bajo stock",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
                     }
                 }
             }

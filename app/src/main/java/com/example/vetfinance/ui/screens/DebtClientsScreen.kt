@@ -1,5 +1,6 @@
 package com.example.vetfinance.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -11,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.People
@@ -44,6 +46,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
     var showOnlyWithDebt by remember { mutableStateOf(true) }
     var minimumDebtText by remember { mutableStateOf("") }
     var selectedSort by remember { mutableStateOf("Mayor deuda") }
+    var showFilters by remember { mutableStateOf(false) }
     var clientToDelete by remember { mutableStateOf<Client?>(null) }
     var clientToAdjustDebt by remember { mutableStateOf<Client?>(null) }
     val sortOptions = remember { listOf("Mayor deuda", "Menor deuda", "Nombre") }
@@ -182,47 +185,72 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
             )
             Spacer(modifier = Modifier.height(10.dp))
 
-            Card(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(8.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(stringResource(R.string.debt_clients_show_only_with_debt_switch))
-                        Switch(
-                            checked = showOnlyWithDebt,
-                            onCheckedChange = { showOnlyWithDebt = it }
-                        )
+                AssistChip(
+                    onClick = { showOnlyWithDebt = !showOnlyWithDebt },
+                    label = {
+                        Text(if (showOnlyWithDebt) "Solo con deuda" else "Todos los clientes")
                     }
-                    OutlinedTextField(
-                        value = minimumDebtText,
-                        onValueChange = { minimumDebtText = it.filter { char -> char.isDigit() } },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Deuda m\u00ednima") },
-                        prefix = { Text(stringResource(R.string.text_prefix_gs)) },
-                        visualTransformation = NumberTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        singleLine = true,
-                        shape = RoundedCornerShape(8.dp)
-                    )
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        sortOptions.forEach { option ->
-                            FilterChip(
-                                selected = selectedSort == option,
-                                onClick = { selectedSort = option },
-                                label = { Text(option) }
+                )
+                FilledTonalButton(
+                    onClick = { showFilters = !showFilters },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (showFilters) "Ocultar filtros" else "Filtros")
+                }
+            }
+
+            AnimatedVisibility(visible = showFilters) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(stringResource(R.string.debt_clients_show_only_with_debt_switch))
+                            Switch(
+                                checked = showOnlyWithDebt,
+                                onCheckedChange = { showOnlyWithDebt = it }
                             )
+                        }
+                        OutlinedTextField(
+                            value = minimumDebtText,
+                            onValueChange = { minimumDebtText = it.filter { char -> char.isDigit() } },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Deuda m\u00ednima") },
+                            prefix = { Text(stringResource(R.string.text_prefix_gs)) },
+                            visualTransformation = NumberTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = RoundedCornerShape(8.dp)
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState())
+                                .padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            sortOptions.forEach { option ->
+                                FilterChip(
+                                    selected = selectedSort == option,
+                                    onClick = { selectedSort = option },
+                                    label = { Text(option) }
+                                )
+                            }
                         }
                     }
                 }

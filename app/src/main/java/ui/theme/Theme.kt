@@ -29,11 +29,14 @@ private val LightColorScheme = lightColorScheme(
     background = AppBackground,
     surface = AppSurface,
     surfaceVariant = AppSurfaceVariant,
-    surfaceContainerHigh = Color(0xFFEFF5EF),
+    surfaceContainerLow = AppSurfaceContainerLow,
+    surfaceContainer = AppSurfaceContainer,
+    surfaceContainerHigh = AppSurfaceContainerHigh,
     onBackground = TextPrimary,
     onSurface = TextPrimary,
     onSurfaceVariant = TextSecondary,
-    outline = Color(0xFF748277)
+    outline = Color(0xFF748277),
+    outlineVariant = OutlineVariant
 )
 
 @Composable
@@ -48,7 +51,10 @@ fun VetFinanceTheme(
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.primary.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            window.navigationBarColor = colorScheme.surface.toArgb()
+            val controller = WindowCompat.getInsetsController(window, view)
+            controller.isAppearanceLightStatusBars = false
+            controller.isAppearanceLightNavigationBars = true
         }
     }
 

@@ -1,6 +1,7 @@
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -56,6 +58,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -165,7 +168,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
             contentPadding = PaddingValues(top = 18.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             item {
                 DashboardHeader(
@@ -293,44 +296,75 @@ private fun DashboardHeader(
     pendingItemsCount: Int,
     onSettingsClick: () -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Top
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                brush = Brush.linearGradient(
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.secondary
+                    )
+                ),
+                shape = RoundedCornerShape(8.dp)
+            )
+            .padding(16.dp)
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = clinicName,
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            AssistChip(
-                onClick = {},
-                label = {
-                    Text(
-                        text = if (pendingItemsCount == 0) "D\u00eda al corriente" else "$pendingItemsCount pendientes"
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = if (pendingItemsCount == 0) Icons.Default.CheckCircle else Icons.Default.WarningAmber,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            )
-        }
-        IconButton(onClick = onSettingsClick) {
-            Icon(Icons.Default.Settings, contentDescription = "Ajustes")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Panel operativo",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White.copy(alpha = 0.82f)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = clinicName,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.82f)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                AssistChip(
+                    onClick = {},
+                    colors = AssistChipDefaults.assistChipColors(
+                        containerColor = Color.White.copy(alpha = 0.16f),
+                        labelColor = Color.White,
+                        leadingIconContentColor = Color.White
+                    ),
+                    label = {
+                        Text(
+                            text = if (pendingItemsCount == 0) "D\u00eda al corriente" else "$pendingItemsCount pendientes"
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = if (pendingItemsCount == 0) Icons.Default.CheckCircle else Icons.Default.WarningAmber,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                )
+            }
+            IconButton(onClick = onSettingsClick) {
+                Icon(
+                    Icons.Default.Settings,
+                    contentDescription = "Ajustes",
+                    tint = Color.White
+                )
+            }
         }
     }
 }
@@ -446,6 +480,7 @@ private fun DashboardMetricCard(
     Card(
         modifier = modifier,
         shape = DashboardCardShape,
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = CardDefaults.cardColors(
             containerColor = containerColor,
             contentColor = contentColor
@@ -561,6 +596,7 @@ private fun DashboardEmptyState() {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = DashboardCardShape,
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
         Row(
