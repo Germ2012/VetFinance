@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -77,14 +78,16 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainScreen(viewModel: VetViewModel) {
     val navController = rememberNavController()
-    val navItems = listOf(
-        Screen.Dashboard,
-        Screen.Calendar,
-        Screen.Sales,
-        Screen.Reports,
-        Screen.Inventory,
-        Screen.Clients
-    )
+    val navItems = remember {
+        listOf(
+            Screen.Dashboard,
+            Screen.Calendar,
+            Screen.Sales,
+            Screen.Reports,
+            Screen.Inventory,
+            Screen.Clients
+        )
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -133,12 +136,14 @@ fun MainScreen(viewModel: VetViewModel) {
                         ),
                         alwaysShowLabel = true,
                         onClick = {
-                            navController.navigate(screen.route) {
-                               popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
+                            if (!selected) {
+                                navController.navigate(screen.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
+                                    launchSingleTop = true
+                                    restoreState = true
                                 }
-                               launchSingleTop = true
-                               restoreState = true
                             }
                         }
                     )

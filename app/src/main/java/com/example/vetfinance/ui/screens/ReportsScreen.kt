@@ -5,10 +5,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -16,6 +18,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,7 +39,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -53,8 +60,11 @@ import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.TopSellingProduct
-import com.example.vetfinance.viewmodel.ClientPurchaseReport
-import com.example.vetfinance.viewmodel.ProductProfitReport
+import com.example.vetfinance.domain.model.CategoryProfitReport
+import com.example.vetfinance.domain.model.ClientPurchaseReport
+import com.example.vetfinance.domain.model.ProductProfitReport
+import com.example.vetfinance.domain.model.SalesTrendComparisonPoint
+import com.example.vetfinance.domain.model.StockHealthSummary
 import com.example.vetfinance.viewmodel.HistoricalPeriod
 import com.example.vetfinance.viewmodel.ReportPeriodType
 import com.example.vetfinance.viewmodel.TopProductsMetric
@@ -262,6 +272,7 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
     val salesSummary by viewModel.salesSummary.collectAsState()
     val grossProfit by viewModel.grossProfitSummary.collectAsState()
     val selectedHistoricalPeriod by viewModel.selectedHistoricalPeriod.collectAsState()
+    val salesTrendComparison by viewModel.salesTrendComparison.collectAsState()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -345,6 +356,9 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+        item {
+            SalesTrendComparisonChart(points = salesTrendComparison)
         }
         item {
             BackupPanel(
@@ -603,6 +617,8 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
 fun ProfitabilityReportTab(viewModel: VetViewModel) {
     val productReports by viewModel.productProfitReports.collectAsState()
     val clientReports by viewModel.clientPurchaseReports.collectAsState()
+    val categoryReports by viewModel.categoryProfitReports.collectAsState()
+    val selectedHistoricalPeriod by viewModel.selectedHistoricalPeriod.collectAsState()
     val totalRevenue = remember(productReports) { productReports.sumOf { it.revenue } }
     val totalProfit = remember(productReports) { productReports.sumOf { it.profit } }
     val averageMargin = remember(productReports, totalRevenue) {
@@ -627,6 +643,9 @@ fun ProfitabilityReportTab(viewModel: VetViewModel) {
                 title = "Rentabilidad",
                 body = "Compara ganancia, margen, servicios y clientes con mayor compra acumulada."
             )
+        }
+        item {
+            PeriodSelector(viewModel)
         }
         if (productReports.isEmpty()) {
             item {
@@ -661,6 +680,12 @@ fun ProfitabilityReportTab(viewModel: VetViewModel) {
                     label = "Margen promedio",
                     value = "${String.format(Locale.getDefault(), "%.1f", averageMargin)}%",
                     icon = Icons.Default.Assessment
+                )
+            }
+            item {
+                CategoryProfitChart(
+                    reports = categoryReports,
+                    periodLabel = selectedHistoricalPeriod?.displayName ?: stringResource(R.string.no_period_selected)
                 )
             }
             item {
@@ -699,7 +724,7 @@ fun ProfitabilityReportTab(viewModel: VetViewModel) {
                 item {
                     ReportSectionTitle("Clientes que mas compran")
                 }
-                items(clientReports.take(5), key = { it.client.clientId }) { row ->
+                items(clientReports.take(5), key = { it.clientId }) { row ->
                     ClientPurchaseReportRow(row)
                 }
             }
@@ -863,6 +888,7 @@ fun DebtsReportTab(viewModel: VetViewModel) {
 @Composable
 fun InventoryReportTab(viewModel: VetViewModel) {
     val totalValue by viewModel.totalInventoryValue.collectAsState()
+    val stockHealth by viewModel.stockHealthSummary.collectAsState()
     val formattedValue = stringResource(R.string.label_client_debt_amount, formatCurrency(totalValue ?: 0.0))
     val inventory by viewModel.inventory.collectAsState()
     val productsOnly = remember(inventory) {
@@ -926,6 +952,9 @@ fun InventoryReportTab(viewModel: VetViewModel) {
                     modifier = Modifier.weight(1f)
                 )
             }
+        }
+        item {
+            StockHealthCard(summary = stockHealth)
         }
         if (productsOnly.isEmpty()) {
             item {
@@ -1021,7 +1050,7 @@ private fun ClientPurchaseReportRow(report: ClientPurchaseReport) {
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(report.client.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(report.clientName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("${report.saleCount} compras registradas", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
@@ -1139,6 +1168,296 @@ private fun ReportChartPanel(
             Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             content()
         }
+    }
+}
+
+@Composable
+private fun SalesTrendComparisonChart(points: List<SalesTrendComparisonPoint>) {
+    var selectedIndex by remember(points) {
+        mutableStateOf(points.indexOfLast { it.currentSales > 0.0 || it.previousSales > 0.0 }.takeIf { it >= 0 })
+    }
+    val maxValue = remember(points) {
+        maxOf(1.0, points.maxOfOrNull { maxOf(it.currentSales, it.previousSales) } ?: 0.0)
+    }
+    val currentColor = MaterialTheme.colorScheme.primary
+    val previousColor = MaterialTheme.colorScheme.tertiary
+    val gridColor = MaterialTheme.colorScheme.outlineVariant
+
+    ReportChartPanel(title = "Tendencia de ventas: semana actual vs anterior") {
+        if (points.isEmpty()) {
+            Text(
+                "Todavia no hay ventas suficientes para comparar semanas.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@ReportChartPanel
+        }
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(190.dp)
+        ) {
+            val top = 10.dp.toPx()
+            val bottom = 20.dp.toPx()
+            val left = 12.dp.toPx()
+            val right = size.width - 12.dp.toPx()
+            val usableHeight = (size.height - top - bottom).coerceAtLeast(1f)
+            val usableWidth = (right - left).coerceAtLeast(1f)
+            val divisor = points.lastIndex.coerceAtLeast(1)
+
+            fun offsetFor(index: Int, value: Double): Offset {
+                val normalized = (value / maxValue).toFloat().coerceIn(0f, 1f)
+                return Offset(
+                    x = left + usableWidth * (index.toFloat() / divisor),
+                    y = top + usableHeight * (1f - normalized)
+                )
+            }
+
+            repeat(4) { step ->
+                val y = top + usableHeight * (step / 3f)
+                drawLine(
+                    color = gridColor.copy(alpha = 0.55f),
+                    start = Offset(left, y),
+                    end = Offset(right, y),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+
+            fun pathFor(selector: (SalesTrendComparisonPoint) -> Double): Path {
+                val path = Path()
+                points.forEachIndexed { index, point ->
+                    val offset = offsetFor(index, selector(point))
+                    if (index == 0) path.moveTo(offset.x, offset.y) else path.lineTo(offset.x, offset.y)
+                }
+                return path
+            }
+
+            drawPath(
+                path = pathFor { it.previousSales },
+                color = previousColor,
+                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+            )
+            drawPath(
+                path = pathFor { it.currentSales },
+                color = currentColor,
+                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+            )
+
+            points.forEachIndexed { index, point ->
+                val isSelected = selectedIndex == index
+                drawCircle(
+                    color = previousColor,
+                    radius = if (isSelected) 5.dp.toPx() else 3.dp.toPx(),
+                    center = offsetFor(index, point.previousSales)
+                )
+                drawCircle(
+                    color = currentColor,
+                    radius = if (isSelected) 5.dp.toPx() else 3.dp.toPx(),
+                    center = offsetFor(index, point.currentSales)
+                )
+            }
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            ChartLegendDot(color = currentColor, label = "Actual")
+            ChartLegendDot(color = previousColor, label = "Anterior")
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            points.forEachIndexed { index, point ->
+                FilterChip(
+                    selected = selectedIndex == index,
+                    onClick = { selectedIndex = index },
+                    label = { Text(point.label, maxLines = 1) }
+                )
+            }
+        }
+
+        selectedIndex?.let { index ->
+            points.getOrNull(index)?.let { point ->
+                val delta = point.currentSales - point.previousSales
+                val deltaText = if (delta >= 0) "+Gs. ${formatCurrency(delta)}" else "-Gs. ${formatCurrency(kotlin.math.abs(delta))}"
+                Text(
+                    "${point.label}: actual Gs. ${formatCurrency(point.currentSales)} | anterior Gs. ${formatCurrency(point.previousSales)} | variacion $deltaText",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CategoryProfitChart(
+    reports: List<CategoryProfitReport>,
+    periodLabel: String
+) {
+    var selectedCategory by remember(reports) { mutableStateOf(reports.firstOrNull()?.category) }
+    val maxProfit = remember(reports) {
+        maxOf(1.0, reports.maxOfOrNull { it.profit.coerceAtLeast(0.0) } ?: 0.0)
+    }
+
+    ReportChartPanel(title = "Rentabilidad por categoria - $periodLabel") {
+        if (reports.isEmpty()) {
+            Text(
+                "No hay ventas con categorias para el periodo seleccionado.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@ReportChartPanel
+        }
+
+        reports.forEach { report ->
+            val selected = selectedCategory == report.category
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
+                    .clickable { selectedCategory = report.category }
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        report.category,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        "Gs. ${formatCurrency(report.profit)}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (report.profit < 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                    )
+                }
+                LinearProgressIndicator(
+                    progress = { (report.profit.coerceAtLeast(0.0) / maxProfit).toFloat().coerceIn(0f, 1f) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(7.dp),
+                    color = if (report.profit < 0.0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.outlineVariant
+                )
+            }
+        }
+
+        reports.firstOrNull { it.category == selectedCategory }?.let { selected ->
+            Text(
+                "Ingreso Gs. ${formatCurrency(selected.revenue)} | costo Gs. ${formatCurrency(selected.cost)} | margen ${String.format(Locale.getDefault(), "%.1f", selected.marginPercent)}%",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun StockHealthCard(summary: StockHealthSummary) {
+    var expanded by remember { mutableStateOf(false) }
+    val total = summary.totalCount
+    val optimalRatio = if (total > 0) summary.optimalCount.toFloat() / total.toFloat() else 0f
+
+    ReportChartPanel(title = "Estado de inventario") {
+        if (total == 0) {
+            Text(
+                "Todavia no hay productos inventariables para medir salud de stock.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@ReportChartPanel
+        }
+
+        LinearProgressIndicator(
+            progress = { optimalRatio.coerceIn(0f, 1f) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(10.dp),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.errorContainer
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            StockHealthMetric(
+                label = "Optimos",
+                value = summary.optimalCount.toString(),
+                icon = Icons.Default.CheckCircle,
+                modifier = Modifier.weight(1f)
+            )
+            StockHealthMetric(
+                label = "Bajo stock",
+                value = summary.lowStockCount.toString(),
+                icon = Icons.Default.WarningAmber,
+                modifier = Modifier.weight(1f),
+                isWarning = summary.lowStockCount > 0
+            )
+        }
+        TextButton(onClick = { expanded = !expanded }) {
+            Text(if (expanded) "Ocultar lectura" else "Ver lectura")
+        }
+        AnimatedVisibility(visible = expanded) {
+            Text(
+                if (summary.lowStockCount > 0) {
+                    "${summary.lowStockCount} productos necesitan reposicion o ajuste. Prioriza los que sostienen ventas frecuentes."
+                } else {
+                    "El inventario esta saludable: todos los productos medidos estan por encima de su umbral."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun StockHealthMetric(
+    label: String,
+    value: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    modifier: Modifier = Modifier,
+    isWarning: Boolean = false
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(if (isWarning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.surface)
+            .padding(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = if (isWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp)
+        )
+        Column {
+            Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun ChartLegendDot(color: Color, label: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .background(color, CircleShape)
+        )
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

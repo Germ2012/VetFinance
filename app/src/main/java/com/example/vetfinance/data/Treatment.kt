@@ -12,7 +12,7 @@ import java.util.UUID
         ForeignKey(entity = Pet::class, parentColumns = ["petId"], childColumns = ["petIdFk"]),
         ForeignKey(entity = Product::class, parentColumns = ["productId"], childColumns = ["serviceId"])
     ],
-    indices = [Index("petIdFk"), Index("serviceId")]
+    indices = [Index("petIdFk"), Index("serviceId"), Index("nextTreatmentDate")]
 )
 data class Treatment(
     @PrimaryKey

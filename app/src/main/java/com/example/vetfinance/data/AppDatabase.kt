@@ -15,7 +15,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AppointmentLog::class, ClientDebtHistory::class, SupplierDebt::class,
         StockMovement::class
     ],
-    version = 25,
+    version = 26,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -240,6 +240,24 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                 """.trimIndent())
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_stock_movements_productIdFk` ON `stock_movements` (`productIdFk`)")
+            }
+        }
+
+        val MIGRATION_25_26 = object : Migration(25, 26) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_name` ON `products` (`name`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_category` ON `products` (`category`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_products_supplierIdFk` ON `products` (`supplierIdFk`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_clients_name` ON `clients` (`name`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_clients_phone` ON `clients` (`phone`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sales_date` ON `sales` (`date`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_payments_paymentDate` ON `payments` (`paymentDate`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_payments_clientIdFk` ON `payments` (`clientIdFk`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_treatments_nextTreatmentDate` ON `treatments` (`nextTreatmentDate`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_appointments_appointmentDate` ON `appointments` (`appointmentDate`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_client_debt_history_eventDate` ON `client_debt_history` (`eventDate`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sales_products_cross_ref_saleId` ON `sales_products_cross_ref` (`saleId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_sales_products_cross_ref_productId` ON `sales_products_cross_ref` (`productId`)")
             }
         }
 

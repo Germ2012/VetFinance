@@ -11,7 +11,7 @@ import java.util.UUID
     foreignKeys = [
         ForeignKey(entity = Client::class, parentColumns = ["clientId"], childColumns = ["clientIdFk"])
     ],
-    indices = [Index("clientIdFk")]
+    indices = [Index("clientIdFk"), Index("paymentDate")]
 )
 data class Payment(
     @PrimaryKey

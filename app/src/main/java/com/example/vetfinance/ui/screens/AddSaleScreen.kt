@@ -2,7 +2,6 @@ package com.example.vetfinance.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
@@ -46,6 +45,12 @@ import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.NumberTransformation
 import ui.utils.formatCurrency
 import java.util.Locale
+
+private data class SaleInventoryStats(
+    val productCount: Int,
+    val serviceCount: Int,
+    val doseCount: Int
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -190,28 +195,48 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         )
     }
 
-    val lowStockIds = lowStockProducts.map { it.productId }.toSet()
-    val frequentIds = frequentProducts.map { it.productId }
-    val visibleInventory = inventory
-        .filter { product ->
-            when (saleFilter) {
-                "Productos" -> !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
-                "Servicios" -> product.isService
-                "Dosis" -> !product.isService && product.sellingMethod == SELLING_METHOD_DOSE_ONLY
-                "Bajo stock" -> product.productId in lowStockIds
-                else -> true
+    val selectedClientPhone = remember(clients, selectedSaleClientId) {
+        selectedSaleClientId?.let { clientId -> clients.find { it.clientId == clientId }?.phone }
+    }
+    val lowStockIds = remember(lowStockProducts) { lowStockProducts.map { it.productId }.toSet() }
+    val frequentRankById = remember(frequentProducts) {
+        frequentProducts.mapIndexed { index, product -> product.productId to index }.toMap()
+    }
+    val visibleInventory by remember(inventory, saleFilter, lowStockIds, frequentRankById) {
+        derivedStateOf {
+            val filtered = inventory.filter { product ->
+                when (saleFilter) {
+                    "Productos" -> !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
+                    "Servicios" -> product.isService
+                    "Dosis" -> !product.isService && product.sellingMethod == SELLING_METHOD_DOSE_ONLY
+                    "Bajo stock" -> product.productId in lowStockIds
+                    else -> true
+                }
+            }
+            if (frequentRankById.isEmpty()) {
+                filtered
+            } else {
+                filtered.sortedWith(
+                    compareBy<Product> { frequentRankById[it.productId] ?: Int.MAX_VALUE }
+                        .thenBy { it.name }
+                )
             }
         }
-        .sortedWith(
-            compareBy<Product> {
-                val rank = frequentIds.indexOf(it.productId)
-                if (rank >= 0) rank else Int.MAX_VALUE
-            }.thenBy { it.name.lowercase(Locale.getDefault()) }
+    }
+    val visibleStats = remember(visibleInventory) {
+        SaleInventoryStats(
+            productCount = visibleInventory.count { !it.isService && it.sellingMethod != SELLING_METHOD_DOSE_ONLY },
+            serviceCount = visibleInventory.count { it.isService },
+            doseCount = visibleInventory.count { !it.isService && it.sellingMethod == SELLING_METHOD_DOSE_ONLY }
         )
-    val visibleProducts = visibleInventory.count { !it.isService && it.sellingMethod != SELLING_METHOD_DOSE_ONLY }
-    val visibleServices = visibleInventory.count { it.isService }
-    val visibleDoses = visibleInventory.count { !it.isService && it.sellingMethod == SELLING_METHOD_DOSE_ONLY }
-    val cartUnits = cart.sumOf { it.quantity }
+    }
+    val cartQuantityByProductId = remember(cart) {
+        cart.groupBy { it.product.productId }.mapValues { (_, items) -> items.sumOf { it.quantity } }
+    }
+    val lastCartItemByProductId = remember(cart) {
+        cart.asReversed().associateBy { it.product.productId }
+    }
+    val cartUnits = remember(cart) { cart.sumOf { it.quantity } }
 
     Scaffold(
         topBar = {
@@ -250,7 +275,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
         ) {
             SaleCustomerPanel(
                 clientName = saleClientName,
-                selectedClientPhone = clients.find { it.clientId == selectedSaleClientId }?.phone,
+                selectedClientPhone = selectedClientPhone,
                 onClientNameChange = {
                     saleClientName = it
                     selectedSaleClientId = null
@@ -293,9 +318,9 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 item {
                     SaleSelectorHeader(
                         visibleCount = visibleInventory.size,
-                        productCount = visibleProducts,
-                        serviceCount = visibleServices,
-                        doseCount = visibleDoses
+                        productCount = visibleStats.productCount,
+                        serviceCount = visibleStats.serviceCount,
+                        doseCount = visibleStats.doseCount
                     )
                 }
                 item {
@@ -321,10 +346,20 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                         )
                     }
                 } else {
-                    items(visibleInventory, key = { it.productId }) { product ->
+                    items(
+                        items = visibleInventory,
+                        key = { it.productId },
+                        contentType = { product ->
+                            when {
+                                product.isService -> "service"
+                                product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> "dose"
+                                else -> "product"
+                            }
+                        }
+                    ) { product ->
                         ProductSelectionItem(
                             product = product,
-                            quantityInCart = cart.filter { it.product.productId == product.productId }.sumOf { it.quantity },
+                            quantityInCart = cartQuantityByProductId[product.productId] ?: 0.0,
                             onAdd = {
                                 when {
                                     product.isContainer -> viewModel.openSaleTypeDialog(product)
@@ -334,7 +369,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                                 }
                             },
                             onRemove = {
-                                val itemToRemove = cart.findLast { it.product.productId == product.productId }
+                                val itemToRemove = lastCartItemByProductId[product.productId]
                                 if (itemToRemove != null) {
                                     viewModel.removeFromCart(itemToRemove)
                                 }
@@ -500,8 +535,7 @@ private fun SaleCartPanel(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .animateContentSize(),
+            .padding(horizontal = 16.dp),
         shape = RoundedCornerShape(8.dp),
         color = MaterialTheme.colorScheme.primaryContainer
     ) {

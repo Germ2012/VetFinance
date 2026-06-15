@@ -16,7 +16,7 @@ import java.util.UUID
             onDelete = ForeignKey.SET_NULL
         )
     ],
-    indices = [Index("clientIdFk")]
+    indices = [Index("clientIdFk"), Index("date")]
 )
 data class Sale(
     @PrimaryKey

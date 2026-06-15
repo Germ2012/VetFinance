@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddShoppingCart
@@ -24,10 +26,18 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.STOCK_MOVEMENT_CONTAINER_OPEN
@@ -66,26 +76,13 @@ fun InventoryScreen(viewModel: VetViewModel) {
     val isLoading by viewModel.isLoading.collectAsState()
     val productCostHistory by viewModel.productCostHistory.collectAsState()
     val productStockMovements by viewModel.productStockMovements.collectAsState()
+    val pagedProducts = viewModel.inventoryPaginated.collectAsLazyPagingItems()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     val productsFilterText = stringResource(R.string.inventory_filter_products)
     val servicesFilterText = stringResource(R.string.inventory_filter_services)
 
-    val filteredProducts = remember(inventory, filter, searchQuery, productsFilterText, servicesFilterText) {
-        val byType = when (filter) {
-            productsFilterText -> inventory.filter { !it.isService }
-            servicesFilterText -> inventory.filter { it.isService }
-            else -> inventory
-        }
-        if (searchQuery.isBlank()) {
-            byType
-        } else {
-            byType.filter { product ->
-                product.name.contains(searchQuery, ignoreCase = true) ||
-                    product.category.orEmpty().contains(searchQuery, ignoreCase = true) ||
-                    product.supplierIdFk.orEmpty().contains(searchQuery, ignoreCase = true)
-            }
-        }
-    }
     val productCount = remember(inventory) { inventory.count { !it.isService } }
     val serviceCount = remember(inventory) { inventory.count { it.isService } }
 
@@ -251,44 +248,68 @@ fun InventoryScreen(viewModel: VetViewModel) {
                     }
                 },
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        focusManager.clearFocus(force = true)
+                        keyboardController?.hide()
+                    }
+                ),
                 shape = RoundedCornerShape(8.dp)
             )
             Spacer(modifier = Modifier.height(12.dp))
             InventoryFilter(selectedFilter = filter, onFilterSelected = { viewModel.onInventoryFilterChanged(it) })
             InventoryListHeader(
-                showingCount = filteredProducts.size,
+                showingCount = pagedProducts.itemCount,
                 totalCount = inventory.size,
                 filter = filter
             )
             Spacer(modifier = Modifier.height(12.dp))
 
-            if (isLoading && inventory.isEmpty()) {
+            if ((isLoading && inventory.isEmpty()) || pagedProducts.loadState.refresh is LoadState.Loading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             } else {
                 LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInputDismissKeyboard(
+                            onDismiss = {
+                                focusManager.clearFocus(force = true)
+                                keyboardController?.hide()
+                            }
+                        ),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(bottom = 96.dp)
                 ) {
-                    items(filteredProducts, key = { it.productId }) { product ->
-                        InventoryItem(
-                            product = product,
-                            onEdit = { productToEdit = it },
-                            onDelete = { productToDelete = it },
-                            onShowCostHistory = {
-                                productForCostHistory = it
-                                viewModel.loadProductCostHistory(it.productId)
-                            },
-                            onShowStockHistory = {
-                                productForStockHistory = it
-                                viewModel.loadProductStockMovements(it.productId)
-                            },
-                            onAdjustStock = { productForStockAdjustment = it },
-                            onOpenContainer = { viewModel.openContainerForBulkSale(it) }
-                        )
+                    items(
+                        count = pagedProducts.itemCount,
+                        key = pagedProducts.itemKey { it.productId },
+                        contentType = { index -> pagedProducts[index]?.let { if (it.isService) "service" else "product" } ?: "placeholder" }
+                    ) { index ->
+                        val product = pagedProducts[index]
+                        if (product != null) {
+                            InventoryItem(
+                                product = product,
+                                onEdit = { productToEdit = it },
+                                onDelete = { productToDelete = it },
+                                onShowCostHistory = {
+                                    productForCostHistory = it
+                                    viewModel.loadProductCostHistory(it.productId)
+                                },
+                                onShowStockHistory = {
+                                    productForStockHistory = it
+                                    viewModel.loadProductStockMovements(it.productId)
+                                },
+                                onAdjustStock = { productForStockAdjustment = it },
+                                onOpenContainer = { viewModel.openContainerForBulkSale(it) }
+                            )
+                        } else {
+                            InventoryItemPlaceholder()
+                        }
                     }
-                    if (filteredProducts.isEmpty() && !isLoading) {
+                    if (pagedProducts.itemCount == 0 && !isLoading && pagedProducts.loadState.refresh !is LoadState.Loading) {
                         item {
                             InventoryEmptyState(
                                 message = stringResource(R.string.inventory_no_products_matching_filter),
@@ -296,11 +317,39 @@ fun InventoryScreen(viewModel: VetViewModel) {
                             )
                         }
                     }
+                    if (pagedProducts.loadState.append is LoadState.Loading) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(28.dp))
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 }
+
+private fun Modifier.pointerInputDismissKeyboard(onDismiss: () -> Unit): Modifier = this.then(
+    Modifier.pointerInput(Unit) {
+        awaitPointerEventScope {
+            var wasPressed = false
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val isPressed = event.changes.any { it.pressed }
+                if (isPressed && !wasPressed) {
+                    onDismiss()
+                }
+                wasPressed = isPressed
+            }
+        }
+    }
+)
 
 @Composable
 private fun InventoryHeader(
@@ -614,7 +663,6 @@ fun InventoryItem(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .animateContentSize()
             .clickable { onEdit(product) },
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
@@ -778,6 +826,35 @@ private fun InventoryEmptyState(
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(stringResource(R.string.content_description_add_product))
             }
+        }
+    }
+}
+
+@Composable
+private fun InventoryItemPlaceholder() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth(0.58f)
+                    .height(6.dp),
+                color = MaterialTheme.colorScheme.outline,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth(0.34f)
+                    .height(6.dp),
+                color = MaterialTheme.colorScheme.outline,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
         }
     }
 }

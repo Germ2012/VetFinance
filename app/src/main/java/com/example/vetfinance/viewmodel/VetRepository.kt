@@ -253,10 +253,10 @@ class VetRepository @Inject constructor(
     }
 
     // --- Pagination Methods ---
-    fun getProductsPaginated(filterType: String): Flow<PagingData<Product>> {
+    fun getProductsPaginated(filterType: String, searchQuery: String): Flow<PagingData<Product>> {
         return Pager(
             config = PagingConfig(pageSize = 20, enablePlaceholders = false),
-            pagingSourceFactory = { productDao.getProductsPagedSource(filterType) }
+            pagingSourceFactory = { productDao.getProductsPagedSource(filterType, searchQuery) }
         ).flow
     }
 
@@ -264,6 +264,32 @@ class VetRepository @Inject constructor(
         return Pager(
             config = PagingConfig(pageSize = 20, enablePlaceholders = false),
             pagingSourceFactory = { clientDao.getDebtClientsPagedSource(searchQuery) }
+        ).flow
+    }
+
+    fun getDebtCollectionRowsPaginated(
+        searchQuery: String,
+        includeZeroDebt: Boolean,
+        minimumDebt: Double,
+        sortMode: String
+    ): Flow<PagingData<DebtCollectionRow>> {
+        return Pager(
+            config = PagingConfig(pageSize = 20, enablePlaceholders = false),
+            pagingSourceFactory = {
+                clientDao.getDebtCollectionRowsPagedSource(
+                    searchQuery = searchQuery,
+                    includeZeroDebt = if (includeZeroDebt) 1 else 0,
+                    minimumDebt = minimumDebt,
+                    sortMode = sortMode
+                )
+            }
+        ).flow
+    }
+
+    fun getClientsPaginated(searchQuery: String): Flow<PagingData<Client>> {
+        return Pager(
+            config = PagingConfig(pageSize = 20, enablePlaceholders = false),
+            pagingSourceFactory = { clientDao.getClientsPagedSource(searchQuery) }
         ).flow
     }
 
@@ -283,8 +309,23 @@ class VetRepository @Inject constructor(
 
     fun getTopSellingProductsByRevenue(startDate: Long, endDate: Long, limit: Int): Flow<List<TopSellingProduct>> =
         saleDao.getTopSellingProductsByRevenue(startDate, endDate, limit)
+    fun getDailySalesTotals(startDate: Long, endDate: Long): Flow<List<DailySalesTotal>> =
+        saleDao.getDailySalesTotals(startDate, endDate)
+    fun getFinancialSummary(startDate: Long, endDate: Long): Flow<FinancialSummaryRow> =
+        saleDao.getFinancialSummary(startDate, endDate)
+    fun getCategoryProfitRows(startDate: Long, endDate: Long, limit: Int): Flow<List<CategoryProfitRow>> =
+        saleDao.getCategoryProfitRows(startDate, endDate, limit)
+    fun getFrequentSaleProducts(limit: Int = 6): Flow<List<Product>> = saleDao.getFrequentSaleProducts(limit)
+    fun getPendingCollectionRows(): Flow<List<DebtCollectionRow>> = clientDao.getPendingCollectionRows()
+    fun getDebtCollectionSummary(searchQuery: String, includeZeroDebt: Boolean, minimumDebt: Double): Flow<DebtCollectionSummary> =
+        clientDao.getDebtCollectionSummary(
+            searchQuery = searchQuery,
+            includeZeroDebt = if (includeZeroDebt) 1 else 0,
+            minimumDebt = minimumDebt
+        )
     fun getTotalDebt(): Flow<Double?> = clientDao.getTotalDebt()
     fun getTotalInventoryValue(): Flow<Double?> = productDao.getTotalInventoryValue()
+    fun getStockHealthSummary(): Flow<StockHealthRow> = productDao.getStockHealthSummary()
     fun getAllProducts(): Flow<List<Product>> = productDao.getAllProducts()
     fun getAllSales(): Flow<List<SaleWithProducts>> = saleDao.getAllSalesWithProducts()
     fun getAllClients(): Flow<List<Client>> = clientDao.getAllClients()

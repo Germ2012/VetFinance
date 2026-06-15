@@ -9,8 +9,30 @@ import androidx.paging.PagingData
 import androidx.paging.cachedIn
 import com.example.vetfinance.R
 import com.example.vetfinance.data.*
+import com.example.vetfinance.domain.model.CashClosingSummary
+import com.example.vetfinance.domain.model.CategoryProfitReport
+import com.example.vetfinance.domain.model.ClientPurchaseReport
+import com.example.vetfinance.domain.model.FinancialSummary
+import com.example.vetfinance.domain.model.ProductProfitReport
+import com.example.vetfinance.domain.model.SalesTrendComparisonPoint
+import com.example.vetfinance.domain.model.StockHealthSummary
+import com.example.vetfinance.domain.usecase.GetCashClosingSummaryUseCase
+import com.example.vetfinance.domain.usecase.GetCategoryProfitReportsUseCase
+import com.example.vetfinance.domain.usecase.GetClientPurchaseReportsUseCase
+import com.example.vetfinance.domain.usecase.GetClientsPageUseCase
+import com.example.vetfinance.domain.usecase.GetDebtCollectionPageUseCase
+import com.example.vetfinance.domain.usecase.GetDebtCollectionSummaryUseCase
+import com.example.vetfinance.domain.usecase.GetFinancialSummaryUseCase
+import com.example.vetfinance.domain.usecase.GetFilteredInventoryUseCase
+import com.example.vetfinance.domain.usecase.GetFrequentSaleProductsUseCase
+import com.example.vetfinance.domain.usecase.GetPendingCollectionRowsUseCase
+import com.example.vetfinance.domain.usecase.GetProductProfitReportsUseCase
+import com.example.vetfinance.domain.usecase.GetSalesTrendComparisonUseCase
+import com.example.vetfinance.domain.usecase.GetStockHealthSummaryUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -45,36 +67,10 @@ data class GlobalSearchResult(
     val subtitle: String
 )
 
-data class DebtCollectionRow(
-    val client: Client,
-    val totalSold: Double,
-    val totalPaid: Double,
-    val balance: Double
-)
-
-data class CashClosingSummary(
-    val salesCount: Int,
-    val salesTotal: Double,
-    val paymentsTotal: Double,
-    val debtIncreases: Double,
-    val debtAdjustments: Double,
-    val operationalTotal: Double
-)
-
-data class ProductProfitReport(
-    val name: String,
-    val isService: Boolean,
-    val quantitySold: Double,
-    val revenue: Double,
-    val cost: Double,
-    val profit: Double,
-    val marginPercent: Double
-)
-
-data class ClientPurchaseReport(
-    val client: Client,
-    val totalPurchased: Double,
-    val saleCount: Int
+data class DebtCollectionFilters(
+    val showOnlyWithDebt: Boolean = true,
+    val minimumDebt: Double = 0.0,
+    val sortMode: String = "Mayor deuda"
 )
 
 enum class TopProductsPeriod(@StringRes val displayResId: Int) {
@@ -88,10 +84,23 @@ enum class TopProductsMetric {
     REVENUE
 }
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
 class VetViewModel @Inject constructor(
-    private val repository: VetRepository
+    private val repository: VetRepository,
+    private val getFilteredInventoryUseCase: GetFilteredInventoryUseCase,
+    private val getClientsPageUseCase: GetClientsPageUseCase,
+    private val getFrequentSaleProductsUseCase: GetFrequentSaleProductsUseCase,
+    private val getPendingCollectionRowsUseCase: GetPendingCollectionRowsUseCase,
+    private val getDebtCollectionPageUseCase: GetDebtCollectionPageUseCase,
+    private val getDebtCollectionSummaryUseCase: GetDebtCollectionSummaryUseCase,
+    private val getCashClosingSummaryUseCase: GetCashClosingSummaryUseCase,
+    private val getFinancialSummaryUseCase: GetFinancialSummaryUseCase,
+    private val getSalesTrendComparisonUseCase: GetSalesTrendComparisonUseCase,
+    private val getCategoryProfitReportsUseCase: GetCategoryProfitReportsUseCase,
+    private val getStockHealthSummaryUseCase: GetStockHealthSummaryUseCase,
+    private val getProductProfitReportsUseCase: GetProductProfitReportsUseCase,
+    private val getClientPurchaseReportsUseCase: GetClientPurchaseReportsUseCase
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(true)
@@ -244,122 +253,23 @@ class VetViewModel @Inject constructor(
     private val _globalSearchQuery = MutableStateFlow("")
     val globalSearchQuery: StateFlow<String> = _globalSearchQuery.asStateFlow()
 
-    val frequentSaleProducts: StateFlow<List<Product>> = combine(inventory, _sales) { products, sales ->
-        val productScores = mutableMapOf<String, Double>()
-        sales.forEach { sale ->
-            sale.crossRefs.forEach { ref ->
-                productScores[ref.productId] = (productScores[ref.productId] ?: 0.0) + ref.quantitySold
-            }
-        }
-        products
-            .filter { productScores.containsKey(it.productId) }
-            .sortedByDescending { productScores[it.productId] ?: 0.0 }
-            .take(6)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val frequentSaleProducts: StateFlow<List<Product>> = getFrequentSaleProductsUseCase()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val pendingCollectionRows: StateFlow<List<DebtCollectionRow>> = combine(clients, _sales, _payments) { clientList, sales, payments ->
-        val salesByClient = sales
-            .groupBy { it.sale.clientIdFk }
-            .mapValues { (_, clientSales) -> clientSales.sumOf { it.sale.totalAmount } }
-        val paymentsByClient = payments
-            .groupBy { it.clientIdFk }
-            .mapValues { (_, clientPayments) -> clientPayments.sumOf { it.amount } }
+    val pendingCollectionRows: StateFlow<List<DebtCollectionRow>> = getPendingCollectionRowsUseCase()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-        clientList
-            .filter { it.debtAmount > 0.0 }
-            .map { client ->
-                DebtCollectionRow(
-                    client = client,
-                    totalSold = salesByClient[client.clientId] ?: 0.0,
-                    totalPaid = paymentsByClient[client.clientId] ?: 0.0,
-                    balance = client.debtAmount
-                )
-            }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val cashClosingSummary: StateFlow<CashClosingSummary> = getCashClosingSummaryUseCase()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CashClosingSummary(0, 0.0, 0.0, 0.0, 0.0, 0.0))
 
-    val cashClosingSummary: StateFlow<CashClosingSummary> = combine(_sales, _payments, _allDebtHistory) { sales, payments, debtHistory ->
-        val zoneId = ZoneId.systemDefault()
-        val startOfDay = LocalDate.now().atStartOfDay(zoneId).toInstant().toEpochMilli()
-        val endOfDay = LocalDate.now().atTime(23, 59, 59).atZone(zoneId).toInstant().toEpochMilli()
-        val todaySales = sales.filter { it.sale.date in startOfDay..endOfDay }
-        val todayPayments = payments.filter { it.paymentDate in startOfDay..endOfDay }
-        val todayDebtEvents = debtHistory.filter { it.eventDate in startOfDay..endOfDay }
-        val salesTotal = todaySales.sumOf { it.sale.totalAmount }
-        val paymentsTotal = todayPayments.sumOf { it.amount }
-        val debtIncreases = todayDebtEvents
-            .filter { it.amountChange > 0.0 }
-            .sumOf { it.amountChange }
-        val debtAdjustments = todayDebtEvents
-            .filter { it.eventType == CLIENT_DEBT_EVENT_ADJUSTMENT }
-            .sumOf { it.amountChange }
+    val salesTrendComparison: StateFlow<List<SalesTrendComparisonPoint>> = getSalesTrendComparisonUseCase()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-        CashClosingSummary(
-            salesCount = todaySales.size,
-            salesTotal = salesTotal,
-            paymentsTotal = paymentsTotal,
-            debtIncreases = debtIncreases,
-            debtAdjustments = debtAdjustments,
-            operationalTotal = salesTotal + paymentsTotal
-        )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), CashClosingSummary(0, 0.0, 0.0, 0.0, 0.0, 0.0))
+    val productProfitReports: StateFlow<List<ProductProfitReport>> = getProductProfitReportsUseCase()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val productProfitReports: StateFlow<List<ProductProfitReport>> = _sales.map { sales ->
-        data class Accumulator(
-            val name: String,
-            val isService: Boolean,
-            var quantitySold: Double = 0.0,
-            var revenue: Double = 0.0,
-            var cost: Double = 0.0
-        )
-
-        val rows = linkedMapOf<String, Accumulator>()
-        sales.forEach { sale ->
-            sale.crossRefs.forEach { ref ->
-                val product = sale.products.find { it.productId == ref.productId }
-                val revenue = ref.overridePrice ?: (ref.priceAtTimeOfSale * ref.quantitySold)
-                val cost = (product?.cost ?: 0.0) * ref.quantitySold
-                val row = rows.getOrPut(ref.productId) {
-                    Accumulator(
-                        name = product?.name ?: "Producto no disponible",
-                        isService = product?.isService ?: false
-                    )
-                }
-                row.quantitySold += ref.quantitySold
-                row.revenue += revenue
-                row.cost += cost
-            }
-        }
-
-        rows.values.map { row ->
-            val profit = row.revenue - row.cost
-            ProductProfitReport(
-                name = row.name,
-                isService = row.isService,
-                quantitySold = row.quantitySold,
-                revenue = row.revenue,
-                cost = row.cost,
-                profit = profit,
-                marginPercent = if (row.revenue > 0.0) (profit / row.revenue) * 100.0 else 0.0
-            )
-        }.sortedByDescending { it.profit }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val clientPurchaseReports: StateFlow<List<ClientPurchaseReport>> = combine(clients, _sales) { clientList, sales ->
-        val clientsById = clientList.associateBy { it.clientId }
-        sales
-            .filter { it.sale.clientIdFk != null }
-            .groupBy { it.sale.clientIdFk }
-            .mapNotNull { (clientId, clientSales) ->
-                val client = clientId?.let { clientsById[it] } ?: return@mapNotNull null
-                ClientPurchaseReport(
-                    client = client,
-                    totalPurchased = clientSales.sumOf { it.sale.totalAmount },
-                    saleCount = clientSales.size
-                )
-            }
-            .sortedByDescending { it.totalPurchased }
-            .take(10)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val clientPurchaseReports: StateFlow<List<ClientPurchaseReport>> = getClientPurchaseReportsUseCase()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val globalSearchResults: StateFlow<List<GlobalSearchResult>> = combine(
         clients,
@@ -381,19 +291,82 @@ class VetViewModel @Inject constructor(
                 .map { product ->
                     val type = if (product.isService) "Servicio" else "Producto"
                     GlobalSearchResult(product.productId, "product", "$type: ${product.name}", product.category ?: product.sellingMethod)
-                }
+            }
             (clientResults + petResults + productResults).take(12)
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val pagedInventorySearchQuery = _productSearchQuery
+        .debounce(220)
+        .distinctUntilChanged()
+
+    val inventoryPaginated: Flow<PagingData<Product>> = combine(_inventoryFilter, pagedInventorySearchQuery) { filter, query ->
+        filter to query
+    }.flatMapLatest { (filter, query) ->
+        getFilteredInventoryUseCase(filter, query)
+    }.cachedIn(viewModelScope)
+
+    val clientsPaginated: Flow<PagingData<Client>> = clientSearchQuery.flatMapLatest { query ->
+        getClientsPageUseCase(query)
+    }.cachedIn(viewModelScope)
 
     val debtClientsPaginated: Flow<PagingData<Client>> = clientSearchQuery.flatMapLatest { repository.getDebtClientsPaginated(it) }.cachedIn(viewModelScope)
+
+    private val _debtCollectionFilters = MutableStateFlow(DebtCollectionFilters())
+    val debtCollectionFilters: StateFlow<DebtCollectionFilters> = _debtCollectionFilters.asStateFlow()
+
+    fun onDebtCollectionFiltersChanged(
+        showOnlyWithDebt: Boolean,
+        minimumDebt: Double,
+        sortMode: String
+    ) {
+        _debtCollectionFilters.value = DebtCollectionFilters(
+            showOnlyWithDebt = showOnlyWithDebt,
+            minimumDebt = minimumDebt.coerceAtLeast(0.0),
+            sortMode = sortMode
+        )
+    }
+
+    val debtCollectionRowsPaginated: Flow<PagingData<DebtCollectionRow>> = combine(
+        clientSearchQuery,
+        _debtCollectionFilters
+    ) { query, filters ->
+        query to filters
+    }.flatMapLatest { (query, filters) ->
+        getDebtCollectionPageUseCase(
+            searchQuery = query,
+            includeZeroDebt = !filters.showOnlyWithDebt,
+            minimumDebt = filters.minimumDebt,
+            sortMode = filters.sortMode
+        )
+    }.cachedIn(viewModelScope)
+
+    val debtCollectionSummary: StateFlow<DebtCollectionSummary> = combine(
+        clientSearchQuery,
+        _debtCollectionFilters
+    ) { query, filters ->
+        query to filters
+    }.flatMapLatest { (query, filters) ->
+        getDebtCollectionSummaryUseCase(
+            searchQuery = query,
+            includeZeroDebt = !filters.showOnlyWithDebt,
+            minimumDebt = filters.minimumDebt
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DebtCollectionSummary(0, 0.0, 0.0))
+
     val filteredPetsWithOwners: StateFlow<List<PetWithOwner>> = combine(petsWithOwners, _petSearchQuery) { pets, query ->
         if (query.isBlank()) pets else pets.filter { it.pet.name.contains(query, true) || it.owner.name.contains(query, true) }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val filteredInventory: StateFlow<List<Product>> = combine(inventory, _productSearchQuery) { products, query ->
         if (query.isBlank()) products else products.filter { it.name.contains(query, true) }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val filteredSales: StateFlow<List<SaleWithProducts>> = combine(_sales, _selectedSaleDateFilter) { sales, date ->
         if (date == null) sales else {
@@ -401,7 +374,9 @@ class VetViewModel @Inject constructor(
             val endOfDay = startOfDay + 24 * 60 * 60 * 1000 - 1
             sales.filter { it.sale.date in startOfDay..endOfDay }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val lowStockProducts: StateFlow<List<Product>> = inventory.map { products ->
         products.filter { product ->
@@ -412,7 +387,9 @@ class VetViewModel @Inject constructor(
                 threshold > 0.0 && product.stock < threshold
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _selectedCalendarDate = MutableStateFlow(LocalDate.now())
     val selectedCalendarDate: StateFlow<LocalDate> = _selectedCalendarDate.asStateFlow()
@@ -445,15 +422,19 @@ class VetViewModel @Inject constructor(
 
     val totalDebt: StateFlow<Double?> = repository.getTotalDebt().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
     val totalInventoryValue: StateFlow<Double?> = repository.getTotalInventoryValue().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val stockHealthSummary: StateFlow<StockHealthSummary> = getStockHealthSummaryUseCase()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StockHealthSummary(0, 0))
 
     val salesSummaryToday: StateFlow<Double> = _sales.map { sales ->
         val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         sales.filter { it.sale.date >= startOfDay }.sumOf { it.sale.totalAmount }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = 0.0
-    )
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = 0.0
+        )
 
     private val _topProductsPeriod = MutableStateFlow(TopProductsPeriod.MONTH)
     val topProductsPeriod: StateFlow<TopProductsPeriod> = _topProductsPeriod.asStateFlow()
@@ -505,15 +486,31 @@ class VetViewModel @Inject constructor(
 
     val availableHistoricalPeriods: StateFlow<List<HistoricalPeriod>> = combine(_sales, reportPeriodType) { sales, type ->
         generateHistoricalPeriods(sales, type)
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val financialSummary: StateFlow<FinancialSummary> = selectedHistoricalPeriod.flatMapLatest { period ->
+        if (period == null) {
+            flowOf(FinancialSummary(0.0, 0.0))
+        } else {
+            getFinancialSummaryUseCase(period.startDate, period.endDate)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), FinancialSummary(0.0, 0.0))
+
+    val salesSummary: StateFlow<Double> = financialSummary.map { it.salesTotal }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+    val grossProfitSummary: StateFlow<Double> = financialSummary.map { it.grossProfit }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
+
+    val categoryProfitReports: StateFlow<List<CategoryProfitReport>> = selectedHistoricalPeriod.flatMapLatest { period ->
+        if (period == null) {
+            flowOf(emptyList())
+        } else {
+            getCategoryProfitReportsUseCase(period.startDate, period.endDate)
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val salesSummary: StateFlow<Double> = selectedHistoricalPeriod.map { period ->
-        calculateSalesSummary(period)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
-
-    val grossProfitSummary: StateFlow<Double> = selectedHistoricalPeriod.map { period ->
-        calculateGrossProfitSummary(period)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0.0)
 
 
     private val _showAddProductDialog = MutableStateFlow(false)
@@ -634,27 +631,6 @@ class VetViewModel @Inject constructor(
                     endDate = endDate
                 )
             }.distinctBy { it.id }
-    }
-
-
-    private fun calculateSalesSummary(period: HistoricalPeriod?): Double {
-        if (period == null) return 0.0
-        return _sales.value
-            .filter { it.sale.date in period.startDate..period.endDate }
-            .sumOf { it.sale.totalAmount }
-    }
-
-    private fun calculateGrossProfitSummary(period: HistoricalPeriod?): Double {
-        if (period == null) return 0.0
-        val relevantSales = _sales.value.filter { it.sale.date in period.startDate..period.endDate }
-        val totalRevenue = relevantSales.sumOf { it.sale.totalAmount }
-        val totalCost = relevantSales.sumOf { sale ->
-            sale.crossRefs.sumOf { ref ->
-                val product = sale.products.find { it.productId == ref.productId }
-                (product?.cost ?: 0.0) * ref.quantitySold
-            }
-        }
-        return totalRevenue - totalCost
     }
 
 

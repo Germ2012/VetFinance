@@ -89,11 +89,11 @@ import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.AppointmentWithDetails
 import com.example.vetfinance.data.Client
+import com.example.vetfinance.data.DebtCollectionRow
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SupplierDebtWithSupplier
 import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.navigation.Screen
-import com.example.vetfinance.viewmodel.DebtCollectionRow
 import com.example.vetfinance.viewmodel.GlobalSearchResult
 import com.example.vetfinance.viewmodel.VetViewModel
 import java.time.Instant

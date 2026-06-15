@@ -16,7 +16,7 @@ const val APPOINTMENT_STATUS_CANCELLED = "CANCELLED"
         ForeignKey(entity = Client::class, parentColumns = ["clientId"], childColumns = ["clientIdFk"], onDelete = ForeignKey.CASCADE),
         ForeignKey(entity = Pet::class, parentColumns = ["petId"], childColumns = ["petIdFk"], onDelete = ForeignKey.CASCADE)
     ],
-    indices = [Index("clientIdFk"), Index("petIdFk")]
+    indices = [Index("clientIdFk"), Index("petIdFk"), Index("appointmentDate")]
 )
 data class Appointment(
     @PrimaryKey

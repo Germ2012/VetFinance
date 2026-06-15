@@ -26,6 +26,41 @@ data class TopSellingProduct(
     val totalRevenue: Double
 )
 
+data class DailySalesTotal(
+    val dayIndex: Int,
+    val totalSales: Double
+)
+
+data class CategoryProfitRow(
+    val category: String,
+    val revenue: Double,
+    val cost: Double,
+    val profit: Double
+)
+
+data class FinancialSummaryRow(
+    val salesTotal: Double,
+    val grossProfit: Double
+)
+
+data class StockHealthRow(
+    val optimalCount: Int,
+    val lowStockCount: Int
+)
+
+data class DebtCollectionRow(
+    @Embedded val client: Client,
+    val totalSold: Double,
+    val totalPaid: Double,
+    val balance: Double
+)
+
+data class DebtCollectionSummary(
+    val clientCount: Int,
+    val totalPending: Double,
+    val totalPaid: Double
+)
+
 
 // --- DAOs ---
 @Dao
@@ -54,11 +89,54 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE productId = :productId")
     suspend fun getProductById(productId: String): Product?
 
-    @Query("SELECT * FROM products WHERE (:filterType = 'Todos') OR (:filterType = 'Productos' AND isService = 0) OR (:filterType = 'Servicios' AND isService = 1) ORDER BY name ASC")
-    fun getProductsPagedSource(filterType: String): PagingSource<Int, Product>
+    @Query("""
+        SELECT *
+        FROM products
+        WHERE
+            (
+                :filterType = 'Todos'
+                OR (:filterType = 'Productos' AND isService = 0 AND sellingMethod != 'Solo Dosis')
+                OR (:filterType = 'Servicios' AND isService = 1)
+                OR (:filterType = 'Dosis' AND isService = 0 AND sellingMethod = 'Solo Dosis')
+                OR (:filterType = 'Bajo stock' AND isService = 0 AND isContainer = 0 AND sellingMethod != 'Solo Dosis'
+                    AND COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
+                    AND stock < COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END))
+            )
+            AND (
+                :searchQuery = ''
+                OR name LIKE '%' || :searchQuery || '%'
+                OR category LIKE '%' || :searchQuery || '%'
+                OR supplierIdFk LIKE '%' || :searchQuery || '%'
+            )
+        ORDER BY name ASC
+    """)
+    fun getProductsPagedSource(filterType: String, searchQuery: String): PagingSource<Int, Product>
 
     @Query("SELECT SUM(cost * stock) FROM products WHERE isService = 0")
     fun getTotalInventoryValue(): Flow<Double?>
+
+    @Query("""
+        SELECT
+            COALESCE(SUM(
+                CASE
+                    WHEN COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
+                        AND stock < COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END)
+                    THEN 1 ELSE 0
+                END
+            ), 0) AS lowStockCount,
+            COALESCE(SUM(
+                CASE
+                    WHEN COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) <= 0.0
+                        OR stock >= COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END)
+                    THEN 1 ELSE 0
+                END
+            ), 0) AS optimalCount
+        FROM products
+        WHERE isService = 0
+            AND isContainer = 0
+            AND sellingMethod != 'Solo Dosis'
+    """)
+    fun getStockHealthSummary(): Flow<StockHealthRow>
 
     @Delete
     suspend fun delete(product: Product)
@@ -128,6 +206,73 @@ interface SaleDao {
     """)
     fun getTopSellingProductsByRevenue(startDate: Long, endDate: Long, limit: Int = 10): Flow<List<TopSellingProduct>>
 
+    @Query("""
+        SELECT
+            CAST((date - :startDate) / 86400000 AS INTEGER) AS dayIndex,
+            COALESCE(SUM(totalAmount), 0.0) AS totalSales
+        FROM sales
+        WHERE date BETWEEN :startDate AND :endDate
+        GROUP BY dayIndex
+        ORDER BY dayIndex ASC
+    """)
+    fun getDailySalesTotals(startDate: Long, endDate: Long): Flow<List<DailySalesTotal>>
+
+    @Query("""
+        SELECT
+            COALESCE((
+                SELECT SUM(totalAmount)
+                FROM sales
+                WHERE date BETWEEN :startDate AND :endDate
+            ), 0.0) AS salesTotal,
+            COALESCE((
+                SELECT SUM(
+                    COALESCE(sp.overridePrice, sp.priceAtTimeOfSale * sp.quantitySold)
+                    - (COALESCE(p.cost, 0.0) * sp.quantitySold)
+                )
+                FROM sales_products_cross_ref AS sp
+                JOIN sales AS s ON sp.saleId = s.saleId
+                LEFT JOIN products AS p ON sp.productId = p.productId
+                WHERE s.date BETWEEN :startDate AND :endDate
+            ), 0.0) AS grossProfit
+    """)
+    fun getFinancialSummary(startDate: Long, endDate: Long): Flow<FinancialSummaryRow>
+
+    @Query("""
+        SELECT
+            CASE
+                WHEN p.isService = 1 THEN 'Servicios'
+                WHEN p.category IS NULL OR TRIM(p.category) = '' THEN 'Sin categoria'
+                ELSE p.category
+            END AS category,
+            COALESCE(SUM(COALESCE(sp.overridePrice, sp.priceAtTimeOfSale * sp.quantitySold)), 0.0) AS revenue,
+            COALESCE(SUM(COALESCE(p.cost, 0.0) * sp.quantitySold), 0.0) AS cost,
+            COALESCE(SUM(
+                COALESCE(sp.overridePrice, sp.priceAtTimeOfSale * sp.quantitySold)
+                - (COALESCE(p.cost, 0.0) * sp.quantitySold)
+            ), 0.0) AS profit
+        FROM sales_products_cross_ref AS sp
+        JOIN sales AS s ON sp.saleId = s.saleId
+        JOIN products AS p ON sp.productId = p.productId
+        WHERE s.date BETWEEN :startDate AND :endDate
+        GROUP BY category
+        ORDER BY profit DESC
+        LIMIT :limit
+    """)
+    fun getCategoryProfitRows(startDate: Long, endDate: Long, limit: Int = 8): Flow<List<CategoryProfitRow>>
+
+    @Query("""
+        SELECT p.*
+        FROM products AS p
+        INNER JOIN (
+            SELECT productId, SUM(quantitySold) AS totalSold
+            FROM sales_products_cross_ref
+            GROUP BY productId
+        ) AS ranked ON ranked.productId = p.productId
+        ORDER BY ranked.totalSold DESC, p.name ASC
+        LIMIT :limit
+    """)
+    fun getFrequentSaleProducts(limit: Int = 6): Flow<List<Product>>
+
     @Query("SELECT * FROM sales")
     fun getAllSalesSimple(): Flow<List<Sale>>
     @Query("SELECT * FROM sales_products_cross_ref")
@@ -168,6 +313,101 @@ interface ClientDao {
 
     @Query("SELECT * FROM clients WHERE debtAmount > 0 AND name LIKE '%' || :searchQuery || '%' ORDER BY name ASC")
     fun getDebtClientsPagedSource(searchQuery: String): PagingSource<Int, Client>
+
+    @Query("SELECT * FROM clients WHERE (:searchQuery = '' OR name LIKE '%' || :searchQuery || '%' OR phone LIKE '%' || :searchQuery || '%') ORDER BY name ASC")
+    fun getClientsPagedSource(searchQuery: String): PagingSource<Int, Client>
+
+    @Query("""
+        SELECT
+            c.*,
+            COALESCE(salesByClient.totalSold, 0.0) AS totalSold,
+            COALESCE(paymentsByClient.totalPaid, 0.0) AS totalPaid,
+            c.debtAmount AS balance
+        FROM clients AS c
+        LEFT JOIN (
+            SELECT clientIdFk, SUM(totalAmount) AS totalSold
+            FROM sales
+            GROUP BY clientIdFk
+        ) AS salesByClient ON salesByClient.clientIdFk = c.clientId
+        LEFT JOIN (
+            SELECT clientIdFk, SUM(amount) AS totalPaid
+            FROM payments
+            GROUP BY clientIdFk
+        ) AS paymentsByClient ON paymentsByClient.clientIdFk = c.clientId
+        WHERE c.debtAmount > 0.0
+        ORDER BY c.debtAmount DESC, c.name ASC
+    """)
+    fun getPendingCollectionRows(): Flow<List<DebtCollectionRow>>
+
+    @Query("""
+        SELECT
+            c.*,
+            COALESCE(salesByClient.totalSold, 0.0) AS totalSold,
+            COALESCE(paymentsByClient.totalPaid, 0.0) AS totalPaid,
+            c.debtAmount AS balance
+        FROM clients AS c
+        LEFT JOIN (
+            SELECT clientIdFk, SUM(totalAmount) AS totalSold
+            FROM sales
+            GROUP BY clientIdFk
+        ) AS salesByClient ON salesByClient.clientIdFk = c.clientId
+        LEFT JOIN (
+            SELECT clientIdFk, SUM(amount) AS totalPaid
+            FROM payments
+            GROUP BY clientIdFk
+        ) AS paymentsByClient ON paymentsByClient.clientIdFk = c.clientId
+        WHERE
+            (:includeZeroDebt = 1 OR c.debtAmount > 0.0)
+            AND c.debtAmount >= :minimumDebt
+            AND (
+                :searchQuery = ''
+                OR c.name LIKE '%' || :searchQuery || '%'
+                OR c.phone LIKE '%' || :searchQuery || '%'
+            )
+        ORDER BY
+            CASE WHEN :sortMode = 'Menor deuda' THEN c.debtAmount END ASC,
+            CASE WHEN :sortMode = 'Nombre' THEN c.name END COLLATE NOCASE ASC,
+            CASE WHEN :sortMode = 'Mayor deuda' THEN c.debtAmount END DESC,
+            c.name COLLATE NOCASE ASC
+    """)
+    fun getDebtCollectionRowsPagedSource(
+        searchQuery: String,
+        includeZeroDebt: Int,
+        minimumDebt: Double,
+        sortMode: String
+    ): PagingSource<Int, DebtCollectionRow>
+
+    @Query("""
+        SELECT
+            COUNT(*) AS clientCount,
+            COALESCE(SUM(balance), 0.0) AS totalPending,
+            COALESCE(SUM(totalPaid), 0.0) AS totalPaid
+        FROM (
+            SELECT
+                c.clientId,
+                COALESCE(paymentsByClient.totalPaid, 0.0) AS totalPaid,
+                c.debtAmount AS balance
+            FROM clients AS c
+            LEFT JOIN (
+                SELECT clientIdFk, SUM(amount) AS totalPaid
+                FROM payments
+                GROUP BY clientIdFk
+            ) AS paymentsByClient ON paymentsByClient.clientIdFk = c.clientId
+            WHERE
+                (:includeZeroDebt = 1 OR c.debtAmount > 0.0)
+                AND c.debtAmount >= :minimumDebt
+                AND (
+                    :searchQuery = ''
+                    OR c.name LIKE '%' || :searchQuery || '%'
+                    OR c.phone LIKE '%' || :searchQuery || '%'
+                )
+        )
+    """)
+    fun getDebtCollectionSummary(
+        searchQuery: String,
+        includeZeroDebt: Int,
+        minimumDebt: Double
+    ): Flow<DebtCollectionSummary>
 
     @Query("SELECT SUM(debtAmount) FROM clients")
     fun getTotalDebt(): Flow<Double?>
