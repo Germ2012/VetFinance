@@ -70,6 +70,7 @@ class VetRepository @Inject constructor(
     private val appointmentLogDao: AppointmentLogDao,
     @ApplicationContext private val context: Context
 ) {
+    private val searchDao: SearchDao = db.searchDao()
 
     private companion object {
         const val MAX_BACKUP_FILE_BYTES = 2_000_000
@@ -316,6 +317,12 @@ class VetRepository @Inject constructor(
     fun getCategoryProfitRows(startDate: Long, endDate: Long, limit: Int): Flow<List<CategoryProfitRow>> =
         saleDao.getCategoryProfitRows(startDate, endDate, limit)
     fun getFrequentSaleProducts(limit: Int = 6): Flow<List<Product>> = saleDao.getFrequentSaleProducts(limit)
+    fun getSalesTotalsForRange(startDate: Long, endDate: Long): Flow<CashClosingSalesRow> =
+        saleDao.getSalesTotalsForRange(startDate, endDate)
+    fun getPaymentsTotalForRange(startDate: Long, endDate: Long): Flow<Double> =
+        paymentDao.getPaymentsTotalForRange(startDate, endDate)
+    fun getDebtTotalsForRange(startDate: Long, endDate: Long, adjustmentType: String): Flow<CashClosingDebtRow> =
+        clientDebtHistoryDao.getDebtTotalsForRange(startDate, endDate, adjustmentType)
     fun getPendingCollectionRows(): Flow<List<DebtCollectionRow>> = clientDao.getPendingCollectionRows()
     fun getDebtCollectionSummary(searchQuery: String, includeZeroDebt: Boolean, minimumDebt: Double): Flow<DebtCollectionSummary> =
         clientDao.getDebtCollectionSummary(
@@ -326,6 +333,12 @@ class VetRepository @Inject constructor(
     fun getTotalDebt(): Flow<Double?> = clientDao.getTotalDebt()
     fun getTotalInventoryValue(): Flow<Double?> = productDao.getTotalInventoryValue()
     fun getStockHealthSummary(): Flow<StockHealthRow> = productDao.getStockHealthSummary()
+    fun searchGlobal(query: String, limit: Int = 12): Flow<List<GlobalSearchRow>> =
+        searchDao.searchGlobal(query.trim(), limit)
+    fun searchProductSuggestions(query: String, limit: Int = 8): Flow<List<Product>> =
+        productDao.searchProductSuggestions(query.trim(), limit)
+    fun searchClientSuggestions(query: String, limit: Int = 6): Flow<List<Client>> =
+        clientDao.searchClientSuggestions(query.trim(), limit)
     fun getAllProducts(): Flow<List<Product>> = productDao.getAllProducts()
     fun getAllSales(): Flow<List<SaleWithProducts>> = saleDao.getAllSalesWithProducts()
     fun getAllClients(): Flow<List<Client>> = clientDao.getAllClients()

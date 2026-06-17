@@ -17,7 +17,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,6 +35,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AddShoppingCart
@@ -62,7 +62,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -82,7 +81,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -98,9 +96,9 @@ import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SupplierDebtWithSupplier
 import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.navigation.Screen
+import com.example.vetfinance.domain.model.GlobalSearchResult
 import com.example.vetfinance.ui.components.SkeletonLine
 import com.example.vetfinance.ui.theme.Elevation
-import com.example.vetfinance.viewmodel.GlobalSearchResult
 import com.example.vetfinance.viewmodel.VetViewModel
 import java.time.Instant
 import java.time.LocalDate
@@ -128,6 +126,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
     val globalSearchQuery by viewModel.globalSearchQuery.collectAsStateWithLifecycle()
     val globalSearchResults by viewModel.globalSearchResults.collectAsStateWithLifecycle()
+    val petIdToNameMap by viewModel.petIdToNameMap.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsStateWithLifecycle()
     val showPaymentDialog by viewModel.showPaymentDialog.collectAsStateWithLifecycle()
@@ -171,7 +170,6 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         }
     }
     val services = remember(inventory) { inventory.filter { it.isService } }
-    val petIdToNameMap = remember(petsWithOwners) { petsWithOwners.associate { it.pet.petId to it.pet.name } }
     val petForDialog = remember(treatmentForNextDialog, petsWithOwners) {
         treatmentForNextDialog?.let { treatment ->
             petsWithOwners.find { it.pet.petId == treatment.petIdFk }
@@ -240,14 +238,18 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         )
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Image(
-            painter = painterResource(id = R.drawable.vet_background_logo),
-            contentDescription = stringResource(R.string.dashboard_background_content_description),
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alpha = 0.10f
-        )
+    val backgroundPainter = painterResource(id = R.drawable.vet_background_logo)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .drawWithCache {
+                onDrawBehind {
+                    with(backgroundPainter) {
+                        draw(size = size, alpha = 0.10f)
+                    }
+                }
+            }
+    ) {
 
         LazyColumn(
             modifier = Modifier
@@ -272,10 +274,14 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             }
 
             if (globalSearchResults.isNotEmpty()) {
-                item {
-                    DashboardSearchResults(
-                        results = globalSearchResults,
-                        onResultClick = { result ->
+                items(
+                    items = globalSearchResults,
+                    key = { "${it.type}-${it.id}" },
+                    contentType = { "dashboard-search-result-${it.type}" }
+                ) { result ->
+                    DashboardSearchResultItem(
+                        result = result,
+                        onResultClick = {
                             when (result.type) {
                                 "client" -> navController.navigate("client_detail/${result.id}")
                                 "pet" -> navController.navigate("pet_detail/${result.id}")
@@ -502,8 +508,8 @@ private fun DashboardSearch(
 }
 
 @Composable
-private fun DashboardSearchResults(
-    results: List<GlobalSearchResult>,
+private fun DashboardSearchResultItem(
+    result: GlobalSearchResult,
     onResultClick: (GlobalSearchResult) -> Unit
 ) {
     ElevatedCard(
@@ -511,40 +517,33 @@ private fun DashboardSearchResults(
         shape = MaterialTheme.shapes.medium,
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = Elevation.level2)
     ) {
-        Column {
-            results.forEachIndexed { index, result ->
-                ListItem(
-                    leadingContent = {
-                        Icon(
-                            imageVector = result.iconForType(),
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    },
-                    headlineContent = {
-                        Text(
-                            text = result.title,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    supportingContent = {
-                        Text(
-                            text = result.subtitle,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    trailingContent = {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
-                    },
-                    modifier = Modifier.clickable { onResultClick(result) }
+        ListItem(
+            leadingContent = {
+                Icon(
+                    imageVector = result.iconForType(),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
                 )
-                if (index < results.lastIndex) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
-                }
-            }
-        }
+            },
+            headlineContent = {
+                Text(
+                    text = result.title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            supportingContent = {
+                Text(
+                    text = result.subtitle,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            },
+            trailingContent = {
+                Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null)
+            },
+            modifier = Modifier.clickable { onResultClick(result) }
+        )
     }
 }
 

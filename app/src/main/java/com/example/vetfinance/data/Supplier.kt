@@ -1,10 +1,12 @@
 package com.example.vetfinance.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import java.util.UUID
 
 @Entity(tableName = "suppliers")
+@Immutable
 data class Supplier(
     @PrimaryKey val supplierId: String = UUID.randomUUID().toString(),
     val name: String,

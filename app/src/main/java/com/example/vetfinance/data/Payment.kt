@@ -1,5 +1,6 @@
 package com.example.vetfinance.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -13,6 +14,7 @@ import java.util.UUID
     ],
     indices = [Index("clientIdFk"), Index("paymentDate")]
 )
+@Immutable
 data class Payment(
     @PrimaryKey
     val paymentId: String = UUID.randomUUID().toString(),

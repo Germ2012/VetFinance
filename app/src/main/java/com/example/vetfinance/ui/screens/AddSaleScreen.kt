@@ -514,7 +514,11 @@ private fun ClientSuggestionPanel(
         LazyColumn(
             modifier = Modifier.heightIn(max = 136.dp)
         ) {
-            items(suggestions, key = { it.clientId }) { client ->
+            items(
+                items = suggestions,
+                key = { it.clientId },
+                contentType = { "client-suggestion" }
+            ) { client ->
                 ListItem(
                     headlineContent = { Text(client.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     supportingContent = {
@@ -597,7 +601,13 @@ private fun SaleCartPanel(
                 modifier = Modifier.heightIn(max = 184.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(cart, key = { it.cartItemId }) { cartItem ->
+                items(
+                    items = cart,
+                    key = { it.cartItemId },
+                    contentType = { item ->
+                        if (item.product.sellingMethod == SELLING_METHOD_DOSE_ONLY) "dose-cart-item" else "cart-item"
+                    }
+                ) { cartItem ->
                     CartItemRow(
                         cartItem = cartItem,
                         onRemove = { onRemove(cartItem) },

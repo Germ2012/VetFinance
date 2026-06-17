@@ -1,5 +1,6 @@
 package com.example.vetfinance.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -18,6 +19,7 @@ const val APPOINTMENT_STATUS_CANCELLED = "CANCELLED"
     ],
     indices = [Index("clientIdFk"), Index("petIdFk"), Index("appointmentDate")]
 )
+@Immutable
 data class Appointment(
     @PrimaryKey
     val appointmentId: String = UUID.randomUUID().toString(),

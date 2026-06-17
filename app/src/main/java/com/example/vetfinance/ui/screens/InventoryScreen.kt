@@ -438,6 +438,16 @@ private fun InventoryAlertBanner(
     onAdjustStock: (Product) -> Unit
 ) {
     val lowStockCount = lowStockProducts.size
+    val visibleLowStockProducts = remember(lowStockProducts) {
+        lowStockProducts
+            .sortedWith(
+                compareBy<Product> { product ->
+                    val threshold = product.lowStockThreshold ?: 1.0
+                    if (threshold > 0) product.stock / threshold else product.stock
+                }.thenBy { it.name.lowercase(Locale.getDefault()) }
+            )
+            .take(8)
+    }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -475,17 +485,9 @@ private fun InventoryAlertBanner(
             AnimatedVisibility(visible = expanded) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.error.copy(alpha = 0.25f))
-                    lowStockProducts
-                        .sortedWith(
-                            compareBy<Product> { product ->
-                                val threshold = product.lowStockThreshold ?: 1.0
-                                if (threshold > 0) product.stock / threshold else product.stock
-                            }.thenBy { it.name.lowercase(Locale.getDefault()) }
-                        )
-                        .take(8)
-                        .forEach { product ->
-                            LowStockProductRow(product = product, onAdjustStock = onAdjustStock)
-                        }
+                    visibleLowStockProducts.forEach { product ->
+                        LowStockProductRow(product = product, onAdjustStock = onAdjustStock)
+                    }
                     if (lowStockProducts.size > 8) {
                         Text(
                             text = "Mostrando 8 de $lowStockCount alertas. Usa el filtro de inventario para ver el resto.",

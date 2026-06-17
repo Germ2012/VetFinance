@@ -1,11 +1,13 @@
 package com.example.vetfinance.data
 
+import androidx.compose.runtime.Immutable
 import androidx.paging.PagingSource
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
 // --- RELATION CLASSES ---
+@Immutable
 data class AppointmentWithDetails(
     @Embedded val appointment: Appointment,
     @Relation(
@@ -20,17 +22,20 @@ data class AppointmentWithDetails(
     val client: Client
 )
 
+@Immutable
 data class TopSellingProduct(
     val name: String,
     val totalSold: Double,
     val totalRevenue: Double
 )
 
+@Immutable
 data class DailySalesTotal(
     val dayIndex: Int,
     val totalSales: Double
 )
 
+@Immutable
 data class CategoryProfitRow(
     val category: String,
     val revenue: Double,
@@ -46,6 +51,23 @@ data class FinancialSummaryRow(
 data class StockHealthRow(
     val optimalCount: Int,
     val lowStockCount: Int
+)
+
+data class CashClosingSalesRow(
+    val salesCount: Int,
+    val salesTotal: Double
+)
+
+data class CashClosingDebtRow(
+    val debtIncreases: Double,
+    val debtAdjustments: Double
+)
+
+data class GlobalSearchRow(
+    val id: String,
+    val type: String,
+    val title: String,
+    val subtitle: String
 )
 
 data class DebtCollectionRow(
@@ -111,6 +133,21 @@ interface ProductDao {
         ORDER BY name ASC
     """)
     fun getProductsPagedSource(filterType: String, searchQuery: String): PagingSource<Int, Product>
+
+    @Query("""
+        SELECT *
+        FROM products
+        WHERE :query != ''
+            AND (
+                name LIKE '%' || :query || '%'
+                OR category LIKE '%' || :query || '%'
+            )
+        ORDER BY
+            CASE WHEN name LIKE :query || '%' THEN 0 ELSE 1 END,
+            name COLLATE NOCASE ASC
+        LIMIT :limit
+    """)
+    fun searchProductSuggestions(query: String, limit: Int = 8): Flow<List<Product>>
 
     @Query("SELECT SUM(cost * stock) FROM products WHERE isService = 0")
     fun getTotalInventoryValue(): Flow<Double?>
@@ -219,6 +256,15 @@ interface SaleDao {
 
     @Query("""
         SELECT
+            COUNT(*) AS salesCount,
+            COALESCE(SUM(totalAmount), 0.0) AS salesTotal
+        FROM sales
+        WHERE date BETWEEN :startDate AND :endDate
+    """)
+    fun getSalesTotalsForRange(startDate: Long, endDate: Long): Flow<CashClosingSalesRow>
+
+    @Query("""
+        SELECT
             COALESCE((
                 SELECT SUM(totalAmount)
                 FROM sales
@@ -316,6 +362,21 @@ interface ClientDao {
 
     @Query("SELECT * FROM clients WHERE (:searchQuery = '' OR name LIKE '%' || :searchQuery || '%' OR phone LIKE '%' || :searchQuery || '%') ORDER BY name ASC")
     fun getClientsPagedSource(searchQuery: String): PagingSource<Int, Client>
+
+    @Query("""
+        SELECT *
+        FROM clients
+        WHERE :query != ''
+            AND (
+                name LIKE '%' || :query || '%'
+                OR phone LIKE '%' || :query || '%'
+            )
+        ORDER BY
+            CASE WHEN name LIKE :query || '%' THEN 0 ELSE 1 END,
+            name COLLATE NOCASE ASC
+        LIMIT :limit
+    """)
+    fun searchClientSuggestions(query: String, limit: Int = 6): Flow<List<Client>>
 
     @Query("""
         SELECT
@@ -428,6 +489,13 @@ interface PaymentDao {
 
     @Query("SELECT * FROM payments")
     fun getAllPaymentsSimple(): Flow<List<Payment>>
+
+    @Query("""
+        SELECT COALESCE(SUM(amount), 0.0)
+        FROM payments
+        WHERE paymentDate BETWEEN :startDate AND :endDate
+    """)
+    fun getPaymentsTotalForRange(startDate: Long, endDate: Long): Flow<Double>
 }
 
 @Dao
@@ -540,4 +608,62 @@ interface StockMovementDao {
 
     @Query("SELECT * FROM stock_movements ORDER BY movementDate DESC")
     fun getAllStockMovementsSimple(): Flow<List<StockMovement>>
+}
+
+@Dao
+interface SearchDao {
+    @Query("""
+        SELECT id, type, title, subtitle
+        FROM (
+            SELECT
+                clientId AS id,
+                'client' AS type,
+                'Cliente: ' || name AS title,
+                COALESCE(phone, 'Sin telefono') AS subtitle,
+                0 AS priority,
+                name AS sortName
+            FROM clients
+            WHERE :query != ''
+                AND (
+                    name LIKE '%' || :query || '%'
+                    OR phone LIKE '%' || :query || '%'
+                )
+
+            UNION ALL
+
+            SELECT
+                p.petId AS id,
+                'pet' AS type,
+                'Mascota: ' || p.name AS title,
+                'Dueno: ' || c.name AS subtitle,
+                1 AS priority,
+                p.name AS sortName
+            FROM pets AS p
+            INNER JOIN clients AS c ON c.clientId = p.ownerIdFk
+            WHERE :query != ''
+                AND (
+                    p.name LIKE '%' || :query || '%'
+                    OR c.name LIKE '%' || :query || '%'
+                )
+
+            UNION ALL
+
+            SELECT
+                productId AS id,
+                'product' AS type,
+                CASE WHEN isService = 1 THEN 'Servicio: ' ELSE 'Producto: ' END || name AS title,
+                COALESCE(category, sellingMethod) AS subtitle,
+                2 AS priority,
+                name AS sortName
+            FROM products
+            WHERE :query != ''
+                AND (
+                    name LIKE '%' || :query || '%'
+                    OR category LIKE '%' || :query || '%'
+                )
+        )
+        ORDER BY priority ASC, sortName COLLATE NOCASE ASC
+        LIMIT :limit
+    """)
+    fun searchGlobal(query: String, limit: Int = 12): Flow<List<GlobalSearchRow>>
 }

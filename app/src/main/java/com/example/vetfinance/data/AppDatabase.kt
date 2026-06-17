@@ -36,6 +36,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun clientDebtHistoryDao(): ClientDebtHistoryDao
     abstract fun supplierDebtDao(): SupplierDebtDao
     abstract fun stockMovementDao(): StockMovementDao
+    abstract fun searchDao(): SearchDao
 
     companion object {
         /**

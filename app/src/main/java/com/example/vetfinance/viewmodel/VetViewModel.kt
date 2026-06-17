@@ -13,6 +13,7 @@ import com.example.vetfinance.domain.model.CashClosingSummary
 import com.example.vetfinance.domain.model.CategoryProfitReport
 import com.example.vetfinance.domain.model.ClientPurchaseReport
 import com.example.vetfinance.domain.model.FinancialSummary
+import com.example.vetfinance.domain.model.GlobalSearchResult
 import com.example.vetfinance.domain.model.ProductProfitReport
 import com.example.vetfinance.domain.model.SalesTrendComparisonPoint
 import com.example.vetfinance.domain.model.StockHealthSummary
@@ -25,6 +26,7 @@ import com.example.vetfinance.domain.usecase.GetDebtCollectionSummaryUseCase
 import com.example.vetfinance.domain.usecase.GetFinancialSummaryUseCase
 import com.example.vetfinance.domain.usecase.GetFilteredInventoryUseCase
 import com.example.vetfinance.domain.usecase.GetFrequentSaleProductsUseCase
+import com.example.vetfinance.domain.usecase.GetGlobalSearchResultsUseCase
 import com.example.vetfinance.domain.usecase.GetPendingCollectionRowsUseCase
 import com.example.vetfinance.domain.usecase.GetProductProfitReportsUseCase
 import com.example.vetfinance.domain.usecase.GetSalesTrendComparisonUseCase
@@ -59,13 +61,6 @@ data class HistoricalPeriod(
     val displayName: String, // e.g., "06/10/2025", "Semana 41 (06/10 - 12/10)", "Octubre 2025"
     val startDate: Long,
     val endDate: Long
-)
-
-data class GlobalSearchResult(
-    val id: String,
-    val type: String,
-    val title: String,
-    val subtitle: String
 )
 
 data class DebtCollectionFilters(
@@ -122,7 +117,8 @@ class VetViewModel @Inject constructor(
     private val getCategoryProfitReportsUseCase: GetCategoryProfitReportsUseCase,
     private val getStockHealthSummaryUseCase: GetStockHealthSummaryUseCase,
     private val getProductProfitReportsUseCase: GetProductProfitReportsUseCase,
-    private val getClientPurchaseReportsUseCase: GetClientPurchaseReportsUseCase
+    private val getClientPurchaseReportsUseCase: GetClientPurchaseReportsUseCase,
+    private val getGlobalSearchResultsUseCase: GetGlobalSearchResultsUseCase
 ) : ViewModel() {
 
     private val _isLoading = MutableStateFlow(true)
@@ -248,13 +244,32 @@ class VetViewModel @Inject constructor(
     private val _selectedSaleDateFilter = MutableStateFlow<Long?>(null)
     val selectedSaleDateFilter: StateFlow<Long?> = _selectedSaleDateFilter.asStateFlow()
 
-    private val _productNameSuggestions = MutableStateFlow<List<Product>>(emptyList())
-    val productNameSuggestions: StateFlow<List<Product>> = _productNameSuggestions.asStateFlow()
-    private val _clientNameSuggestions = MutableStateFlow<List<Client>>(emptyList())
-    val clientNameSuggestions: StateFlow<List<Client>> = _clientNameSuggestions.asStateFlow()
+    private val _productNameSuggestionQuery = MutableStateFlow("")
+    val productNameSuggestions: StateFlow<List<Product>> = _productNameSuggestionQuery
+        .debounce(SEARCH_DEBOUNCE_MS)
+        .map { it.trim() }
+        .distinctUntilChanged()
+        .flatMapLatest { query ->
+            if (query.isBlank()) flowOf(emptyList()) else repository.searchProductSuggestions(query)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _clientNameSuggestionQuery = MutableStateFlow("")
+    val clientNameSuggestions: StateFlow<List<Client>> = _clientNameSuggestionQuery
+        .debounce(SEARCH_DEBOUNCE_MS)
+        .map { it.trim() }
+        .distinctUntilChanged()
+        .flatMapLatest { query ->
+            if (query.isBlank()) flowOf(emptyList()) else repository.searchClientSuggestions(query)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val clients: StateFlow<List<Client>> = repository.getAllClients().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val petsWithOwners: StateFlow<List<PetWithOwner>> = repository.getAllPetsWithOwners().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val petIdToNameMap: StateFlow<Map<String, String>> = petsWithOwners
+        .map { pets -> pets.associate { it.pet.petId to it.pet.name } }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
     val inventory: StateFlow<List<Product>> = repository.getAllProducts().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _treatmentHistory = MutableStateFlow<List<Treatment>>(emptyList())
     val treatmentHistory: StateFlow<List<Treatment>> = _treatmentHistory.asStateFlow()
@@ -309,36 +324,13 @@ class VetViewModel @Inject constructor(
         .debounce(SEARCH_DEBOUNCE_MS)
         .distinctUntilChanged()
 
-    val globalSearchResults: StateFlow<List<GlobalSearchResult>> = combine(
-        clients,
-        petsWithOwners,
-        inventory,
-        debouncedGlobalSearchQuery
-    ) { clientList, petList, productList, query ->
-        if (query.isBlank()) {
-            emptyList()
-        } else {
-            val clientResults = clientList
-                .filter { it.name.contains(query, true) || (it.phone?.contains(query, true) == true) }
-                .map { GlobalSearchResult(it.clientId, "client", "Cliente: ${it.name}", it.phone ?: "Sin telefono") }
-            val petResults = petList
-                .filter { it.pet.name.contains(query, true) || it.owner.name.contains(query, true) }
-                .map { GlobalSearchResult(it.pet.petId, "pet", "Mascota: ${it.pet.name}", "Dueno: ${it.owner.name}") }
-            val productResults = productList
-                .filter { it.name.contains(query, true) }
-                .map { product ->
-                    val type = if (product.isService) "Servicio" else "Producto"
-                    GlobalSearchResult(product.productId, "product", "$type: ${product.name}", product.category ?: product.sellingMethod)
-            }
-            (clientResults + petResults + productResults).take(12)
-        }
-    }
-        .flowOn(Dispatchers.Default)
+    val globalSearchResults: StateFlow<List<GlobalSearchResult>> = debouncedGlobalSearchQuery
+        .flatMapLatest { query -> getGlobalSearchResultsUseCase(query) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val inventoryPaginated: Flow<PagingData<Product>> = combine(_inventoryFilter, debouncedProductSearchQuery) { filter, query ->
         filter to query
-    }.flatMapLatest { (filter, query) ->
+    }.distinctUntilChanged().flatMapLatest { (filter, query) ->
         getFilteredInventoryUseCase(filter, query)
     }.cachedIn(viewModelScope)
 
@@ -459,11 +451,10 @@ class VetViewModel @Inject constructor(
     val stockHealthSummary: StateFlow<StockHealthSummary> = getStockHealthSummaryUseCase()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), StockHealthSummary(0, 0))
 
-    val salesSummaryToday: StateFlow<Double> = _sales.map { sales ->
-        val startOfDay = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        sales.filter { it.sale.date >= startOfDay }.sumOf { it.sale.totalAmount }
-    }
-        .flowOn(Dispatchers.Default)
+    private val todayRangeMillis = currentDayRangeMillis()
+    val salesSummaryToday: StateFlow<Double> = repository
+        .getSalesTotalsForRange(todayRangeMillis.first, todayRangeMillis.second)
+        .map { it.salesTotal }
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -578,7 +569,7 @@ class VetViewModel @Inject constructor(
         inventoryBaseUiState,
         suppliers,
         _appSettings,
-        _productNameSuggestions,
+        productNameSuggestions,
         _isLoading
     ) { base, supplierList, settings, suggestions, loading ->
         base.copy(
@@ -703,6 +694,14 @@ class VetViewModel @Inject constructor(
     }
 
 
+    private fun currentDayRangeMillis(): Pair<Long, Long> {
+        val zoneId = ZoneId.systemDefault()
+        val today = LocalDate.now()
+        val startOfDay = today.atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val endOfDay = today.atTime(23, 59, 59).atZone(zoneId).toInstant().toEpochMilli()
+        return startOfDay to endOfDay
+    }
+
     fun onInventoryFilterChanged(newFilter: String) { _inventoryFilter.value = newFilter }
     fun onPetSearchQueryChange(query: String) { _petSearchQuery.value = query }
     fun clearPetSearchQuery() { _petSearchQuery.value = "" }
@@ -715,18 +714,10 @@ class VetViewModel @Inject constructor(
     fun clearGlobalSearchQuery() { _globalSearchQuery.value = "" }
     fun onSaleDateFilterSelected(date: Long?) { _selectedSaleDateFilter.value = date }
     fun clearSaleDateFilter() { _selectedSaleDateFilter.value = null }
-    fun onProductNameChange(name: String) { if (name.isBlank()) { _productNameSuggestions.value = emptyList(); return }; _productNameSuggestions.value = inventory.value.filter { it.name.contains(name, ignoreCase = true) } }
-    fun clearProductNameSuggestions() { _productNameSuggestions.value = emptyList() }
-    fun onClientNameChange(name: String) {
-        if (name.isBlank()) {
-            _clientNameSuggestions.value = emptyList()
-            return
-        }
-        _clientNameSuggestions.value = clients.value
-            .filter { it.name.contains(name, ignoreCase = true) || (it.phone?.contains(name) == true) }
-            .take(6)
-    }
-    fun clearClientNameSuggestions() { _clientNameSuggestions.value = emptyList() }
+    fun onProductNameChange(name: String) { _productNameSuggestionQuery.value = name }
+    fun clearProductNameSuggestions() { _productNameSuggestionQuery.value = "" }
+    fun onClientNameChange(name: String) { _clientNameSuggestionQuery.value = name }
+    fun clearClientNameSuggestions() { _clientNameSuggestionQuery.value = "" }
     fun onTopProductsPeriodSelected(period: TopProductsPeriod) { _topProductsPeriod.value = period; _topProductsDate.value = LocalDate.now() }
     fun onTopProductsMetricSelected(metric: TopProductsMetric) {
         _topProductsMetric.value = metric
