@@ -14,7 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,9 +48,9 @@ fun ClientDetailScreen(
         viewModel.loadDebtHistoryForClient(clientId)
     }
 
-    val clients by viewModel.clients.collectAsState()
-    val paymentHistory by viewModel.paymentHistory.collectAsState()
-    val debtHistory by viewModel.debtHistory.collectAsState()
+    val clients by viewModel.clients.collectAsStateWithLifecycle()
+    val paymentHistory by viewModel.paymentHistory.collectAsStateWithLifecycle()
+    val debtHistory by viewModel.debtHistory.collectAsStateWithLifecycle()
     val client = clients.find { it.clientId == clientId }
     val sortedDebtHistory = remember(debtHistory) { debtHistory.sortedByDescending { it.eventDate } }
     val sortedPayments = remember(paymentHistory) { paymentHistory.sortedByDescending { it.paymentDate } }

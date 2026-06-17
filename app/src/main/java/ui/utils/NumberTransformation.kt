@@ -5,6 +5,9 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import java.text.DecimalFormat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlin.math.max
 
 class NumberTransformation : VisualTransformation {
@@ -44,6 +47,12 @@ class NumberTransformation : VisualTransformation {
 fun formatCurrency(value: Double): String {
     val formatter = DecimalFormat("#,###.##")
     return formatter.format(value)
+}
+
+fun Double.formatGs(): String = "Gs. ${formatCurrency(this)}"
+
+fun Long.toReadableDate(pattern: String = "dd/MM/yyyy"): String {
+    return SimpleDateFormat(pattern, Locale.getDefault()).format(Date(this))
 }
 
 val ThousandsSeparatorTransformation = NumberTransformation()

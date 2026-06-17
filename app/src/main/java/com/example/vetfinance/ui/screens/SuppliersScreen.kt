@@ -9,7 +9,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -25,9 +25,9 @@ fun SuppliersScreen(
     viewModel: VetViewModel,
     navController: NavController
 ) {
-    val suppliers by viewModel.suppliers.collectAsState()
-    val showSupplierDialog by viewModel.showSupplierDialog.collectAsState()
-    val editingSupplier by viewModel.editingSupplier.collectAsState()
+    val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
+    val showSupplierDialog by viewModel.showSupplierDialog.collectAsStateWithLifecycle()
+    val editingSupplier by viewModel.editingSupplier.collectAsStateWithLifecycle()
 
     if (showSupplierDialog) {
         SupplierDialog(

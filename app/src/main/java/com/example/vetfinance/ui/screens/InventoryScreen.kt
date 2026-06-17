@@ -16,6 +16,9 @@ import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -26,8 +29,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
@@ -46,7 +51,9 @@ import com.example.vetfinance.data.STOCK_MOVEMENT_RESTOCK
 import com.example.vetfinance.data.STOCK_MOVEMENT_SALE
 import com.example.vetfinance.data.STOCK_MOVEMENT_SALE_REVERSAL
 import com.example.vetfinance.data.StockMovement
+import com.example.vetfinance.ui.components.SkeletonLine
 import com.example.vetfinance.viewmodel.VetViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ui.utils.formatCurrency
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -55,15 +62,17 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InventoryScreen(viewModel: VetViewModel) {
-    val showDialog by viewModel.showAddProductDialog.collectAsState()
-    val filter by viewModel.inventoryFilter.collectAsState()
-    val inventory by viewModel.inventory.collectAsState()
-    val searchQuery by viewModel.productSearchQuery.collectAsState()
-    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
-    val suppliers by viewModel.suppliers.collectAsState()
-    val appSettings by viewModel.appSettings.collectAsState()
+    val uiState by viewModel.inventoryUiState.collectAsStateWithLifecycle()
+    val showDialog = uiState.showAddProductDialog
+    val filter = uiState.filter
+    val inventory = uiState.inventory
+    val searchQuery = uiState.searchQuery
+    val lowStockProducts = uiState.lowStockProducts
+    val suppliers = uiState.suppliers
+    val appSettings = uiState.appSettings
     var productToEdit by remember { mutableStateOf<Product?>(null) }
     var productToDelete by remember { mutableStateOf<Product?>(null) }
+    var productForActions by remember { mutableStateOf<Product?>(null) }
     var secureProductToDelete by remember { mutableStateOf<Product?>(null) }
     var productForCostHistory by remember { mutableStateOf<Product?>(null) }
     var productForStockHistory by remember { mutableStateOf<Product?>(null) }
@@ -72,16 +81,14 @@ fun InventoryScreen(viewModel: VetViewModel) {
     var secureStockValue by remember { mutableStateOf<Double?>(null) }
     var secureStockNote by remember { mutableStateOf("") }
     var lowStockAlertExpanded by remember { mutableStateOf(false) }
-    val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val productCostHistory by viewModel.productCostHistory.collectAsState()
-    val productStockMovements by viewModel.productStockMovements.collectAsState()
+    val productNameSuggestions = uiState.productNameSuggestions
+    val isLoading = uiState.isLoading
+    val productCostHistory by viewModel.productCostHistory.collectAsStateWithLifecycle()
+    val productStockMovements by viewModel.productStockMovements.collectAsStateWithLifecycle()
     val pagedProducts = viewModel.inventoryPaginated.collectAsLazyPagingItems()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-
-    val productsFilterText = stringResource(R.string.inventory_filter_products)
-    val servicesFilterText = stringResource(R.string.inventory_filter_services)
+    val haptic = LocalHapticFeedback.current
 
     val productCount = remember(inventory) { inventory.count { !it.isService } }
     val serviceCount = remember(inventory) { inventory.count { it.isService } }
@@ -131,6 +138,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
             confirmButton = {
                 Button(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         secureProductToDelete = product
                         productToDelete = null
                     },
@@ -153,6 +161,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
             actionLabel = "eliminar producto",
             onDismiss = { secureProductToDelete = null },
             onAuthorized = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.deleteProduct(product)
                 secureProductToDelete = null
             }
@@ -200,10 +209,40 @@ fun InventoryScreen(viewModel: VetViewModel) {
                 secureStockNote = ""
             },
             onAuthorized = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.adjustProductStock(stockProduct, stockValue, secureStockNote)
                 secureStockProduct = null
                 secureStockValue = null
                 secureStockNote = ""
+            }
+        )
+    }
+
+    productForActions?.let { product ->
+        InventoryActionsSheet(
+            product = product,
+            onDismiss = { productForActions = null },
+            onEdit = {
+                productToEdit = product
+                productForActions = null
+            },
+            onDelete = {
+                productToDelete = product
+                productForActions = null
+            },
+            onShowCostHistory = {
+                productForCostHistory = product
+                viewModel.loadProductCostHistory(product.productId)
+                productForActions = null
+            },
+            onShowStockHistory = {
+                productForStockHistory = product
+                viewModel.loadProductStockMovements(product.productId)
+                productForActions = null
+            },
+            onAdjustStock = {
+                productForStockAdjustment = product
+                productForActions = null
             }
         )
     }
@@ -255,7 +294,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
                         keyboardController?.hide()
                     }
                 ),
-                shape = RoundedCornerShape(8.dp)
+                shape = MaterialTheme.shapes.medium
             )
             Spacer(modifier = Modifier.height(12.dp))
             InventoryFilter(selectedFilter = filter, onFilterSelected = { viewModel.onInventoryFilterChanged(it) })
@@ -267,8 +306,14 @@ fun InventoryScreen(viewModel: VetViewModel) {
             Spacer(modifier = Modifier.height(12.dp))
 
             if ((isLoading && inventory.isEmpty()) || pagedProducts.loadState.refresh is LoadState.Loading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 96.dp)
+                ) {
+                    items(6, contentType = { "inventory-skeleton" }) {
+                        InventoryItemPlaceholder()
+                    }
                 }
             } else {
                 LazyColumn(
@@ -293,16 +338,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
                             InventoryItem(
                                 product = product,
                                 onEdit = { productToEdit = it },
-                                onDelete = { productToDelete = it },
-                                onShowCostHistory = {
-                                    productForCostHistory = it
-                                    viewModel.loadProductCostHistory(it.productId)
-                                },
-                                onShowStockHistory = {
-                                    productForStockHistory = it
-                                    viewModel.loadProductStockMovements(it.productId)
-                                },
-                                onAdjustStock = { productForStockAdjustment = it },
+                                onShowActions = { productForActions = it },
                                 onOpenContainer = { viewModel.openContainerForBulkSale(it) }
                             )
                         } else {
@@ -319,14 +355,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
                     }
                     if (pagedProducts.loadState.append is LoadState.Loading) {
                         item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                            }
+                            InventoryItemPlaceholder()
                         }
                     }
                 }
@@ -361,7 +390,7 @@ private fun InventoryHeader(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 14.dp),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.primaryContainer
     ) {
         Column(
@@ -415,7 +444,7 @@ private fun InventoryAlertBanner(
             .padding(top = 12.dp)
             .animateContentSize()
             .clickable(onClick = onToggle),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.errorContainer,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
     ) {
@@ -481,7 +510,7 @@ private fun LowStockProductRow(
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.20f))
     ) {
@@ -512,7 +541,7 @@ private fun LowStockProductRow(
                 }
                 FilledTonalButton(
                     onClick = { onAdjustStock(product) },
-                    shape = RoundedCornerShape(8.dp),
+                    shape = MaterialTheme.shapes.medium,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Text("Ajustar")
@@ -596,7 +625,7 @@ private fun InventoryMetric(
 ) {
     Card(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = if (isWarning) {
                 MaterialTheme.colorScheme.errorContainer
@@ -647,24 +676,28 @@ fun InventoryFilter(selectedFilter: String, onFilterSelected: (String) -> Unit) 
 fun InventoryItem(
     product: Product,
     onEdit: (Product) -> Unit,
-    onDelete: (Product) -> Unit,
-    onShowCostHistory: (Product) -> Unit,
-    onShowStockHistory: (Product) -> Unit,
-    onAdjustStock: (Product) -> Unit,
+    onShowActions: (Product) -> Unit,
     onOpenContainer: (Product) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val stockReference = (product.lowStockThreshold ?: product.stock.coerceAtLeast(1.0)).coerceAtLeast(1.0)
-    val stockRatio = (product.stock / stockReference).coerceIn(0.0, 1.0).toFloat()
-    val isLowStock = product.lowStockThreshold?.let { threshold ->
-        threshold > 0 && product.stock < threshold
-    } == true
+    val stockRatio by remember(product.stock, product.lowStockThreshold) {
+        derivedStateOf {
+            val stockReference = (product.lowStockThreshold ?: product.stock.coerceAtLeast(1.0)).coerceAtLeast(1.0)
+            (product.stock / stockReference).coerceIn(0.0, 1.0).toFloat()
+        }
+    }
+    val isLowStock by remember(product.stock, product.lowStockThreshold) {
+        derivedStateOf {
+            product.lowStockThreshold?.let { threshold ->
+                threshold > 0 && product.stock < threshold
+            } == true
+        }
+    }
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onEdit(product) },
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
         Row(
@@ -709,7 +742,7 @@ fun InventoryItem(
                     FilledTonalButton(
                         onClick = { onOpenContainer(product) },
                         enabled = product.stock >= 1,
-                        shape = RoundedCornerShape(8.dp)
+                        shape = MaterialTheme.shapes.medium
                     ) {
                         Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -747,54 +780,96 @@ fun InventoryItem(
                 }
             }
             Box(modifier = Modifier.align(Alignment.Top)) {
-                IconButton(onClick = { expanded = true }) {
+                IconButton(onClick = { onShowActions(product) }) {
                     Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options_content_description))
-                }
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.inventory_item_menu_edit)) },
-                        onClick = {
-                            onEdit(product)
-                            expanded = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.inventory_item_menu_delete)) },
-                        onClick = {
-                            onDelete(product)
-                            expanded = false
-                        }
-                    )
-                    if (!product.isService) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.inventory_item_menu_cost_history)) },
-                            onClick = {
-                                onShowCostHistory(product)
-                                expanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Historial de stock") },
-                            onClick = {
-                                onShowStockHistory(product)
-                                expanded = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Ajustar stock") },
-                            onClick = {
-                                onAdjustStock(product)
-                                expanded = false
-                            }
-                        )
-                    }
                 }
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun InventoryActionsSheet(
+    product: Product,
+    onDismiss: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onShowCostHistory: () -> Unit,
+    onShowStockHistory: () -> Unit,
+    onAdjustStock: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp)
+        ) {
+            ListItem(
+                headlineContent = {
+                    Text(product.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                },
+                supportingContent = {
+                    Text(if (product.isService) stringResource(R.string.inventory_item_type_service) else product.sellingMethod)
+                },
+                leadingContent = {
+                    Icon(Icons.Default.Inventory, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
+            )
+            HorizontalDivider()
+            InventoryActionRow(
+                icon = Icons.Default.Edit,
+                label = stringResource(R.string.inventory_item_menu_edit),
+                onClick = onEdit
+            )
+            InventoryActionRow(
+                icon = Icons.Default.Delete,
+                label = stringResource(R.string.inventory_item_menu_delete),
+                isDestructive = true,
+                onClick = onDelete
+            )
+            if (!product.isService) {
+                InventoryActionRow(
+                    icon = Icons.Default.History,
+                    label = stringResource(R.string.inventory_item_menu_cost_history),
+                    onClick = onShowCostHistory
+                )
+                InventoryActionRow(
+                    icon = Icons.Default.History,
+                    label = "Historial de stock",
+                    onClick = onShowStockHistory
+                )
+                InventoryActionRow(
+                    icon = Icons.Default.Inventory,
+                    label = "Ajustar stock",
+                    onClick = onAdjustStock
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InventoryActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isDestructive: Boolean = false,
+    onClick: () -> Unit
+) {
+    ListItem(
+        headlineContent = { Text(label) },
+        leadingContent = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
+        },
+        modifier = Modifier.clickable(onClick = onClick)
+    )
 }
 
 @Composable
@@ -806,7 +881,7 @@ private fun InventoryEmptyState(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 24.dp),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
         Column(
@@ -821,7 +896,7 @@ private fun InventoryEmptyState(
                 modifier = Modifier.size(32.dp)
             )
             Text(message, style = MaterialTheme.typography.bodyLarge)
-            Button(onClick = onAddClick, shape = RoundedCornerShape(8.dp)) {
+            Button(onClick = onAddClick, shape = MaterialTheme.shapes.medium) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(stringResource(R.string.content_description_add_product))
@@ -834,27 +909,16 @@ private fun InventoryEmptyState(
 private fun InventoryItemPlaceholder() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth(0.58f)
-                    .height(6.dp),
-                color = MaterialTheme.colorScheme.outline,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth(0.34f)
-                    .height(6.dp),
-                color = MaterialTheme.colorScheme.outline,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
+            SkeletonLine(modifier = Modifier.fillMaxWidth(0.58f), height = 10.dp)
+            SkeletonLine(modifier = Modifier.fillMaxWidth(0.34f), height = 10.dp)
+            SkeletonLine(modifier = Modifier.fillMaxWidth(0.22f), height = 8.dp)
         }
     }
 }

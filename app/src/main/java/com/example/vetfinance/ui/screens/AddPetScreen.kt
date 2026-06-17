@@ -14,6 +14,7 @@ import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.data.Pet
 import com.example.vetfinance.viewmodel.VetViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,8 +27,8 @@ fun AddPetScreen(
     var selectedOwner by remember { mutableStateOf<Client?>(null) }
     var showAddOwnerDialog by remember { mutableStateOf(false) }
 
-    val clients by viewModel.clients.collectAsState()
-    val clientSuggestions by viewModel.clientNameSuggestions.collectAsState()
+    val clients by viewModel.clients.collectAsStateWithLifecycle()
+    val clientSuggestions by viewModel.clientNameSuggestions.collectAsStateWithLifecycle()
 
     if (showAddOwnerDialog) {
         AddOrEditClientDialog(

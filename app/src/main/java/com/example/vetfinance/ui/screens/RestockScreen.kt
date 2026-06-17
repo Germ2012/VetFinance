@@ -27,6 +27,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,8 +35,8 @@ fun RestockScreen(
     viewModel: VetViewModel,
     navController: NavController
 ) {
-    val restockHistory by viewModel.restockHistory.collectAsState()
-    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
+    val restockHistory by viewModel.restockHistory.collectAsStateWithLifecycle()
+    val lowStockProducts by viewModel.lowStockProducts.collectAsStateWithLifecycle()
     var selectedDate by remember { mutableStateOf(LocalDate.now()) }
     var showDatePicker by remember { mutableStateOf(false) }
 

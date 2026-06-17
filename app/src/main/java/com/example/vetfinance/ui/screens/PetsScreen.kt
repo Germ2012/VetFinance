@@ -21,6 +21,7 @@ import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.PetWithOwner
 import com.example.vetfinance.viewmodel.VetViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun PetsScreen(
@@ -28,8 +29,8 @@ fun PetsScreen(
     navController: NavController
 ) {
     // Se obtienen las mascotas filtradas y la consulta de búsqueda del ViewModel
-    val petsWithOwners by viewModel.filteredPetsWithOwners.collectAsState()
-    val searchQuery by viewModel.petSearchQuery.collectAsState()
+    val petsWithOwners by viewModel.filteredPetsWithOwners.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.petSearchQuery.collectAsStateWithLifecycle()
 
     // Limpia la búsqueda al salir de la pantalla
     DisposableEffect(Unit) {

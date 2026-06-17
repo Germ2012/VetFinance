@@ -61,6 +61,7 @@ fun VetFinanceTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
+        shapes = VetFinanceShapes,
         content = content
     )
 }

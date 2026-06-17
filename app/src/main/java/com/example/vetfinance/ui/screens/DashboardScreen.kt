@@ -67,7 +67,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -112,23 +112,23 @@ private val DashboardCardShape = RoundedCornerShape(8.dp)
 
 @Composable
 fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
-    val salesToday by viewModel.salesSummaryToday.collectAsState()
-    val upcomingTreatments by viewModel.upcomingTreatments.collectAsState()
-    val upcomingAppointments by viewModel.upcomingAppointments.collectAsState()
-    val upcomingSupplierDebts by viewModel.upcomingSupplierDebts.collectAsState()
-    val petsWithOwners by viewModel.petsWithOwners.collectAsState()
-    val inventory by viewModel.inventory.collectAsState()
-    val suppliers by viewModel.suppliers.collectAsState()
-    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
-    val pendingCollectionRows by viewModel.pendingCollectionRows.collectAsState()
-    val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
-    val globalSearchQuery by viewModel.globalSearchQuery.collectAsState()
-    val globalSearchResults by viewModel.globalSearchResults.collectAsState()
-    val appSettings by viewModel.appSettings.collectAsState()
-    val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
-    val showPaymentDialog by viewModel.showPaymentDialog.collectAsState()
-    val clientForPayment by viewModel.clientForPayment.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
+    val salesToday by viewModel.salesSummaryToday.collectAsStateWithLifecycle()
+    val upcomingTreatments by viewModel.upcomingTreatments.collectAsStateWithLifecycle()
+    val upcomingAppointments by viewModel.upcomingAppointments.collectAsStateWithLifecycle()
+    val upcomingSupplierDebts by viewModel.upcomingSupplierDebts.collectAsStateWithLifecycle()
+    val petsWithOwners by viewModel.petsWithOwners.collectAsStateWithLifecycle()
+    val inventory by viewModel.inventory.collectAsStateWithLifecycle()
+    val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
+    val lowStockProducts by viewModel.lowStockProducts.collectAsStateWithLifecycle()
+    val pendingCollectionRows by viewModel.pendingCollectionRows.collectAsStateWithLifecycle()
+    val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
+    val globalSearchQuery by viewModel.globalSearchQuery.collectAsStateWithLifecycle()
+    val globalSearchResults by viewModel.globalSearchResults.collectAsStateWithLifecycle()
+    val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
+    val showAddProductDialog by viewModel.showAddProductDialog.collectAsStateWithLifecycle()
+    val showPaymentDialog by viewModel.showPaymentDialog.collectAsStateWithLifecycle()
+    val clientForPayment by viewModel.clientForPayment.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

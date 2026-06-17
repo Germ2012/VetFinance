@@ -53,16 +53,17 @@ import java.util.Date
 import java.util.Locale
 import ui.utils.NumberTransformation
 import ui.utils.formatCurrency
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun CalendarScreen(viewModel: VetViewModel) {
-    val selectedDate by viewModel.selectedCalendarDate.collectAsState()
-    val appointments by viewModel.appointmentsOnSelectedDate.collectAsState()
-    val supplierDebts by viewModel.supplierDebtsOnSelectedDate.collectAsState()
-    val showDialog by viewModel.showAddAppointmentDialog.collectAsState()
-    val clients by viewModel.clients.collectAsState()
-    val petsWithOwners by viewModel.petsWithOwners.collectAsState()
-    val suppliers by viewModel.suppliers.collectAsState()
+    val selectedDate by viewModel.selectedCalendarDate.collectAsStateWithLifecycle()
+    val appointments by viewModel.appointmentsOnSelectedDate.collectAsStateWithLifecycle()
+    val supplierDebts by viewModel.supplierDebtsOnSelectedDate.collectAsStateWithLifecycle()
+    val showDialog by viewModel.showAddAppointmentDialog.collectAsStateWithLifecycle()
+    val clients by viewModel.clients.collectAsStateWithLifecycle()
+    val petsWithOwners by viewModel.petsWithOwners.collectAsStateWithLifecycle()
+    val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
     var showAddMenu by remember { mutableStateOf(false) }
     var showSupplierDebtDialog by remember { mutableStateOf(false) }
 

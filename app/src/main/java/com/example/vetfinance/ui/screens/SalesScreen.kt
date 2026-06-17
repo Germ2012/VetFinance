@@ -31,14 +31,15 @@ import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.util.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
-    val filteredSales by viewModel.filteredSales.collectAsState()
-    val selectedDate by viewModel.selectedSaleDateFilter.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val appSettings by viewModel.appSettings.collectAsState()
+    val filteredSales by viewModel.filteredSales.collectAsStateWithLifecycle()
+    val selectedDate by viewModel.selectedSaleDateFilter.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
     val visibleSalesTotal = remember(filteredSales) { filteredSales.sumOf { it.sale.totalAmount } }
 
     var showDatePicker by remember { mutableStateOf(false) }

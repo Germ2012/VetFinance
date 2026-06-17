@@ -45,6 +45,7 @@ import java.util.UUID
 import javax.inject.Inject
 
 private const val GENERAL_CLIENT_ID = "00000000-0000-0000-0000-000000000001"
+private const val SEARCH_DEBOUNCE_MS = 300L
 
 
 enum class ReportPeriodType(@StringRes val displayResId: Int) {
@@ -71,6 +72,27 @@ data class DebtCollectionFilters(
     val showOnlyWithDebt: Boolean = true,
     val minimumDebt: Double = 0.0,
     val sortMode: String = "Mayor deuda"
+)
+
+data class InventoryScreenUiState(
+    val showAddProductDialog: Boolean = false,
+    val filter: String = "Todos",
+    val inventory: List<Product> = emptyList(),
+    val searchQuery: String = "",
+    val lowStockProducts: List<Product> = emptyList(),
+    val suppliers: List<Supplier> = emptyList(),
+    val appSettings: AppSettings = AppSettings(),
+    val productNameSuggestions: List<Product> = emptyList(),
+    val isLoading: Boolean = true
+)
+
+data class DebtClientsScreenUiState(
+    val searchQuery: String = "",
+    val showPaymentDialog: Boolean = false,
+    val clientForPayment: Client? = null,
+    val isLoading: Boolean = true,
+    val appSettings: AppSettings = AppSettings(),
+    val collectionSummary: DebtCollectionSummary = DebtCollectionSummary(0, 0.0, 0.0)
 )
 
 enum class TopProductsPeriod(@StringRes val displayResId: Int) {
@@ -271,11 +293,27 @@ class VetViewModel @Inject constructor(
     val clientPurchaseReports: StateFlow<List<ClientPurchaseReport>> = getClientPurchaseReportsUseCase()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val debouncedProductSearchQuery = _productSearchQuery
+        .debounce(SEARCH_DEBOUNCE_MS)
+        .distinctUntilChanged()
+
+    private val debouncedClientSearchQuery = _clientSearchQuery
+        .debounce(SEARCH_DEBOUNCE_MS)
+        .distinctUntilChanged()
+
+    private val debouncedPetSearchQuery = _petSearchQuery
+        .debounce(SEARCH_DEBOUNCE_MS)
+        .distinctUntilChanged()
+
+    private val debouncedGlobalSearchQuery = _globalSearchQuery
+        .debounce(SEARCH_DEBOUNCE_MS)
+        .distinctUntilChanged()
+
     val globalSearchResults: StateFlow<List<GlobalSearchResult>> = combine(
         clients,
         petsWithOwners,
         inventory,
-        _globalSearchQuery
+        debouncedGlobalSearchQuery
     ) { clientList, petList, productList, query ->
         if (query.isBlank()) {
             emptyList()
@@ -298,21 +336,17 @@ class VetViewModel @Inject constructor(
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val pagedInventorySearchQuery = _productSearchQuery
-        .debounce(220)
-        .distinctUntilChanged()
-
-    val inventoryPaginated: Flow<PagingData<Product>> = combine(_inventoryFilter, pagedInventorySearchQuery) { filter, query ->
+    val inventoryPaginated: Flow<PagingData<Product>> = combine(_inventoryFilter, debouncedProductSearchQuery) { filter, query ->
         filter to query
     }.flatMapLatest { (filter, query) ->
         getFilteredInventoryUseCase(filter, query)
     }.cachedIn(viewModelScope)
 
-    val clientsPaginated: Flow<PagingData<Client>> = clientSearchQuery.flatMapLatest { query ->
+    val clientsPaginated: Flow<PagingData<Client>> = debouncedClientSearchQuery.flatMapLatest { query ->
         getClientsPageUseCase(query)
     }.cachedIn(viewModelScope)
 
-    val debtClientsPaginated: Flow<PagingData<Client>> = clientSearchQuery.flatMapLatest { repository.getDebtClientsPaginated(it) }.cachedIn(viewModelScope)
+    val debtClientsPaginated: Flow<PagingData<Client>> = debouncedClientSearchQuery.flatMapLatest { repository.getDebtClientsPaginated(it) }.cachedIn(viewModelScope)
 
     private val _debtCollectionFilters = MutableStateFlow(DebtCollectionFilters())
     val debtCollectionFilters: StateFlow<DebtCollectionFilters> = _debtCollectionFilters.asStateFlow()
@@ -330,7 +364,7 @@ class VetViewModel @Inject constructor(
     }
 
     val debtCollectionRowsPaginated: Flow<PagingData<DebtCollectionRow>> = combine(
-        clientSearchQuery,
+        debouncedClientSearchQuery,
         _debtCollectionFilters
     ) { query, filters ->
         query to filters
@@ -344,7 +378,7 @@ class VetViewModel @Inject constructor(
     }.cachedIn(viewModelScope)
 
     val debtCollectionSummary: StateFlow<DebtCollectionSummary> = combine(
-        clientSearchQuery,
+        debouncedClientSearchQuery,
         _debtCollectionFilters
     ) { query, filters ->
         query to filters
@@ -356,13 +390,13 @@ class VetViewModel @Inject constructor(
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DebtCollectionSummary(0, 0.0, 0.0))
 
-    val filteredPetsWithOwners: StateFlow<List<PetWithOwner>> = combine(petsWithOwners, _petSearchQuery) { pets, query ->
+    val filteredPetsWithOwners: StateFlow<List<PetWithOwner>> = combine(petsWithOwners, debouncedPetSearchQuery) { pets, query ->
         if (query.isBlank()) pets else pets.filter { it.pet.name.contains(query, true) || it.owner.name.contains(query, true) }
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val filteredInventory: StateFlow<List<Product>> = combine(inventory, _productSearchQuery) { products, query ->
+    val filteredInventory: StateFlow<List<Product>> = combine(inventory, debouncedProductSearchQuery) { products, query ->
         if (query.isBlank()) products else products.filter { it.name.contains(query, true) }
     }
         .flowOn(Dispatchers.Default)
@@ -523,6 +557,60 @@ class VetViewModel @Inject constructor(
     val showAddAppointmentDialog: StateFlow<Boolean> = _showAddAppointmentDialog.asStateFlow()
     private val _clientForPayment = MutableStateFlow<Client?>(null)
     val clientForPayment: StateFlow<Client?> = _clientForPayment.asStateFlow()
+
+    private val inventoryBaseUiState: Flow<InventoryScreenUiState> = combine(
+        _showAddProductDialog,
+        _inventoryFilter,
+        inventory,
+        _productSearchQuery,
+        lowStockProducts
+    ) { showDialog, filter, productList, query, lowStockList ->
+        InventoryScreenUiState(
+            showAddProductDialog = showDialog,
+            filter = filter,
+            inventory = productList,
+            searchQuery = query,
+            lowStockProducts = lowStockList
+        )
+    }
+
+    val inventoryUiState: StateFlow<InventoryScreenUiState> = combine(
+        inventoryBaseUiState,
+        suppliers,
+        _appSettings,
+        _productNameSuggestions,
+        _isLoading
+    ) { base, supplierList, settings, suggestions, loading ->
+        base.copy(
+            suppliers = supplierList,
+            appSettings = settings,
+            productNameSuggestions = suggestions,
+            isLoading = loading
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), InventoryScreenUiState())
+
+    private val debtClientsBaseUiState: Flow<DebtClientsScreenUiState> = combine(
+        _clientSearchQuery,
+        _showPaymentDialog,
+        _clientForPayment,
+        _isLoading,
+        _appSettings
+    ) { query, showPayment, paymentClient, loading, settings ->
+        DebtClientsScreenUiState(
+            searchQuery = query,
+            showPaymentDialog = showPayment,
+            clientForPayment = paymentClient,
+            isLoading = loading,
+            appSettings = settings
+        )
+    }
+
+    val debtClientsUiState: StateFlow<DebtClientsScreenUiState> = combine(
+        debtClientsBaseUiState,
+        debtCollectionSummary
+    ) { base, summary ->
+        base.copy(collectionSummary = summary)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DebtClientsScreenUiState())
 
     private val _shoppingCart = MutableStateFlow<List<CartItem>>(emptyList())
     val shoppingCart: StateFlow<List<CartItem>> = _shoppingCart.asStateFlow()

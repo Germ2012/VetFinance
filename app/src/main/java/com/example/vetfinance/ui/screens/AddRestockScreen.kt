@@ -33,6 +33,7 @@ import java.time.ZoneId
 import java.util.*
 import kotlin.math.ceil
 import ui.utils.NumberTransformation
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,10 +41,10 @@ fun AddRestockScreen( // Renamed
     viewModel: VetViewModel,
     navController: NavController
 ) {
-    val suppliers by viewModel.suppliers.collectAsState()
-    val allProducts by viewModel.inventory.collectAsState()
-    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
-    val searchQuery by viewModel.restockSearchQuery.collectAsState()
+    val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
+    val allProducts by viewModel.inventory.collectAsStateWithLifecycle()
+    val lowStockProducts by viewModel.lowStockProducts.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.restockSearchQuery.collectAsStateWithLifecycle()
     var selectedDate by remember { mutableStateOf(System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
     var createSupplierDebt by remember { mutableStateOf(false) }

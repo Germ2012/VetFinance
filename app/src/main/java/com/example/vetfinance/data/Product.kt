@@ -1,5 +1,6 @@
 package com.example.vetfinance.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -17,16 +18,17 @@ const val SELLING_METHOD_DOSE_ONLY = "Solo Dosis"
         Index("supplierIdFk")
     ]
 )
+@Immutable
 data class Product(
     @PrimaryKey
     val productId: String = UUID.randomUUID().toString(),
     val name: String,
-    var price: Double,
-    var cost: Double,
-    var stock: Double,
+    val price: Double,
+    val cost: Double,
+    val stock: Double,
     val isService: Boolean,
-    var sellingMethod: String = SELLING_METHOD_BY_UNIT,
-    var lowStockThreshold: Double? = null,
+    val sellingMethod: String = SELLING_METHOD_BY_UNIT,
+    val lowStockThreshold: Double? = null,
     val isContainer: Boolean = false,
     val containedProductId: String? = null,
     val containerSize: Double? = null,

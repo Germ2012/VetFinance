@@ -3,13 +3,14 @@ package com.example.vetfinance.ui.screens
 import androidx.compose.runtime.*
 import androidx.navigation.NavController
 import com.example.vetfinance.viewmodel.VetViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @Composable
 fun AddClientScreen(
     viewModel: VetViewModel,
     navController: NavController
 ) {
-    val clientSuggestions by viewModel.clientNameSuggestions.collectAsState()
+    val clientSuggestions by viewModel.clientNameSuggestions.collectAsStateWithLifecycle()
 
     AddOrEditClientDialog(
         onDismiss = {

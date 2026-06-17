@@ -26,6 +26,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -33,6 +35,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.CartItem
@@ -55,18 +58,19 @@ private data class SaleInventoryStats(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
-    val cart by viewModel.shoppingCart.collectAsState()
-    val total by viewModel.saleTotal.collectAsState()
-    val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
-    val inventory by viewModel.filteredInventory.collectAsState()
-    val allProductsList by viewModel.inventory.collectAsState()
-    val lowStockProducts by viewModel.lowStockProducts.collectAsState()
-    val frequentProducts by viewModel.frequentSaleProducts.collectAsState()
-    val suppliers by viewModel.suppliers.collectAsState()
-    val clients by viewModel.clients.collectAsState()
-    val searchQuery by viewModel.productSearchQuery.collectAsState()
-    val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
-    val clientNameSuggestions by viewModel.clientNameSuggestions.collectAsState()
+    val cart by viewModel.shoppingCart.collectAsStateWithLifecycle()
+    val total by viewModel.saleTotal.collectAsStateWithLifecycle()
+    val showAddProductDialog by viewModel.showAddProductDialog.collectAsStateWithLifecycle()
+    val inventory by viewModel.filteredInventory.collectAsStateWithLifecycle()
+    val allProductsList by viewModel.inventory.collectAsStateWithLifecycle()
+    val lowStockProducts by viewModel.lowStockProducts.collectAsStateWithLifecycle()
+    val frequentProducts by viewModel.frequentSaleProducts.collectAsStateWithLifecycle()
+    val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
+    val clients by viewModel.clients.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.productSearchQuery.collectAsStateWithLifecycle()
+    val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
+    val clientNameSuggestions by viewModel.clientNameSuggestions.collectAsStateWithLifecycle()
+    val haptic = LocalHapticFeedback.current
 
     var saleClientName by remember { mutableStateOf("") }
     var selectedSaleClientId by remember { mutableStateOf<String?>(null) }
@@ -74,13 +78,13 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     var showExitCartDialog by remember { mutableStateOf(false) }
     var cartItemToEditPrice by remember { mutableStateOf<CartItem?>(null) }
 
-    val showFractionalDialog by viewModel.showFractionalSaleDialog.collectAsState()
-    val productForFractionalSale by viewModel.productForFractionalSale.collectAsState()
+    val showFractionalDialog by viewModel.showFractionalSaleDialog.collectAsStateWithLifecycle()
+    val productForFractionalSale by viewModel.productForFractionalSale.collectAsStateWithLifecycle()
 
-    val showDoseDialog by viewModel.showDoseSaleDialog.collectAsState()
-    val productForDoseSale by viewModel.productForDoseSale.collectAsState()
+    val showDoseDialog by viewModel.showDoseSaleDialog.collectAsStateWithLifecycle()
+    val productForDoseSale by viewModel.productForDoseSale.collectAsStateWithLifecycle()
 
-    val saleTypeDialogProduct by viewModel.saleTypeDialogProduct.collectAsState()
+    val saleTypeDialogProduct by viewModel.saleTypeDialogProduct.collectAsStateWithLifecycle()
 
     DisposableEffect(Unit) {
         onDispose {
@@ -260,6 +264,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 itemCount = cartUnits,
                 enabled = cart.isNotEmpty(),
                 onConfirm = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     viewModel.finalizeSale(
                         clientName = saleClientName,
                         selectedClientId = selectedSaleClientId
@@ -417,7 +422,7 @@ private fun SaleCheckoutBar(
             Button(
                 onClick = onConfirm,
                 enabled = enabled,
-                shape = RoundedCornerShape(8.dp)
+                shape = MaterialTheme.shapes.medium
             ) {
                 Icon(Icons.Default.PointOfSale, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
@@ -437,7 +442,7 @@ private fun SaleCustomerPanel(
         modifier = Modifier
             .fillMaxWidth()
             .padding(start = 16.dp, top = 12.dp, end = 16.dp),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Column(
@@ -460,7 +465,7 @@ private fun SaleCustomerPanel(
                     Text(selectedClientPhone ?: stringResource(R.string.sale_client_general_hint))
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(8.dp)
+                shape = MaterialTheme.shapes.medium
             )
         }
     }
@@ -475,7 +480,7 @@ private fun ClientSuggestionPanel(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         tonalElevation = 2.dp,
         color = MaterialTheme.colorScheme.surface
     ) {
@@ -520,7 +525,7 @@ private fun SaleSearchPanel(
             }
         },
         singleLine = true,
-        shape = RoundedCornerShape(8.dp)
+        shape = MaterialTheme.shapes.medium
     )
 }
 
@@ -536,7 +541,7 @@ private fun SaleCartPanel(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.primaryContainer
     ) {
         Column(
@@ -617,7 +622,7 @@ private fun SaleMiniMetric(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Row(
@@ -642,7 +647,7 @@ private fun SaleInlineBanner(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.secondaryContainer
     ) {
         Row(
@@ -668,7 +673,7 @@ private fun SaleEmptyProductState(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 8.dp),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh
     ) {
         Column(
@@ -683,7 +688,7 @@ private fun SaleEmptyProductState(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            FilledTonalButton(onClick = onAddProduct, shape = RoundedCornerShape(8.dp)) {
+            FilledTonalButton(onClick = onAddProduct, shape = MaterialTheme.shapes.medium) {
                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(stringResource(R.string.content_description_add_new_product))
@@ -696,7 +701,7 @@ private fun SaleEmptyProductState(
 fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit, onEditPrice: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
@@ -726,7 +731,7 @@ fun CartItemRow(cartItem: CartItem, onRemove: () -> Unit, onAdd: () -> Unit, onE
             }
             if (cartItem.product.sellingMethod != SELLING_METHOD_DOSE_ONLY) {
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
+                    shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
                     Row(

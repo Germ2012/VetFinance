@@ -70,7 +70,7 @@ import com.example.vetfinance.viewmodel.ReportPeriodType
 import com.example.vetfinance.viewmodel.TopProductsMetric
 import com.example.vetfinance.viewmodel.TopProductsPeriod
 import com.example.vetfinance.viewmodel.VetViewModel
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import ui.utils.formatCurrency
 import java.text.SimpleDateFormat
@@ -181,7 +181,7 @@ private fun ReportsHeader() {
 
 @Composable
 private fun CashClosingTab(viewModel: VetViewModel) {
-    val summary by viewModel.cashClosingSummary.collectAsState()
+    val summary by viewModel.cashClosingSummary.collectAsStateWithLifecycle()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -269,10 +269,10 @@ private fun CashClosingTab(viewModel: VetViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SalesAndBackupTab(viewModel: VetViewModel) {
-    val salesSummary by viewModel.salesSummary.collectAsState()
-    val grossProfit by viewModel.grossProfitSummary.collectAsState()
-    val selectedHistoricalPeriod by viewModel.selectedHistoricalPeriod.collectAsState()
-    val salesTrendComparison by viewModel.salesTrendComparison.collectAsState()
+    val salesSummary by viewModel.salesSummary.collectAsStateWithLifecycle()
+    val grossProfit by viewModel.grossProfitSummary.collectAsStateWithLifecycle()
+    val selectedHistoricalPeriod by viewModel.selectedHistoricalPeriod.collectAsStateWithLifecycle()
+    val salesTrendComparison by viewModel.salesTrendComparison.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -382,9 +382,9 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PeriodSelector(viewModel: VetViewModel) {
-    val periodType by viewModel.reportPeriodType.collectAsState()
-    val availablePeriods by viewModel.availableHistoricalPeriods.collectAsState()
-    val selectedPeriod by viewModel.selectedHistoricalPeriod.collectAsState()
+    val periodType by viewModel.reportPeriodType.collectAsStateWithLifecycle()
+    val availablePeriods by viewModel.availableHistoricalPeriods.collectAsStateWithLifecycle()
+    val selectedPeriod by viewModel.selectedHistoricalPeriod.collectAsStateWithLifecycle()
     var periodTypeExpanded by remember { mutableStateOf(false) }
     var historicalPeriodExpanded by remember { mutableStateOf(false) }
 
@@ -476,11 +476,11 @@ fun PeriodSelector(viewModel: VetViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TopProductsReportTab(viewModel: VetViewModel) {
-    val topProducts by viewModel.topSellingProducts.collectAsState()
-    val selectedProduct by viewModel.selectedTopProduct.collectAsState()
-    val selectedPeriod by viewModel.topProductsPeriod.collectAsState()
-    val selectedMetric by viewModel.topProductsMetric.collectAsState()
-    val selectedDate by viewModel.topProductsDate.collectAsState()
+    val topProducts by viewModel.topSellingProducts.collectAsStateWithLifecycle()
+    val selectedProduct by viewModel.selectedTopProduct.collectAsStateWithLifecycle()
+    val selectedPeriod by viewModel.topProductsPeriod.collectAsStateWithLifecycle()
+    val selectedMetric by viewModel.topProductsMetric.collectAsStateWithLifecycle()
+    val selectedDate by viewModel.topProductsDate.collectAsStateWithLifecycle()
 
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
@@ -615,10 +615,10 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
 
 @Composable
 fun ProfitabilityReportTab(viewModel: VetViewModel) {
-    val productReports by viewModel.productProfitReports.collectAsState()
-    val clientReports by viewModel.clientPurchaseReports.collectAsState()
-    val categoryReports by viewModel.categoryProfitReports.collectAsState()
-    val selectedHistoricalPeriod by viewModel.selectedHistoricalPeriod.collectAsState()
+    val productReports by viewModel.productProfitReports.collectAsStateWithLifecycle()
+    val clientReports by viewModel.clientPurchaseReports.collectAsStateWithLifecycle()
+    val categoryReports by viewModel.categoryProfitReports.collectAsStateWithLifecycle()
+    val selectedHistoricalPeriod by viewModel.selectedHistoricalPeriod.collectAsStateWithLifecycle()
     val totalRevenue = remember(productReports) { productReports.sumOf { it.revenue } }
     val totalProfit = remember(productReports) { productReports.sumOf { it.profit } }
     val averageMargin = remember(productReports, totalRevenue) {
@@ -822,9 +822,9 @@ fun LegendItem(
 
 @Composable
 fun DebtsReportTab(viewModel: VetViewModel) {
-    val totalDebt by viewModel.totalDebt.collectAsState()
+    val totalDebt by viewModel.totalDebt.collectAsStateWithLifecycle()
     val formattedDebt = stringResource(R.string.label_client_debt_amount, formatCurrency(totalDebt ?: 0.0))
-    val clients by viewModel.clients.collectAsState()
+    val clients by viewModel.clients.collectAsStateWithLifecycle()
     val clientsWithDebt = remember(clients) { clients.filter { it.debtAmount > 0 }.sortedByDescending { it.debtAmount } }
     val averageDebt = remember(clientsWithDebt) {
         if (clientsWithDebt.isEmpty()) 0.0 else clientsWithDebt.sumOf { it.debtAmount } / clientsWithDebt.size
@@ -887,10 +887,10 @@ fun DebtsReportTab(viewModel: VetViewModel) {
 
 @Composable
 fun InventoryReportTab(viewModel: VetViewModel) {
-    val totalValue by viewModel.totalInventoryValue.collectAsState()
-    val stockHealth by viewModel.stockHealthSummary.collectAsState()
+    val totalValue by viewModel.totalInventoryValue.collectAsStateWithLifecycle()
+    val stockHealth by viewModel.stockHealthSummary.collectAsStateWithLifecycle()
     val formattedValue = stringResource(R.string.label_client_debt_amount, formatCurrency(totalValue ?: 0.0))
-    val inventory by viewModel.inventory.collectAsState()
+    val inventory by viewModel.inventory.collectAsStateWithLifecycle()
     val productsOnly = remember(inventory) {
         inventory.filter { !it.isService }.sortedWith(
             compareBy<Product> { product ->

@@ -21,6 +21,7 @@ import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.viewmodel.VetViewModel
 import java.text.SimpleDateFormat
 import java.util.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,15 +30,15 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
         viewModel.loadTreatmentsForPet(petId)
     }
 
-    val pets by viewModel.petsWithOwners.collectAsState()
+    val pets by viewModel.petsWithOwners.collectAsStateWithLifecycle()
     val petWithOwner = pets.find { it.pet.petId == petId }
-    val history by viewModel.treatmentHistory.collectAsState()
+    val history by viewModel.treatmentHistory.collectAsStateWithLifecycle()
     var showTreatmentDialog by remember { mutableStateOf(false) }
-    val inventory by viewModel.inventory.collectAsState()
-    val suppliers by viewModel.suppliers.collectAsState()
+    val inventory by viewModel.inventory.collectAsStateWithLifecycle()
+    val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
     val services = remember(inventory) { inventory.filter { it.isService } }
-    val showAddProductDialog by viewModel.showAddProductDialog.collectAsState()
-    val productNameSuggestions by viewModel.productNameSuggestions.collectAsState()
+    val showAddProductDialog by viewModel.showAddProductDialog.collectAsStateWithLifecycle()
+    val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
 
     // Estados para manejar el diálogo de edición y eliminación
     var treatmentToEdit by remember { mutableStateOf<Treatment?>(null) }

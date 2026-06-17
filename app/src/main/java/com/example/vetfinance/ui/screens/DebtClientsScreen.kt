@@ -11,6 +11,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Payments
@@ -20,6 +22,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -32,25 +36,30 @@ import androidx.paging.compose.itemKey
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.data.DebtCollectionRow
+import com.example.vetfinance.ui.components.SkeletonLine
 import com.example.vetfinance.viewmodel.VetViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ui.utils.formatCurrency // Importar formatCurrency
 import ui.utils.NumberTransformation
 
 @Composable
 fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
-    val searchQuery by viewModel.clientSearchQuery.collectAsState()
-    val showPaymentDialog by viewModel.showPaymentDialog.collectAsState()
-    val clientForPayment by viewModel.clientForPayment.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val appSettings by viewModel.appSettings.collectAsState()
-    val collectionSummary by viewModel.debtCollectionSummary.collectAsState()
+    val uiState by viewModel.debtClientsUiState.collectAsStateWithLifecycle()
+    val searchQuery = uiState.searchQuery
+    val showPaymentDialog = uiState.showPaymentDialog
+    val clientForPayment = uiState.clientForPayment
+    val isLoading = uiState.isLoading
+    val appSettings = uiState.appSettings
+    val collectionSummary = uiState.collectionSummary
     val pagedRows = viewModel.debtCollectionRowsPaginated.collectAsLazyPagingItems()
+    val haptic = LocalHapticFeedback.current
 
     var showOnlyWithDebt by remember { mutableStateOf(true) }
     var minimumDebtText by remember { mutableStateOf("") }
     var selectedSort by remember { mutableStateOf("Mayor deuda") }
     var showFilters by remember { mutableStateOf(false) }
     var clientToDelete by remember { mutableStateOf<Client?>(null) }
+    var clientForActions by remember { mutableStateOf<DebtCollectionRow?>(null) }
     var secureClientToDelete by remember { mutableStateOf<Client?>(null) }
     var clientToAdjustDebt by remember { mutableStateOf<Client?>(null) }
     var secureDebtClient by remember { mutableStateOf<Client?>(null) }
@@ -89,6 +98,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
             confirmButton = {
                 Button(
                     onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         secureClientToDelete = client
                         clientToDelete = null
                     },
@@ -111,6 +121,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
             actionLabel = "eliminar cliente",
             onDismiss = { secureClientToDelete = null },
             onAuthorized = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.deleteClient(client)
                 secureClientToDelete = null
             }
@@ -142,10 +153,31 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 secureDebtNote = null
             },
             onAuthorized = {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 viewModel.adjustClientDebt(debtClient, debtValue, secureDebtNote)
                 secureDebtClient = null
                 secureDebtValue = null
                 secureDebtNote = null
+            }
+        )
+    }
+
+    clientForActions?.let { row ->
+        val client = row.client
+        DebtClientActionsSheet(
+            row = row,
+            onDismiss = { clientForActions = null },
+            onDetailClick = {
+                clientForActions = null
+                navController.navigate("client_detail/${client.clientId}")
+            },
+            onAdjustDebtClick = {
+                clientForActions = null
+                clientToAdjustDebt = client
+            },
+            onDeleteClick = {
+                clientForActions = null
+                clientToDelete = client
             }
         )
     }
@@ -196,7 +228,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                     }
                 },
                 singleLine = true,
-                shape = RoundedCornerShape(8.dp)
+                shape = MaterialTheme.shapes.medium
             )
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -213,7 +245,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 )
                 FilledTonalButton(
                     onClick = { showFilters = !showFilters },
-                    shape = RoundedCornerShape(8.dp)
+                    shape = MaterialTheme.shapes.medium
                 ) {
                     Icon(Icons.Default.FilterList, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
@@ -226,7 +258,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 10.dp),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = MaterialTheme.shapes.medium,
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
@@ -250,7 +282,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                             visualTransformation = NumberTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
-                            shape = RoundedCornerShape(8.dp)
+                            shape = MaterialTheme.shapes.medium
                         )
                         Row(
                             modifier = Modifier
@@ -273,8 +305,13 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
             Spacer(modifier = Modifier.height(12.dp))
 
             if ((isLoading && pagedRows.itemCount == 0) || pagedRows.loadState.refresh is LoadState.Loading) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(bottom = 96.dp)
+                ) {
+                    items(6, contentType = { "debt-client-skeleton" }) {
+                        DebtClientPlaceholder()
+                    }
                 }
             } else {
                 LazyColumn(
@@ -293,8 +330,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                                 row = row,
                                 onDetailClick = { navController.navigate("client_detail/${client.clientId}") },
                                 onPayClick = { viewModel.onShowPaymentDialog(client) },
-                                onAdjustDebtClick = { clientToAdjustDebt = client },
-                                onDeleteClick = { clientToDelete = client }
+                                onMoreClick = { clientForActions = row }
                             )
                         } else {
                             DebtClientPlaceholder()
@@ -313,14 +349,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                     }
                     if (pagedRows.loadState.append is LoadState.Loading) {
                         item {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                            }
+                            DebtClientPlaceholder()
                         }
                     }
                 }
@@ -337,7 +366,7 @@ private fun CollectionSummaryCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
     ) {
         Column(
@@ -406,17 +435,15 @@ fun ClientItem(
     row: DebtCollectionRow,
     onDetailClick: () -> Unit,
     onPayClick: () -> Unit,
-    onAdjustDebtClick: () -> Unit,
-    onDeleteClick: () -> Unit
+    onMoreClick: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val client = row.client
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onDetailClick() },
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
         Row(
@@ -448,40 +475,87 @@ fun ClientItem(
                 )
             }
             if (row.balance > 0) {
-                FilledTonalButton(onClick = onPayClick, shape = RoundedCornerShape(8.dp)) {
+                FilledTonalButton(onClick = onPayClick, shape = MaterialTheme.shapes.medium) {
                     Text(stringResource(R.string.client_item_pay_button))
                 }
             }
             Box {
-                IconButton(onClick = { expanded = true }) {
+                IconButton(onClick = onMoreClick) {
                     Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options_content_description))
-                }
-                DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.debt_clients_view_details_menu_item)) },
-                        onClick = {
-                            onDetailClick()
-                            expanded = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.debt_clients_adjust_debt_menu_item)) },
-                        onClick = {
-                            onAdjustDebtClick()
-                            expanded = false
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.delete_button)) },
-                        onClick = {
-                            onDeleteClick()
-                            expanded = false
-                        }
-                    )
                 }
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DebtClientActionsSheet(
+    row: DebtCollectionRow,
+    onDismiss: () -> Unit,
+    onDetailClick: () -> Unit,
+    onAdjustDebtClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 24.dp)
+        ) {
+            ListItem(
+                headlineContent = {
+                    Text(row.client.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.client_item_debt_label, formatCurrency(row.balance)))
+                },
+                leadingContent = {
+                    Icon(Icons.Default.People, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
+            )
+            HorizontalDivider()
+            DebtActionRow(
+                icon = Icons.Default.People,
+                label = stringResource(R.string.debt_clients_view_details_menu_item),
+                onClick = onDetailClick
+            )
+            DebtActionRow(
+                icon = Icons.Default.Edit,
+                label = stringResource(R.string.debt_clients_adjust_debt_menu_item),
+                onClick = onAdjustDebtClick
+            )
+            DebtActionRow(
+                icon = Icons.Default.Delete,
+                label = stringResource(R.string.delete_button),
+                isDestructive = true,
+                onClick = onDeleteClick
+            )
+        }
+    }
+}
+
+@Composable
+private fun DebtActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    isDestructive: Boolean = false,
+    onClick: () -> Unit
+) {
+    ListItem(
+        headlineContent = { Text(label) },
+        leadingContent = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+            )
+        },
+        modifier = Modifier.clickable(onClick = onClick)
+    )
 }
 
 @Composable
@@ -490,7 +564,7 @@ private fun DebtClientsEmptyState(message: String) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 24.dp),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
         Column(
@@ -513,27 +587,16 @@ private fun DebtClientsEmptyState(message: String) {
 private fun DebtClientPlaceholder() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth(0.62f)
-                    .height(6.dp),
-                color = MaterialTheme.colorScheme.outline,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-            LinearProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth(0.42f)
-                    .height(6.dp),
-                color = MaterialTheme.colorScheme.outline,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
-            )
+            SkeletonLine(modifier = Modifier.fillMaxWidth(0.62f), height = 10.dp)
+            SkeletonLine(modifier = Modifier.fillMaxWidth(0.42f), height = 10.dp)
+            SkeletonLine(modifier = Modifier.fillMaxWidth(0.26f), height = 8.dp)
         }
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -67,8 +69,10 @@ class MainActivity : ComponentActivity() {
         askNotificationPermission()
 
         setContent {
-            VetFinanceTheme {
-                MainScreen(viewModel = hiltViewModel<VetViewModel>())
+            CompositionLocalProvider(LocalLifecycleOwner provides this) {
+                VetFinanceTheme {
+                    MainScreen(viewModel = hiltViewModel<VetViewModel>())
+                }
             }
         }
     }

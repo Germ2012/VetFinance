@@ -1,5 +1,6 @@
 package com.example.vetfinance.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
@@ -12,6 +13,7 @@ import java.util.UUID
         Index("phone")
     ]
 )
+@Immutable
 data class Client(
     @PrimaryKey
     val clientId: String = UUID.randomUUID().toString(),
