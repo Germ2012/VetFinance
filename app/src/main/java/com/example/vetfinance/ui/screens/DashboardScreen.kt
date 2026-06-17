@@ -12,8 +12,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,7 +36,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AddShoppingCart
@@ -55,7 +60,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
@@ -94,6 +98,8 @@ import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SupplierDebtWithSupplier
 import com.example.vetfinance.data.Treatment
 import com.example.vetfinance.navigation.Screen
+import com.example.vetfinance.ui.components.SkeletonLine
+import com.example.vetfinance.ui.theme.Elevation
 import com.example.vetfinance.viewmodel.GlobalSearchResult
 import com.example.vetfinance.viewmodel.VetViewModel
 import java.time.Instant
@@ -107,8 +113,6 @@ import ui.utils.formatCurrency
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-private val DashboardCardShape = RoundedCornerShape(8.dp)
 
 @Composable
 fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
@@ -136,11 +140,21 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val sortedLowStockProducts = remember(lowStockProducts) {
         lowStockProducts.sortedBy { it.name.lowercase(Locale.getDefault()) }
     }
+    val pendingCollectionPreviewRows = remember(pendingCollectionRows) {
+        pendingCollectionRows.sortedByDescending { it.balance }.take(3)
+    }
+    val totalPendingCollection = remember(pendingCollectionRows) {
+        pendingCollectionRows.sumOf { it.balance }
+    }
     val pngExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
         uri?.let {
             scope.launch {
                 val exported = exportLowStockPng(context, it, sortedLowStockProducts)
-                Toast.makeText(context, if (exported) "Lista PNG guardada." else "No se pudo guardar el PNG.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (exported) context.getString(R.string.dashboard_png_saved) else context.getString(R.string.dashboard_png_save_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -148,7 +162,11 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         uri?.let {
             scope.launch {
                 val exported = exportLowStockPdf(context, it, sortedLowStockProducts)
-                Toast.makeText(context, if (exported) "Lista PDF guardada." else "No se pudo guardar el PDF.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (exported) context.getString(R.string.dashboard_pdf_saved) else context.getString(R.string.dashboard_pdf_save_failed),
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -159,13 +177,23 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             petsWithOwners.find { it.pet.petId == treatment.petIdFk }
         }
     }
-    val pendingItemsCount = lowStockProducts.size +
-        upcomingAppointments.size +
-        upcomingSupplierDebts.size +
-        upcomingTreatments.size +
-        pendingCollectionRows.size
+    val pendingItemsCount = remember(
+        lowStockProducts,
+        upcomingAppointments,
+        upcomingSupplierDebts,
+        upcomingTreatments,
+        pendingCollectionRows
+    ) {
+        lowStockProducts.size +
+            upcomingAppointments.size +
+            upcomingSupplierDebts.size +
+            upcomingTreatments.size +
+            pendingCollectionRows.size
+    }
     val defaultClinicName = stringResource(R.string.dashboard_summary_of_the_day)
-    val clinicName = appSettings.clinicName.ifBlank { defaultClinicName }
+    val clinicName = remember(appSettings.clinicName, defaultClinicName) {
+        appSettings.clinicName.ifBlank { defaultClinicName }
+    }
 
     if (treatmentForNextDialog != null && petForDialog != null) {
         AddTreatmentDialog(
@@ -277,8 +305,8 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             if (pendingCollectionRows.isNotEmpty()) {
                 item {
                     DashboardCollectionPreview(
-                        rows = pendingCollectionRows.sortedByDescending { it.balance }.take(3),
-                        totalPending = pendingCollectionRows.sumOf { it.balance },
+                        rows = pendingCollectionPreviewRows,
+                        totalPending = totalPendingCollection,
                         onCollect = { row -> viewModel.onShowPaymentDialog(row.client) },
                         onViewAll = { navController.navigate(Screen.DebtClients.route) }
                     )
@@ -287,14 +315,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
 
             if (isLoading) {
                 item {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(220.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
+                    DashboardSkeleton()
                 }
             } else {
                 if (pendingItemsCount == 0) {
@@ -318,12 +339,16 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                 if (upcomingAppointments.isNotEmpty()) {
                     item {
                         DashboardSectionHeader(
-                            title = "Pr\u00f3ximas citas",
+                            title = stringResource(R.string.dashboard_upcoming_appointments_title),
                             count = upcomingAppointments.size,
                             icon = Icons.Default.CalendarMonth
                         )
                     }
-                    items(upcomingAppointments) { appointmentDetails ->
+                    items(
+                        upcomingAppointments,
+                        key = { it.appointment.appointmentId },
+                        contentType = { "appointment-reminder" }
+                    ) { appointmentDetails ->
                         AppointmentReminderItem(details = appointmentDetails)
                     }
                 }
@@ -336,7 +361,11 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                             icon = Icons.Default.LocalShipping
                         )
                     }
-                    items(upcomingSupplierDebts, key = { it.debtId }) { debt ->
+                    items(
+                        upcomingSupplierDebts,
+                        key = { it.debtId },
+                        contentType = { "supplier-debt-reminder" }
+                    ) { debt ->
                         SupplierDebtReminderItem(
                             debt = debt,
                             onMarkPaid = { viewModel.markSupplierDebtAsPaid(debt.debtId) }
@@ -352,7 +381,11 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                             icon = Icons.Default.MedicalServices
                         )
                     }
-                    items(upcomingTreatments) { treatment ->
+                    items(
+                        upcomingTreatments,
+                        key = { it.treatmentId },
+                        contentType = { "treatment-reminder" }
+                    ) { treatment ->
                         TreatmentReminderItem(
                             treatment = treatment,
                             petName = petIdToNameMap[treatment.petIdFk]
@@ -385,7 +418,7 @@ private fun DashboardHeader(
                         MaterialTheme.colorScheme.secondary
                     )
                 ),
-                shape = RoundedCornerShape(8.dp)
+                shape = MaterialTheme.shapes.medium
             )
             .padding(16.dp)
     ) {
@@ -396,7 +429,7 @@ private fun DashboardHeader(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Panel operativo",
+                    text = stringResource(R.string.dashboard_operational_panel),
                     style = MaterialTheme.typography.labelLarge,
                     color = Color.White.copy(alpha = 0.82f)
                 )
@@ -425,7 +458,11 @@ private fun DashboardHeader(
                     ),
                     label = {
                         Text(
-                            text = if (pendingItemsCount == 0) "D\u00eda al corriente" else "$pendingItemsCount pendientes"
+                            text = if (pendingItemsCount == 0) {
+                                stringResource(R.string.dashboard_current_day)
+                            } else {
+                                stringResource(R.string.dashboard_pending_count, pendingItemsCount)
+                            }
                         )
                     },
                     leadingIcon = {
@@ -440,7 +477,7 @@ private fun DashboardHeader(
             IconButton(onClick = onSettingsClick) {
                 Icon(
                     Icons.Default.Settings,
-                    contentDescription = "Ajustes",
+                    contentDescription = stringResource(R.string.dashboard_settings_content_description),
                     tint = Color.White
                 )
             }
@@ -457,10 +494,10 @@ private fun DashboardSearch(
         value = query,
         onValueChange = onQueryChange,
         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-        label = { Text("Buscar cliente, tel\u00e9fono, mascota o producto") },
+        label = { Text(stringResource(R.string.dashboard_search_label)) },
         modifier = Modifier.fillMaxWidth(),
         singleLine = true,
-        shape = DashboardCardShape
+        shape = MaterialTheme.shapes.medium
     )
 }
 
@@ -471,8 +508,8 @@ private fun DashboardSearchResults(
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = DashboardCardShape,
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = Elevation.level2)
     ) {
         Column {
             results.forEachIndexed { index, result ->
@@ -530,7 +567,7 @@ private fun DashboardMetricsRow(
         )
         DashboardMetricCard(
             modifier = Modifier.weight(1f),
-            title = "Pendientes",
+            title = stringResource(R.string.dashboard_pending_title),
             value = pendingItemsCount.toString(),
             icon = Icons.Default.WarningAmber,
             containerColor = if (pendingItemsCount == 0) {
@@ -558,8 +595,8 @@ private fun DashboardMetricCard(
 ) {
     Card(
         modifier = modifier,
-        shape = DashboardCardShape,
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.level1),
         colors = CardDefaults.cardColors(
             containerColor = containerColor,
             contentColor = contentColor
@@ -602,31 +639,31 @@ private fun DashboardQuickActions(
             modifier = Modifier
                 .weight(1f)
                 .height(48.dp),
-            shape = DashboardCardShape,
+            shape = MaterialTheme.shapes.medium,
             contentPadding = PaddingValues(horizontal = 8.dp)
         ) {
             Icon(Icons.Default.PointOfSale, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("Venta", maxLines = 1)
+            Text(stringResource(R.string.dashboard_quick_sale), maxLines = 1)
         }
         FilledTonalButton(
             onClick = onInventoryClick,
             modifier = Modifier
                 .weight(1f)
                 .height(48.dp),
-            shape = DashboardCardShape,
+            shape = MaterialTheme.shapes.medium,
             contentPadding = PaddingValues(horizontal = 8.dp)
         ) {
             Icon(Icons.Default.Inventory, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(6.dp))
-            Text("Stock", maxLines = 1)
+            Text(stringResource(R.string.dashboard_quick_stock), maxLines = 1)
         }
         FilledTonalButton(
             onClick = onRestockClick,
             modifier = Modifier
                 .weight(1f)
                 .height(48.dp),
-            shape = DashboardCardShape,
+            shape = MaterialTheme.shapes.medium,
             contentPadding = PaddingValues(horizontal = 8.dp)
         ) {
             Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -645,7 +682,7 @@ private fun DashboardCollectionPreview(
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = DashboardCardShape,
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
         Column(
@@ -661,12 +698,20 @@ private fun DashboardCollectionPreview(
                     Icon(Icons.Default.Payments, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
-                        Text("Cobros pendientes", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("Total Gs. ${formatCurrency(totalPending)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            stringResource(R.string.dashboard_collection_title),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            stringResource(R.string.dashboard_collection_total, formatCurrency(totalPending)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
                 TextButton(onClick = onViewAll) {
-                    Text("Ver todo")
+                    Text(stringResource(R.string.dashboard_view_all))
                 }
             }
             rows.forEach { row ->
@@ -677,16 +722,20 @@ private fun DashboardCollectionPreview(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(row.client.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("Debe Gs. ${formatCurrency(row.balance)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            stringResource(R.string.dashboard_collection_client_owes, formatCurrency(row.balance)),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                     FilledTonalButton(
                         onClick = { onCollect(row) },
-                        shape = DashboardCardShape,
+                        shape = MaterialTheme.shapes.medium,
                         contentPadding = PaddingValues(horizontal = 12.dp)
                     ) {
                         Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Cobrar")
+                        Text(stringResource(R.string.dashboard_collect_button))
                     }
                 }
             }
@@ -732,8 +781,8 @@ private fun DashboardSectionHeader(
 private fun DashboardEmptyState() {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = DashboardCardShape,
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        shape = MaterialTheme.shapes.medium,
+        elevation = CardDefaults.cardElevation(defaultElevation = Elevation.level1),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
     ) {
         Row(
@@ -749,15 +798,50 @@ private fun DashboardEmptyState() {
             Spacer(modifier = Modifier.width(12.dp))
             Column {
                 Text(
-                    text = "Todo al d\u00eda",
+                    text = stringResource(R.string.dashboard_empty_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = "No hay alertas ni recordatorios pendientes.",
+                    text = stringResource(R.string.dashboard_empty_message),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardSkeleton() {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        repeat(3) { index ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                elevation = CardDefaults.cardElevation(defaultElevation = Elevation.level1),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SkeletonLine(
+                        modifier = Modifier.fillMaxWidth(if (index == 0) 0.72f else 0.56f),
+                        height = 12.dp
+                    )
+                    SkeletonLine(
+                        modifier = Modifier.fillMaxWidth(0.92f),
+                        height = 10.dp
+                    )
+                    SkeletonLine(
+                        modifier = Modifier.fillMaxWidth(0.34f),
+                        height = 10.dp
+                    )
+                }
             }
         }
     }
@@ -774,10 +858,10 @@ fun SupplierDebtReminderItem(
     val daysUntil = ChronoUnit.DAYS.between(LocalDate.now(), dueDate)
     val urgency = urgencyColors(daysUntil)
     val dateText = when {
-        daysUntil < 0 -> "Vencida por ${-daysUntil} d\u00edas"
-        daysUntil == 0L -> "Vence hoy"
-        daysUntil == 1L -> "Vence manana"
-        else -> "Vence en $daysUntil d\u00edas"
+        daysUntil < 0 -> stringResource(R.string.dashboard_supplier_debt_overdue, -daysUntil)
+        daysUntil == 0L -> stringResource(R.string.dashboard_supplier_debt_due_today)
+        daysUntil == 1L -> stringResource(R.string.dashboard_supplier_debt_due_tomorrow)
+        else -> stringResource(R.string.dashboard_supplier_debt_due_in_days, daysUntil)
     }
 
     ReminderCard(
@@ -786,7 +870,8 @@ fun SupplierDebtReminderItem(
         status = dateText,
         statusColor = urgency.statusColor,
         containerColor = urgency.containerColor,
-        contentColor = urgency.contentColor
+        contentColor = urgency.contentColor,
+        emphasized = daysUntil < 0
     ) {
         Text(
             text = debt.description,
@@ -802,7 +887,7 @@ fun SupplierDebtReminderItem(
         Spacer(modifier = Modifier.height(6.dp))
         Button(
             onClick = onMarkPaid,
-            shape = DashboardCardShape,
+            shape = MaterialTheme.shapes.medium,
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
             Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -820,10 +905,14 @@ fun AppointmentReminderItem(details: AppointmentWithDetails) {
     val daysUntil = ChronoUnit.DAYS.between(LocalDate.now(), appointmentDate)
     val urgency = urgencyColors(daysUntil)
     val dateText = when {
-        daysUntil < 0 -> "Vencida"
-        daysUntil == 0L -> "Hoy"
-        daysUntil == 1L -> "Ma\u00f1ana"
-        else -> "En $daysUntil d\u00edas (${appointmentDate.format(DateTimeFormatter.ofPattern("dd/MM"))})"
+        daysUntil < 0 -> stringResource(R.string.dashboard_appointment_overdue_short)
+        daysUntil == 0L -> stringResource(R.string.dashboard_appointment_today_short)
+        daysUntil == 1L -> stringResource(R.string.dashboard_appointment_tomorrow)
+        else -> stringResource(
+            R.string.dashboard_appointment_in_days_with_date,
+            daysUntil,
+            appointmentDate.format(DateTimeFormatter.ofPattern("dd/MM"))
+        )
     }
 
     ReminderCard(
@@ -832,14 +921,18 @@ fun AppointmentReminderItem(details: AppointmentWithDetails) {
         status = dateText,
         statusColor = urgency.statusColor,
         containerColor = urgency.containerColor,
-        contentColor = urgency.contentColor
+        contentColor = urgency.contentColor,
+        emphasized = daysUntil < 0
     ) {
         Text(
-            text = "Due\u00f1o: ${details.client.name}",
+            text = stringResource(R.string.dashboard_owner_label, details.client.name),
             style = MaterialTheme.typography.bodyMedium
         )
         Text(
-            text = "Motivo: ${details.appointment.description ?: "No especificado"}",
+            text = stringResource(
+                R.string.dashboard_reason_label,
+                details.appointment.description ?: stringResource(R.string.dashboard_reason_not_specified)
+            ),
             style = MaterialTheme.typography.bodyMedium,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
@@ -864,10 +957,15 @@ fun LowStockAlert(
         modifier = Modifier
             .animateContentSize()
             .clickable { expanded = !expanded },
-        trailingIcon = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown
+        trailingIcon = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+        emphasized = true
     ) {
         Text(
-            text = if (expanded) "Lista ordenada por nombre. Puedes guardarla como imagen o PDF." else "Toca para ver la lista y exportarla.",
+            text = if (expanded) {
+                stringResource(R.string.dashboard_low_stock_expanded_hint)
+            } else {
+                stringResource(R.string.dashboard_low_stock_collapsed_hint)
+            },
             style = MaterialTheme.typography.bodyMedium
         )
         AnimatedVisibility(visible = expanded) {
@@ -876,7 +974,7 @@ fun LowStockAlert(
                     FilledTonalButton(
                         onClick = onExportPng,
                         modifier = Modifier.weight(1f),
-                        shape = DashboardCardShape,
+                        shape = MaterialTheme.shapes.medium,
                         contentPadding = PaddingValues(horizontal = 8.dp)
                     ) {
                         Icon(Icons.Default.Inventory, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -886,7 +984,7 @@ fun LowStockAlert(
                     Button(
                         onClick = onExportPdf,
                         modifier = Modifier.weight(1f),
-                        shape = DashboardCardShape,
+                        shape = MaterialTheme.shapes.medium,
                         contentPadding = PaddingValues(horizontal = 8.dp)
                     ) {
                         Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -920,7 +1018,11 @@ private fun LowStockDashboardRow(product: Product) {
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = "Minimo: ${formatCurrency(threshold).replace(",00", "")}$unit",
+                text = stringResource(
+                    R.string.dashboard_low_stock_minimum,
+                    formatCurrency(threshold).replace(",00", ""),
+                    unit
+                ),
                 style = MaterialTheme.typography.labelMedium
             )
         }
@@ -955,7 +1057,8 @@ fun TreatmentReminderItem(
         status = nextDateText,
         statusColor = urgency.statusColor,
         containerColor = urgency.containerColor,
-        contentColor = urgency.contentColor
+        contentColor = urgency.contentColor,
+        emphasized = daysUntilNext != null && daysUntilNext < 0
     ) {
         treatment.description?.let {
             Text(
@@ -972,7 +1075,7 @@ fun TreatmentReminderItem(
         Spacer(modifier = Modifier.height(6.dp))
         Button(
             onClick = onMarkAsCompleted,
-            shape = DashboardCardShape
+            shape = MaterialTheme.shapes.medium
         ) {
             Icon(Icons.Default.MedicalServices, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(6.dp))
@@ -991,11 +1094,41 @@ private fun ReminderCard(
     contentColor: Color,
     modifier: Modifier = Modifier,
     trailingIcon: ImageVector? = null,
+    emphasized: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val pulseAlpha = if (emphasized) {
+        val transition = rememberInfiniteTransition(label = "dashboard-critical-pulse")
+        val animatedAlpha by transition.animateFloat(
+            initialValue = 0.22f,
+            targetValue = 0.72f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 1200),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "dashboard-critical-border"
+        )
+        animatedAlpha
+    } else {
+        0f
+    }
+    val cardModifier = modifier
+        .fillMaxWidth()
+        .then(
+            if (emphasized) {
+                Modifier.border(
+                    width = 1.dp,
+                    color = statusColor.copy(alpha = pulseAlpha),
+                    shape = MaterialTheme.shapes.medium
+                )
+            } else {
+                Modifier
+            }
+        )
+
     Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = DashboardCardShape,
+        modifier = cardModifier,
+        shape = MaterialTheme.shapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = containerColor,
             contentColor = contentColor
@@ -1117,22 +1250,27 @@ private suspend fun exportLowStockPng(
         val headerHeight = 180
         val footerHeight = 56
         val height = (headerHeight + sortedProducts.size * rowHeight + footerHeight).coerceAtLeast(360)
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        drawLowStockPage(
-            canvas = canvas,
-            width = width,
-            height = height,
-            products = sortedProducts,
-            startIndex = 0,
-            maxItems = sortedProducts.size,
-            pageNumber = 1,
-            totalPages = 1
-        )
-        context.contentResolver.openOutputStream(uri)?.use { output ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
-        } ?: error("No se pudo abrir el destino del PNG.")
-        bitmap.recycle()
+        var bitmapToRecycle: Bitmap? = null
+        try {
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            bitmapToRecycle = bitmap
+            val canvas = Canvas(bitmap)
+            drawLowStockPage(
+                canvas = canvas,
+                width = width,
+                height = height,
+                products = sortedProducts,
+                startIndex = 0,
+                maxItems = sortedProducts.size,
+                pageNumber = 1,
+                totalPages = 1
+            )
+            context.contentResolver.openOutputStream(uri)?.use { output ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+            } ?: error("No se pudo abrir el destino del PNG.")
+        } finally {
+            bitmapToRecycle?.takeUnless { it.isRecycled }?.recycle()
+        }
     }.isSuccess
 }
 
@@ -1147,28 +1285,31 @@ private suspend fun exportLowStockPdf(
         val pageHeight = 842
         val itemsPerPage = 12
         val totalPages = maxOf(1, kotlin.math.ceil(sortedProducts.size / itemsPerPage.toDouble()).toInt())
-        val document = PdfDocument()
+        var document: PdfDocument? = null
+        try {
+            document = PdfDocument()
+            for (pageIndex in 0 until totalPages) {
+                val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageIndex + 1).create()
+                val page = document.startPage(pageInfo)
+                drawLowStockPage(
+                    canvas = page.canvas,
+                    width = pageWidth,
+                    height = pageHeight,
+                    products = sortedProducts,
+                    startIndex = pageIndex * itemsPerPage,
+                    maxItems = itemsPerPage,
+                    pageNumber = pageIndex + 1,
+                    totalPages = totalPages
+                )
+                document.finishPage(page)
+            }
 
-        for (pageIndex in 0 until totalPages) {
-            val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageIndex + 1).create()
-            val page = document.startPage(pageInfo)
-            drawLowStockPage(
-                canvas = page.canvas,
-                width = pageWidth,
-                height = pageHeight,
-                products = sortedProducts,
-                startIndex = pageIndex * itemsPerPage,
-                maxItems = itemsPerPage,
-                pageNumber = pageIndex + 1,
-                totalPages = totalPages
-            )
-            document.finishPage(page)
+            context.contentResolver.openOutputStream(uri)?.use { output ->
+                document.writeTo(output)
+            } ?: error("No se pudo abrir el destino del PDF.")
+        } finally {
+            document?.close()
         }
-
-        context.contentResolver.openOutputStream(uri)?.use { output ->
-            document.writeTo(output)
-        } ?: error("No se pudo abrir el destino del PDF.")
-        document.close()
     }.isSuccess
 }
 

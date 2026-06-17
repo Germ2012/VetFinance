@@ -1,7 +1,10 @@
 package com.example.vetfinance.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -71,13 +74,18 @@ fun AddTreatmentDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(id = R.string.add_treatment_dialog_title)) },
         text = {
-            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 ExposedDropdownMenuBox(
                     expanded = expanded,
                     onExpandedChange = { expanded = !expanded }
                 ) {
                     OutlinedTextField(
-                        modifier = Modifier.menuAnchor(),
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth(),
                         readOnly = true,
                         value = selectedServiceText,
                         onValueChange = {},
@@ -107,17 +115,36 @@ fun AddTreatmentDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedTextField(
+                        value = weight,
+                        onValueChange = { weight = it },
+                        label = { Text(stringResource(id = R.string.add_treatment_weight_label)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = temperature,
+                        onValueChange = { temperature = it },
+                        label = { Text(stringResource(id = R.string.add_treatment_temperature_label)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                }
 
-                OutlinedTextField(value = weight, onValueChange = { weight = it }, label = { Text(stringResource(id = R.string.add_treatment_weight_label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
-                OutlinedTextField(value = temperature, onValueChange = { temperature = it }, label = { Text(stringResource(id = R.string.add_treatment_temperature_label)) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text))
-                OutlinedTextField(value = symptoms, onValueChange = { symptoms = it }, label = { Text(stringResource(id = R.string.add_treatment_symptoms_label)) })
-                OutlinedTextField(value = diagnosis, onValueChange = { diagnosis = it }, label = { Text(stringResource(id = R.string.add_treatment_diagnosis_label)) })
-                OutlinedTextField(value = treatmentPlan, onValueChange = { treatmentPlan = it }, label = { Text(stringResource(id = R.string.add_treatment_plan_label)) })
+                OutlinedTextField(value = symptoms, onValueChange = { symptoms = it }, label = { Text(stringResource(id = R.string.add_treatment_symptoms_label)) }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = diagnosis, onValueChange = { diagnosis = it }, label = { Text(stringResource(id = R.string.add_treatment_diagnosis_label)) }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = treatmentPlan, onValueChange = { treatmentPlan = it }, label = { Text(stringResource(id = R.string.add_treatment_plan_label)) }, modifier = Modifier.fillMaxWidth())
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Button(onClick = { showDatePicker = true }) {
+                Button(
+                    onClick = { showDatePicker = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Text(
                         text = if (selectedDateMillis != null) {
                             SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(selectedDateMillis!!))

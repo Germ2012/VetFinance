@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -27,14 +26,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.example.vetfinance.R
@@ -44,10 +44,13 @@ import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
 import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
+import com.example.vetfinance.viewmodel.SaleUiEvent
+import com.example.vetfinance.viewmodel.SaleViewModel
 import com.example.vetfinance.viewmodel.VetViewModel
 import ui.utils.NumberTransformation
 import ui.utils.formatCurrency
 import java.util.Locale
+import android.widget.Toast
 
 private data class SaleInventoryStats(
     val productCount: Int,
@@ -57,9 +60,14 @@ private data class SaleInventoryStats(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
-    val cart by viewModel.shoppingCart.collectAsStateWithLifecycle()
-    val total by viewModel.saleTotal.collectAsStateWithLifecycle()
+fun AddSaleScreen(
+    viewModel: VetViewModel,
+    navController: NavHostController,
+    saleViewModel: SaleViewModel = hiltViewModel()
+) {
+    val saleUiState by saleViewModel.uiState.collectAsStateWithLifecycle()
+    val cart = saleUiState.cart
+    val total = saleUiState.total
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsStateWithLifecycle()
     val inventory by viewModel.filteredInventory.collectAsStateWithLifecycle()
     val allProductsList by viewModel.inventory.collectAsStateWithLifecycle()
@@ -70,6 +78,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     val searchQuery by viewModel.productSearchQuery.collectAsStateWithLifecycle()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
     val clientNameSuggestions by viewModel.clientNameSuggestions.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
 
     var saleClientName by remember { mutableStateOf("") }
@@ -78,19 +87,29 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     var showExitCartDialog by remember { mutableStateOf(false) }
     var cartItemToEditPrice by remember { mutableStateOf<CartItem?>(null) }
 
-    val showFractionalDialog by viewModel.showFractionalSaleDialog.collectAsStateWithLifecycle()
-    val productForFractionalSale by viewModel.productForFractionalSale.collectAsStateWithLifecycle()
+    val showFractionalDialog = saleUiState.showFractionalSaleDialog
+    val productForFractionalSale = saleUiState.productForFractionalSale
+    val showDoseDialog = saleUiState.showDoseSaleDialog
+    val productForDoseSale = saleUiState.productForDoseSale
+    val saleTypeDialogProduct = saleUiState.saleTypeDialogProduct
 
-    val showDoseDialog by viewModel.showDoseSaleDialog.collectAsStateWithLifecycle()
-    val productForDoseSale by viewModel.productForDoseSale.collectAsStateWithLifecycle()
-
-    val saleTypeDialogProduct by viewModel.saleTypeDialogProduct.collectAsStateWithLifecycle()
+    LaunchedEffect(saleViewModel) {
+        saleViewModel.events.collect { event ->
+            when (event) {
+                is SaleUiEvent.Error -> Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
+                is SaleUiEvent.SaleFinished -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_SHORT).show()
+                    navController.popBackStack()
+                }
+            }
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose {
             viewModel.clearProductSearchQuery()
-            viewModel.dismissFractionalSaleDialog()
-            viewModel.dismissDoseSaleDialog()
+            saleViewModel.dismissFractionalSaleDialog()
+            saleViewModel.dismissDoseSaleDialog()
             viewModel.clearClientNameSuggestions()
         }
     }
@@ -116,7 +135,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(
                         onClick = {
-                            viewModel.clearCart()
+                            saleViewModel.clearCart()
                             showExitCartDialog = false
                             navController.popBackStack()
                         }
@@ -146,7 +165,7 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             cartItem = cartItem,
             onDismiss = { cartItemToEditPrice = null },
             onConfirm = { finalPrice, reason ->
-                viewModel.updateCartItemPrice(cartItem, finalPrice, reason)
+                saleViewModel.updateCartItemPrice(cartItem, finalPrice, reason)
                 cartItemToEditPrice = null
             }
         )
@@ -171,10 +190,10 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     if (showFractionalDialog && currentProductForFractionalSale != null) {
         FractionalSaleDialog(
             product = currentProductForFractionalSale,
-            onDismiss = { viewModel.dismissFractionalSaleDialog() },
+            onDismiss = { saleViewModel.dismissFractionalSaleDialog() },
             onConfirm = { product, quantity ->
-                viewModel.addOrUpdateProductInCart(product, quantity)
-                viewModel.dismissFractionalSaleDialog()
+                saleViewModel.addOrUpdateProductInCart(product, quantity)
+                saleViewModel.dismissFractionalSaleDialog()
             }
         )
     }
@@ -183,10 +202,10 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     if (showDoseDialog && currentProductForDoseSale != null) {
         DoseSaleDialog(
             product = currentProductForDoseSale,
-            onDismiss = { viewModel.dismissDoseSaleDialog() },
+            onDismiss = { saleViewModel.dismissDoseSaleDialog() },
             onConfirm = { product, notes, price ->
-                viewModel.addOrUpdateDoseInCart(product, notes ?: "", price ?: product.price)
-                viewModel.dismissDoseSaleDialog()
+                saleViewModel.addOrUpdateDoseInCart(product, notes ?: "", price ?: product.price)
+                saleViewModel.dismissDoseSaleDialog()
             }
         )
     }
@@ -194,8 +213,16 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
     saleTypeDialogProduct?.let { product ->
         SaleTypeDialog(
             product = product,
-            viewModel = viewModel,
-            allProducts = allProductsList
+            allProducts = allProductsList,
+            onDismiss = { saleViewModel.closeSaleTypeDialog() },
+            onSellByUnit = {
+                saleViewModel.addToCart(product)
+                saleViewModel.closeSaleTypeDialog()
+            },
+            onSellBulk = { bulkProduct ->
+                saleViewModel.openFractionalSaleDialog(bulkProduct)
+                saleViewModel.closeSaleTypeDialog()
+            }
         )
     }
 
@@ -262,13 +289,13 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
             SaleCheckoutBar(
                 total = total,
                 itemCount = cartUnits,
-                enabled = cart.isNotEmpty(),
+                enabled = cart.isNotEmpty() && !saleUiState.isFinalizing,
                 onConfirm = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                    viewModel.finalizeSale(
+                    saleViewModel.finalizeSale(
                         clientName = saleClientName,
                         selectedClientId = selectedSaleClientId
-                    ) { navController.popBackStack() }
+                    )
                 }
             )
         }
@@ -309,8 +336,8 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                 SaleCartPanel(
                     cart = cart,
                     total = total,
-                    onRemove = { viewModel.removeFromCart(it) },
-                    onAdd = { viewModel.addToCart(it.product) },
+                    onRemove = { saleViewModel.removeFromCart(it) },
+                    onAdd = { saleViewModel.addToCart(it.product) },
                     onEditPrice = { cartItemToEditPrice = it }
                 )
             }
@@ -367,16 +394,16 @@ fun AddSaleScreen(viewModel: VetViewModel, navController: NavHostController) {
                             quantityInCart = cartQuantityByProductId[product.productId] ?: 0.0,
                             onAdd = {
                                 when {
-                                    product.isContainer -> viewModel.openSaleTypeDialog(product)
-                                    product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> viewModel.openFractionalSaleDialog(product)
-                                    product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> viewModel.openDoseSaleDialog(product)
-                                    else -> viewModel.addToCart(product)
+                                    product.isContainer -> saleViewModel.openSaleTypeDialog(product)
+                                    product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> saleViewModel.openFractionalSaleDialog(product)
+                                    product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> saleViewModel.openDoseSaleDialog(product)
+                                    else -> saleViewModel.addToCart(product)
                                 }
                             },
                             onRemove = {
                                 val itemToRemove = lastCartItemByProductId[product.productId]
                                 if (itemToRemove != null) {
-                                    viewModel.removeFromCart(itemToRemove)
+                                    saleViewModel.removeFromCart(itemToRemove)
                                 }
                             }
                         )
@@ -983,24 +1010,23 @@ fun DoseSaleDialog(
 @Composable
 fun SaleTypeDialog(
     product: Product,
-    viewModel: VetViewModel,
-    allProducts: List<Product>
+    allProducts: List<Product>,
+    onDismiss: () -> Unit,
+    onSellByUnit: () -> Unit,
+    onSellBulk: (Product) -> Unit
 ) {
     val bulkProduct = remember(product, allProducts) {
         allProducts.find { it.productId == product.containedProductId }
     }
 
     AlertDialog(
-        onDismissRequest = { viewModel.closeSaleTypeDialog() },
+        onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.dialog_title_select_sale_type)) },
         text = { Text(stringResource(R.string.dialog_message_select_sale_type, product.name)) },
         confirmButton = {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = {
-                        viewModel.addToCart(product)
-                        viewModel.closeSaleTypeDialog()
-                    },
+                    onClick = onSellByUnit,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(stringResource(R.string.button_sell_by_unit, formatCurrency(product.price)))
@@ -1009,9 +1035,8 @@ fun SaleTypeDialog(
                 Button(
                     onClick = {
                         if (bulkProduct != null) {
-                            viewModel.openFractionalSaleDialog(bulkProduct)
+                            onSellBulk(bulkProduct)
                         }
-                        viewModel.closeSaleTypeDialog()
                     },
                     enabled = bulkProduct != null,
                     modifier = Modifier.fillMaxWidth()
@@ -1021,7 +1046,7 @@ fun SaleTypeDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = { viewModel.closeSaleTypeDialog() }) {
+            TextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.cancel_button))
             }
         }

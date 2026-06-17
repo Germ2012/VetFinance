@@ -612,25 +612,6 @@ class VetViewModel @Inject constructor(
         base.copy(collectionSummary = summary)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), DebtClientsScreenUiState())
 
-    private val _shoppingCart = MutableStateFlow<List<CartItem>>(emptyList())
-    val shoppingCart: StateFlow<List<CartItem>> = _shoppingCart.asStateFlow()
-    private val _saleTotal = MutableStateFlow(0.0)
-    val saleTotal: StateFlow<Double> = _saleTotal.asStateFlow()
-
-    private val _showFractionalSaleDialog = MutableStateFlow(false)
-    val showFractionalSaleDialog: StateFlow<Boolean> = _showFractionalSaleDialog.asStateFlow()
-    private val _productForFractionalSale = MutableStateFlow<Product?>(null)
-    val productForFractionalSale: StateFlow<Product?> = _productForFractionalSale.asStateFlow()
-
-    private val _showDoseSaleDialog = MutableStateFlow(false)
-    val showDoseSaleDialog: StateFlow<Boolean> = _showDoseSaleDialog.asStateFlow()
-    private val _productForDoseSale = MutableStateFlow<Product?>(null)
-    val productForDoseSale: StateFlow<Product?> = _productForDoseSale.asStateFlow()
-
-    private val _saleTypeDialogProduct = MutableStateFlow<Product?>(null)
-    val saleTypeDialogProduct: StateFlow<Product?> = _saleTypeDialogProduct.asStateFlow()
-
-
     init {
         viewModelScope.launch {
             repository.getAllSuppliers().collect { _suppliers.value = it } // Initialize suppliers
@@ -761,18 +742,6 @@ class VetViewModel @Inject constructor(
     fun onDismissPaymentDialog() { _clientForPayment.value = null; _showPaymentDialog.value = false }
     fun onShowAddAppointmentDialog() { _showAddAppointmentDialog.value = true }
     fun onDismissAddAppointmentDialog() { _showAddAppointmentDialog.value = false }
-    fun openFractionalSaleDialog(product: Product) { _productForFractionalSale.value = product; _showFractionalSaleDialog.value = true }
-    fun dismissFractionalSaleDialog() { _productForFractionalSale.value = null; _showFractionalSaleDialog.value = false }
-    fun openDoseSaleDialog(product: Product) { _productForDoseSale.value = product; _showDoseSaleDialog.value = true }
-    fun dismissDoseSaleDialog() { _productForDoseSale.value = null; _showDoseSaleDialog.value = false }
-
-    fun openSaleTypeDialog(product: Product) {
-        _saleTypeDialogProduct.value = product
-    }
-    fun closeSaleTypeDialog() {
-        _saleTypeDialogProduct.value = null
-    }
-
     private fun executeWithLoading(action: suspend () -> Unit) = viewModelScope.launch {
         _isLoading.value = true
         try {
@@ -894,156 +863,10 @@ class VetViewModel @Inject constructor(
         reportOperationSuccess("Stock ajustado.")
     }
 
-    private fun shouldValidateStockInCart(product: Product): Boolean {
-        return !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
-    }
-
-    private fun availableStockForCart(product: Product): Double {
-        if (!shouldValidateStockInCart(product)) return Double.MAX_VALUE
-        if (product.isContainer) return product.stock
-
-        val stockFromClosedContainers = inventory.value
-            .filter { it.isContainer && it.containedProductId == product.productId && (it.containerSize ?: 0.0) > 0.0 }
-            .sumOf { container ->
-                val fullContainers = kotlin.math.floor(container.stock)
-                fullContainers * (container.containerSize ?: 0.0)
-            }
-
-        return product.stock + stockFromClosedContainers
-    }
-
-    fun addToCart(product: Product) {
-        val currentCart = _shoppingCart.value.toMutableList()
-        val existingItem = currentCart.find { it.product.productId == product.productId }
-
-        if (product.sellingMethod != SELLING_METHOD_BY_UNIT) return
-
-        val availableStock = availableStockForCart(product)
-        if (shouldValidateStockInCart(product) && availableStock < 1.0) {
-            reportOperationError("Stock insuficiente para ${product.name}. Disponible: ${availableStock.formatForMessage()}.")
-            return
-        }
-
-        // Solo incrementamos cantidad si es "Por Unidad" y ya existe
-        if (existingItem != null) {
-            val newQuantity = existingItem.quantity + 1.0
-            if (!shouldValidateStockInCart(product) || newQuantity <= availableStock) {
-                val index = currentCart.indexOf(existingItem)
-                currentCart[index] = existingItem.copy(quantity = newQuantity)
-            } else {
-                reportOperationError("Stock insuficiente para ${product.name}. Disponible: ${availableStock.formatForMessage()}, solicitado: ${newQuantity.formatForMessage()}.")
-            }
-        } else {
-            currentCart.add(CartItem(product = product, quantity = 1.0))
-        }
-        _shoppingCart.value = currentCart
-        recalculateTotal()
-    }
-
-    fun removeFromCart(cartItem: CartItem) {
-        val currentCart = _shoppingCart.value.toMutableList()
-        val existingItem = currentCart.find { it.cartItemId == cartItem.cartItemId } ?: return
-
-        if (existingItem.product.sellingMethod == SELLING_METHOD_BY_UNIT && existingItem.quantity > 1) {
-            val index = currentCart.indexOf(existingItem)
-            currentCart[index] = existingItem.copy(quantity = existingItem.quantity - 1)
-        } else {
-            currentCart.remove(existingItem)
-        }
-        _shoppingCart.value = currentCart
-        recalculateTotal()
-    }
-
-    fun addOrUpdateProductInCart(product: Product, quantity: Double) {
-        val currentCart = _shoppingCart.value.toMutableList()
-        // Para ventas fraccionadas, asumimos que solo hay una entrada por producto.
-        val existingItemIndex = currentCart.indexOfFirst { it.product.productId == product.productId }
-
-        if (quantity > 0) {
-            val availableStock = availableStockForCart(product)
-            val validQuantity = if (shouldValidateStockInCart(product)) {
-                if (availableStock <= 0.0) {
-                    reportOperationError("Stock insuficiente para ${product.name}.")
-                    0.0
-                } else {
-                    if (quantity > availableStock) {
-                        reportOperationError("Stock insuficiente para ${product.name}. Se agrego solo ${availableStock.formatForMessage()}.")
-                    }
-                    quantity.coerceAtMost(availableStock)
-                }
-            } else {
-                quantity
-            }
-            if (validQuantity > 0) {
-                val newItem = CartItem(product = product, quantity = validQuantity)
-                if (existingItemIndex != -1) {
-                    currentCart[existingItemIndex] = newItem
-                } else {
-                    currentCart.add(newItem)
-                }
-            }
-        } else {
-            if (existingItemIndex != -1) {
-                currentCart.removeAt(existingItemIndex)
-            }
-        }
-        _shoppingCart.value = currentCart
-        recalculateTotal()
-    }
-
-    fun addOrUpdateDoseInCart(product: Product, notes: String, price: Double) {
-        val currentCart = _shoppingCart.value.toMutableList()
-        currentCart.add(CartItem(product = product, quantity = 1.0, notes = notes.ifBlank { null }, overridePrice = price))
-        _shoppingCart.value = currentCart
-        recalculateTotal()
-        dismissDoseSaleDialog()
-    }
-
-    fun updateCartItemPrice(cartItem: CartItem, finalPrice: Double?, reason: String?) {
-        val currentCart = _shoppingCart.value.toMutableList()
-        val index = currentCart.indexOfFirst { it.cartItemId == cartItem.cartItemId }
-        if (index == -1) return
-
-        val normalizedPrice = finalPrice?.takeIf { it > 0.0 }
-        val normalizedReason = reason?.ifBlank { null }
-        currentCart[index] = currentCart[index].copy(
-            overridePrice = normalizedPrice,
-            notes = normalizedReason
-        )
-        _shoppingCart.value = currentCart
-        recalculateTotal()
-    }
-
-    fun clearCart() { _shoppingCart.value = emptyList(); _saleTotal.value = 0.0 }
-
-    private fun recalculateTotal() {
-        _saleTotal.value = _shoppingCart.value.sumOf {
-            it.overridePrice ?: (it.product.price * it.quantity)
-        }
-    }
-
-    fun finalizeSale(clientName: String? = null, selectedClientId: String? = null, onFinished: () -> Unit) = executeWithLoading {
-        if (_shoppingCart.value.isNotEmpty()) {
-            val saleClient = selectedClientId
-                ?.let { clientId -> clients.value.find { it.clientId == clientId } }
-                ?: repository.findOrCreateClientForSale(clientName)
-            repository.insertSale(
-                Sale(date = System.currentTimeMillis(), totalAmount = _saleTotal.value, clientIdFk = saleClient.clientId),
-                _shoppingCart.value
-            )
-            clearCart()
-            reportOperationSuccess("Venta registrada correctamente.")
-            onFinished()
-        }
-    }
     suspend fun exportarDatosCompletos(): Map<String, String> = repository.exportarDatosCompletos()
     suspend fun importarDatosDesdeZIP(uri: Uri, context: Context): String = repository.importarDatosDesdeZIP(uri, context)
 
     private suspend fun addSampleData() = repository.insertClient(Client(clientId = GENERAL_CLIENT_ID, name = "Cliente General", phone = null, address = null, debtAmount = 0.0))
-
-    private fun Double.formatForMessage(): String {
-        return if (this % 1.0 == 0.0) this.toLong().toString() else String.format(Locale.getDefault(), "%.3f", this)
-    }
 
     private fun Double.formatMoneyForMessage(): String {
         return String.format(Locale.getDefault(), "%,.0f", this)

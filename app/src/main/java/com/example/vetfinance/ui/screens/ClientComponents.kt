@@ -7,6 +7,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -45,6 +47,7 @@ fun ClientItem(client: Client, onPayClick: () -> Unit, onItemClick: () -> Unit) 
 @Composable
 fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> Unit) {
     var amount by remember { mutableStateOf("") }
+    val haptic = LocalHapticFeedback.current
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -67,6 +70,7 @@ fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> 
                     // CORRECCIÓN APLICADA: No se necesita .replace(".", "")
                     val paymentAmount = amount.toDoubleOrNull() ?: 0.0
                     if (paymentAmount > 0) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         onConfirm(paymentAmount)
                     }
                 },
