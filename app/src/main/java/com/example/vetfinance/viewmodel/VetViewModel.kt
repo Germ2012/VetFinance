@@ -317,12 +317,6 @@ class VetViewModel @Inject constructor(
     val salesTrendComparison: StateFlow<List<SalesTrendComparisonPoint>> = getSalesTrendComparisonUseCase()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val productProfitReports: StateFlow<List<ProductProfitReport>> = getProductProfitReportsUseCase()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val clientPurchaseReports: StateFlow<List<ClientPurchaseReport>> = getClientPurchaseReportsUseCase()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
     private val debouncedProductSearchQuery = _productSearchQuery
         .debounce(SEARCH_DEBOUNCE_MS)
         .distinctUntilChanged()
@@ -608,6 +602,22 @@ class VetViewModel @Inject constructor(
             flowOf(emptyList())
         } else {
             getCategoryProfitReportsUseCase(period.startDate, period.endDate)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val productProfitReports: StateFlow<List<ProductProfitReport>> = selectedHistoricalPeriod.flatMapLatest { period ->
+        if (period == null) {
+            flowOf(emptyList())
+        } else {
+            getProductProfitReportsUseCase(period.startDate, period.endDate)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val clientPurchaseReports: StateFlow<List<ClientPurchaseReport>> = selectedHistoricalPeriod.flatMapLatest { period ->
+        if (period == null) {
+            flowOf(emptyList())
+        } else {
+            getClientPurchaseReportsUseCase(period.startDate, period.endDate)
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 

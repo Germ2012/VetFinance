@@ -90,6 +90,25 @@ data class DebtCollectionSummary(
     val totalPaid: Double
 )
 
+@Immutable
+data class ProductProfitReportRow(
+    val productId: String,
+    val name: String,
+    val isService: Boolean,
+    val totalSold: Double,
+    val revenue: Double,
+    val cost: Double,
+    val profit: Double
+)
+
+@Immutable
+data class ClientPurchaseReportRow(
+    val clientId: String,
+    val clientName: String,
+    val totalPurchased: Double,
+    val saleCount: Int
+)
+
 
 // --- DAOs ---
 @Dao
@@ -326,6 +345,24 @@ interface SaleDao {
     """)
     fun getFrequentSaleProducts(limit: Int = 6): Flow<List<Product>>
 
+    @Query("""
+        SELECT
+            p.productId AS productId,
+            p.name,
+            p.isService,
+            COALESCE(SUM(sp.quantitySold), 0.0) AS totalSold,
+            COALESCE(SUM(COALESCE(sp.overridePrice, sp.priceAtTimeOfSale * sp.quantitySold)), 0.0) AS revenue,
+            COALESCE(SUM(COALESCE(p.cost, 0.0) * sp.quantitySold), 0.0) AS cost,
+            COALESCE(SUM(COALESCE(sp.overridePrice, sp.priceAtTimeOfSale * sp.quantitySold) - (COALESCE(p.cost, 0.0) * sp.quantitySold)), 0.0) AS profit
+        FROM sales_products_cross_ref AS sp
+        JOIN sales AS s ON sp.saleId = s.saleId
+        JOIN products AS p ON sp.productId = p.productId
+        WHERE s.date BETWEEN :startDate AND :endDate
+        GROUP BY p.productId, p.name, p.isService
+        ORDER BY profit DESC
+    """)
+    fun getProductProfitReports(startDate: Long, endDate: Long): Flow<List<ProductProfitReportRow>>
+
     @Query("SELECT * FROM sales")
     fun getAllSalesSimple(): Flow<List<Sale>>
     @Query("SELECT * FROM sales_products_cross_ref")
@@ -479,6 +516,21 @@ interface ClientDao {
 
     @Query("SELECT SUM(debtAmount) FROM clients")
     fun getTotalDebt(): Flow<Double?>
+
+    @Query("""
+        SELECT
+            c.clientId,
+            c.name AS clientName,
+            COALESCE(SUM(s.totalAmount), 0.0) AS totalPurchased,
+            COUNT(s.saleId) AS saleCount
+        FROM clients AS c
+        JOIN sales AS s ON c.clientId = s.clientIdFk
+        WHERE s.date BETWEEN :startDate AND :endDate
+        GROUP BY c.clientId
+        ORDER BY totalPurchased DESC
+        LIMIT :limit
+    """)
+    fun getClientPurchaseReports(startDate: Long, endDate: Long, limit: Int): Flow<List<ClientPurchaseReportRow>>
 }
 
 @Dao

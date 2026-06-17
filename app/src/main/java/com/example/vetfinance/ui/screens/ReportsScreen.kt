@@ -697,7 +697,11 @@ fun ProfitabilityReportTab(viewModel: VetViewModel) {
             item {
                 ReportSectionTitle("Productos con mayor ganancia")
             }
-            items(topProfit) { row ->
+            items(
+                items = topProfit,
+                key = { "profit-${it.productId}" },
+                contentType = { "product-profit-row" }
+            ) { row ->
                 ProductProfitReportRow(
                     report = row,
                     primaryLabel = "Ganancia Gs. ${formatCurrency(row.profit)}",
@@ -707,7 +711,11 @@ fun ProfitabilityReportTab(viewModel: VetViewModel) {
             item {
                 ReportSectionTitle("Mejor margen")
             }
-            items(topMargin) { row ->
+            items(
+                items = topMargin,
+                key = { "margin-${it.productId}" },
+                contentType = { "product-margin-row" }
+            ) { row ->
                 ProductProfitReportRow(
                     report = row,
                     primaryLabel = "${String.format(Locale.getDefault(), "%.1f", row.marginPercent)}% margen",
@@ -718,7 +726,11 @@ fun ProfitabilityReportTab(viewModel: VetViewModel) {
                 item {
                     ReportSectionTitle("Servicios mas rentables")
                 }
-                items(topServices) { row ->
+                items(
+                    items = topServices,
+                    key = { "service-${it.productId}" },
+                    contentType = { "service-profit-row" }
+                ) { row ->
                     ProductProfitReportRow(
                         report = row,
                         primaryLabel = "Ganancia Gs. ${formatCurrency(row.profit)}",
@@ -730,7 +742,11 @@ fun ProfitabilityReportTab(viewModel: VetViewModel) {
                 item {
                     ReportSectionTitle("Clientes que mas compran")
                 }
-                items(clientReports.take(5), key = { it.clientId }) { row ->
+                items(
+                    items = clientReports.take(5),
+                    key = { "client-purchase-${it.clientId}" },
+                    contentType = { "client-purchase-row" }
+                ) { row ->
                     ClientPurchaseReportRow(row)
                 }
             }

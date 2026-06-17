@@ -333,6 +333,10 @@ class VetRepository @Inject constructor(
     fun getTotalDebt(): Flow<Double?> = clientDao.getTotalDebt()
     fun getTotalInventoryValue(): Flow<Double?> = productDao.getTotalInventoryValue()
     fun getStockHealthSummary(): Flow<StockHealthRow> = productDao.getStockHealthSummary()
+    fun getProductProfitReports(startDate: Long, endDate: Long): Flow<List<ProductProfitReportRow>> =
+        saleDao.getProductProfitReports(startDate, endDate)
+    fun getClientPurchaseReports(startDate: Long, endDate: Long, limit: Int): Flow<List<ClientPurchaseReportRow>> =
+        clientDao.getClientPurchaseReports(startDate, endDate, limit)
     fun searchGlobal(query: String, limit: Int = 12): Flow<List<GlobalSearchRow>> =
         searchDao.searchGlobal(query.trim(), limit)
     fun searchProductSuggestions(query: String, limit: Int = 8): Flow<List<Product>> =
@@ -555,11 +559,9 @@ class VetRepository @Inject constructor(
     }
 
     private suspend fun ensureStockAvailable(product: Product, requiredQuantity: Double): Product {
-        var currentProduct = productDao.getProductById(product.productId)
-            ?: throw IllegalStateException("Producto no encontrado: ${product.name}")
+        if (product.stock >= requiredQuantity) return product
 
-        if (currentProduct.stock >= requiredQuantity) return currentProduct
-
+        var currentProduct = product
         val container = productDao.findContainerForProduct(currentProduct.productId)
         val containerSize = container?.containerSize ?: 0.0
         val fullContainersAvailable = floor(container?.stock ?: 0.0).toInt()
