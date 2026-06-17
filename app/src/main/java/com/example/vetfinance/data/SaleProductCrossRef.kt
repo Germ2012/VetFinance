@@ -1,5 +1,6 @@
 package com.example.vetfinance.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -24,6 +25,7 @@ import java.util.UUID
     ],
     indices = [Index("productId"), Index("saleId")]
 )
+@Immutable
 data class SaleProductCrossRef(
     @PrimaryKey
     val crossRefId: String = UUID.randomUUID().toString(),

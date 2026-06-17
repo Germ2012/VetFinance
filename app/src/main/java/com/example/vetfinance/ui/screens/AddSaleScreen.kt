@@ -52,12 +52,6 @@ import ui.utils.formatCurrency
 import java.util.Locale
 import android.widget.Toast
 
-private data class SaleInventoryStats(
-    val productCount: Int,
-    val serviceCount: Int,
-    val doseCount: Int
-)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSaleScreen(
@@ -69,13 +63,14 @@ fun AddSaleScreen(
     val cart = saleUiState.cart
     val total = saleUiState.total
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsStateWithLifecycle()
-    val inventory by viewModel.filteredInventory.collectAsStateWithLifecycle()
+    val visibleInventory by viewModel.saleVisibleInventory.collectAsStateWithLifecycle()
+    val visibleStats by viewModel.saleInventoryStats.collectAsStateWithLifecycle()
     val allProductsList by viewModel.inventory.collectAsStateWithLifecycle()
-    val lowStockProducts by viewModel.lowStockProducts.collectAsStateWithLifecycle()
     val frequentProducts by viewModel.frequentSaleProducts.collectAsStateWithLifecycle()
     val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
     val clients by viewModel.clients.collectAsStateWithLifecycle()
     val searchQuery by viewModel.productSearchQuery.collectAsStateWithLifecycle()
+    val saleFilter by viewModel.saleInventoryFilter.collectAsStateWithLifecycle()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
     val clientNameSuggestions by viewModel.clientNameSuggestions.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -83,7 +78,6 @@ fun AddSaleScreen(
 
     var saleClientName by remember { mutableStateOf("") }
     var selectedSaleClientId by remember { mutableStateOf<String?>(null) }
-    var saleFilter by remember { mutableStateOf("Todos") }
     var showExitCartDialog by remember { mutableStateOf(false) }
     var cartItemToEditPrice by remember { mutableStateOf<CartItem?>(null) }
 
@@ -108,6 +102,7 @@ fun AddSaleScreen(
     DisposableEffect(Unit) {
         onDispose {
             viewModel.clearProductSearchQuery()
+            viewModel.clearSaleInventoryFilter()
             saleViewModel.dismissFractionalSaleDialog()
             saleViewModel.dismissDoseSaleDialog()
             viewModel.clearClientNameSuggestions()
@@ -229,38 +224,6 @@ fun AddSaleScreen(
     val selectedClientPhone = remember(clients, selectedSaleClientId) {
         selectedSaleClientId?.let { clientId -> clients.find { it.clientId == clientId }?.phone }
     }
-    val lowStockIds = remember(lowStockProducts) { lowStockProducts.map { it.productId }.toSet() }
-    val frequentRankById = remember(frequentProducts) {
-        frequentProducts.mapIndexed { index, product -> product.productId to index }.toMap()
-    }
-    val visibleInventory by remember(inventory, saleFilter, lowStockIds, frequentRankById) {
-        derivedStateOf {
-            val filtered = inventory.filter { product ->
-                when (saleFilter) {
-                    "Productos" -> !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
-                    "Servicios" -> product.isService
-                    "Dosis" -> !product.isService && product.sellingMethod == SELLING_METHOD_DOSE_ONLY
-                    "Bajo stock" -> product.productId in lowStockIds
-                    else -> true
-                }
-            }
-            if (frequentRankById.isEmpty()) {
-                filtered
-            } else {
-                filtered.sortedWith(
-                    compareBy<Product> { frequentRankById[it.productId] ?: Int.MAX_VALUE }
-                        .thenBy { it.name }
-                )
-            }
-        }
-    }
-    val visibleStats = remember(visibleInventory) {
-        SaleInventoryStats(
-            productCount = visibleInventory.count { !it.isService && it.sellingMethod != SELLING_METHOD_DOSE_ONLY },
-            serviceCount = visibleInventory.count { it.isService },
-            doseCount = visibleInventory.count { !it.isService && it.sellingMethod == SELLING_METHOD_DOSE_ONLY }
-        )
-    }
     val cartQuantityByProductId = remember(cart) {
         cart.groupBy { it.product.productId }.mapValues { (_, items) -> items.sumOf { it.quantity } }
     }
@@ -358,7 +321,7 @@ fun AddSaleScreen(
                 item {
                     SaleProductFilterRow(
                         selectedFilter = saleFilter,
-                        onFilterSelected = { saleFilter = it }
+                        onFilterSelected = { viewModel.onSaleInventoryFilterSelected(it) }
                     )
                 }
                 if (frequentProducts.isNotEmpty() && saleFilter == "Todos" && searchQuery.isBlank()) {

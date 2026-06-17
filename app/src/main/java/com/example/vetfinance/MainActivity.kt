@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -63,11 +64,10 @@ class MainActivity : ComponentActivity() {
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
 
         // 3. Se llama a la función para pedir el permiso justo al crear la actividad.
-        askNotificationPermission()
-
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides this) {
                 VetFinanceTheme {
@@ -75,6 +75,8 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        askNotificationPermission()
     }
 }
 

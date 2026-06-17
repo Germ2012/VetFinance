@@ -3,6 +3,7 @@ package com.example.vetfinance.viewmodel
 import android.content.Context
 import android.net.Uri
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
@@ -37,6 +38,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -56,6 +58,7 @@ enum class ReportPeriodType(@StringRes val displayResId: Int) {
     MONTH(R.string.period_month)
 }
 
+@Immutable
 data class HistoricalPeriod(
     val id: String, // e.g., "2025-10-06", "2025-W41", "2025-10"
     val displayName: String, // e.g., "06/10/2025", "Semana 41 (06/10 - 12/10)", "Octubre 2025"
@@ -63,12 +66,14 @@ data class HistoricalPeriod(
     val endDate: Long
 )
 
+@Immutable
 data class DebtCollectionFilters(
     val showOnlyWithDebt: Boolean = true,
     val minimumDebt: Double = 0.0,
     val sortMode: String = "Mayor deuda"
 )
 
+@Immutable
 data class InventoryScreenUiState(
     val showAddProductDialog: Boolean = false,
     val filter: String = "Todos",
@@ -81,6 +86,7 @@ data class InventoryScreenUiState(
     val isLoading: Boolean = true
 )
 
+@Immutable
 data class DebtClientsScreenUiState(
     val searchQuery: String = "",
     val showPaymentDialog: Boolean = false,
@@ -100,6 +106,13 @@ enum class TopProductsMetric {
     QUANTITY,
     REVENUE
 }
+
+@Immutable
+data class SaleInventoryStats(
+    val productCount: Int = 0,
+    val serviceCount: Int = 0,
+    val doseCount: Int = 0
+)
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
@@ -243,6 +256,8 @@ class VetViewModel @Inject constructor(
     val productSearchQuery: StateFlow<String> = _productSearchQuery.asStateFlow()
     private val _selectedSaleDateFilter = MutableStateFlow<Long?>(null)
     val selectedSaleDateFilter: StateFlow<Long?> = _selectedSaleDateFilter.asStateFlow()
+    private val _saleInventoryFilter = MutableStateFlow("Todos")
+    val saleInventoryFilter: StateFlow<String> = _saleInventoryFilter.asStateFlow()
 
     private val _productNameSuggestionQuery = MutableStateFlow("")
     val productNameSuggestions: StateFlow<List<Product>> = _productNameSuggestionQuery
@@ -417,6 +432,65 @@ class VetViewModel @Inject constructor(
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val lowStockProductsByName: StateFlow<List<Product>> = lowStockProducts
+        .map { products ->
+            products.sortedBy { it.name.lowercase(Locale.getDefault()) }
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val lowStockProductsByUrgency: StateFlow<List<Product>> = lowStockProducts
+        .map { products ->
+            products.sortedWith(
+                compareBy<Product> { product ->
+                    val threshold = product.lowStockThreshold ?: 1.0
+                    if (threshold > 0) product.stock / threshold else product.stock
+                }.thenBy { it.name.lowercase(Locale.getDefault()) }
+            )
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val saleVisibleInventory: StateFlow<List<Product>> = combine(
+        filteredInventory,
+        _saleInventoryFilter,
+        lowStockProducts,
+        frequentSaleProducts
+    ) { products, filter, lowStockList, frequentList ->
+        val lowStockIds = lowStockList.map { it.productId }.toSet()
+        val frequentRankById = frequentList.mapIndexed { index, product -> product.productId to index }.toMap()
+        val filtered = products.filter { product ->
+            when (filter) {
+                "Productos" -> !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY
+                "Servicios" -> product.isService
+                "Dosis" -> !product.isService && product.sellingMethod == SELLING_METHOD_DOSE_ONLY
+                "Bajo stock" -> product.productId in lowStockIds
+                else -> true
+            }
+        }
+        if (frequentRankById.isEmpty()) {
+            filtered
+        } else {
+            filtered.sortedWith(
+                compareBy<Product> { frequentRankById[it.productId] ?: Int.MAX_VALUE }
+                    .thenBy { it.name.lowercase(Locale.getDefault()) }
+            )
+        }
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val saleInventoryStats: StateFlow<SaleInventoryStats> = saleVisibleInventory
+        .map { products ->
+            SaleInventoryStats(
+                productCount = products.count { !it.isService && it.sellingMethod != SELLING_METHOD_DOSE_ONLY },
+                serviceCount = products.count { it.isService },
+                doseCount = products.count { !it.isService && it.sellingMethod == SELLING_METHOD_DOSE_ONLY }
+            )
+        }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SaleInventoryStats())
+
     private val _selectedCalendarDate = MutableStateFlow(LocalDate.now())
     val selectedCalendarDate: StateFlow<LocalDate> = _selectedCalendarDate.asStateFlow()
 
@@ -554,7 +628,7 @@ class VetViewModel @Inject constructor(
         _inventoryFilter,
         inventory,
         _productSearchQuery,
-        lowStockProducts
+        lowStockProductsByUrgency
     ) { showDialog, filter, productList, query, lowStockList ->
         InventoryScreenUiState(
             showAddProductDialog = showDialog,
@@ -615,22 +689,16 @@ class VetViewModel @Inject constructor(
         viewModelScope.launch {
             clients.firstOrNull()?.let { clientList ->
                 if (clientList.none { it.clientId == GENERAL_CLIENT_ID }) {
-                    addSampleData()
-                }
-            }
-        }
-        viewModelScope.launch {
-            availableHistoricalPeriods.collect { periods ->
-                if (_selectedHistoricalPeriod.value == null) {
-                    _selectedHistoricalPeriod.value = periods.firstOrNull()
+                    withContext(Dispatchers.IO) {
+                        addSampleData()
+                    }
                 }
             }
         }
     }
     fun onReportPeriodTypeChanged(newType: ReportPeriodType) {
         _reportPeriodType.value = newType
-        // Resetea el período seleccionado y deja que el colector lo actualice
-        _selectedHistoricalPeriod.value = availableHistoricalPeriods.value.firstOrNull()
+        _selectedHistoricalPeriod.value = null
     }
 
     fun onHistoricalPeriodSelected(period: HistoricalPeriod) {
@@ -714,6 +782,8 @@ class VetViewModel @Inject constructor(
     fun clearGlobalSearchQuery() { _globalSearchQuery.value = "" }
     fun onSaleDateFilterSelected(date: Long?) { _selectedSaleDateFilter.value = date }
     fun clearSaleDateFilter() { _selectedSaleDateFilter.value = null }
+    fun onSaleInventoryFilterSelected(newFilter: String) { _saleInventoryFilter.value = newFilter }
+    fun clearSaleInventoryFilter() { _saleInventoryFilter.value = "Todos" }
     fun onProductNameChange(name: String) { _productNameSuggestionQuery.value = name }
     fun clearProductNameSuggestions() { _productNameSuggestionQuery.value = "" }
     fun onClientNameChange(name: String) { _clientNameSuggestionQuery.value = name }

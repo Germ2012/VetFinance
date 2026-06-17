@@ -1,5 +1,6 @@
 package com.example.vetfinance.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -7,6 +8,7 @@ import androidx.room.Query
 import androidx.room.Transaction
 import kotlinx.coroutines.flow.Flow
 
+@Immutable
 data class RestockHistoryItem(
     val productName: String,
     val supplierName: String?,
@@ -15,6 +17,7 @@ data class RestockHistoryItem(
     val quantity: Double
 )
 
+@Immutable
 data class ProductCostHistoryItem(
     val supplierName: String?,
     val orderDate: Long,

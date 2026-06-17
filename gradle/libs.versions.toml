@@ -5,6 +5,8 @@ activityCompose = "1.9.0"
 composeBom = "2024.05.00"
 composeCompiler = "1.5.11" # Compatible con Kotlin 1.9.23
 coreKtx = "1.13.1"
+coreSplashscreen = "1.0.1"
+coilCompose = "2.6.0"
 lifecycleRuntimeKtx = "2.8.0"
 room = "2.6.1"
 navigationCompose = "2.7.7"
@@ -23,6 +25,8 @@ lifecycleRuntimeCompose = "2.8.0" # <-- AÑADIDO
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coilCompose" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycleRuntimeCompose" } # <-- AÑADIDO
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }

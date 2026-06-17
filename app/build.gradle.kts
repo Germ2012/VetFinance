@@ -66,6 +66,7 @@ room {
 dependencies {
     // ---- Core y Lifecycle KTX ----
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose) // <-- AÑADIDO
     implementation(libs.androidx.activity.compose)
@@ -94,6 +95,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.material.icons.extended)
+    implementation(libs.coil.compose)
 
     // ---- Room (Base de Datos Local) ----
     implementation(libs.room.runtime)

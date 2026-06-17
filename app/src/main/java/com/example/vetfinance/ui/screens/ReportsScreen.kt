@@ -388,6 +388,12 @@ fun PeriodSelector(viewModel: VetViewModel) {
     var periodTypeExpanded by remember { mutableStateOf(false) }
     var historicalPeriodExpanded by remember { mutableStateOf(false) }
 
+    LaunchedEffect(availablePeriods, selectedPeriod) {
+        if (selectedPeriod == null && availablePeriods.isNotEmpty()) {
+            viewModel.onHistoricalPeriodSelected(availablePeriods.first())
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),

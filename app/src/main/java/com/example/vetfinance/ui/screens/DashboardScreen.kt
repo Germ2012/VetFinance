@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -82,12 +83,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.example.vetfinance.R
 import com.example.vetfinance.data.AppointmentWithDetails
 import com.example.vetfinance.data.Client
@@ -121,7 +123,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val petsWithOwners by viewModel.petsWithOwners.collectAsStateWithLifecycle()
     val inventory by viewModel.inventory.collectAsStateWithLifecycle()
     val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
-    val lowStockProducts by viewModel.lowStockProducts.collectAsStateWithLifecycle()
+    val lowStockProducts by viewModel.lowStockProductsByName.collectAsStateWithLifecycle()
     val pendingCollectionRows by viewModel.pendingCollectionRows.collectAsStateWithLifecycle()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
     val globalSearchQuery by viewModel.globalSearchQuery.collectAsStateWithLifecycle()
@@ -136,14 +138,14 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var treatmentForNextDialog by remember { mutableStateOf<Treatment?>(null) }
-    val sortedLowStockProducts = remember(lowStockProducts) {
-        lowStockProducts.sortedBy { it.name.lowercase(Locale.getDefault()) }
+    val sortedLowStockProducts = remember(lowStockProducts, isLoading) {
+        if (isLoading) emptyList() else lowStockProducts
     }
-    val pendingCollectionPreviewRows = remember(pendingCollectionRows) {
-        pendingCollectionRows.sortedByDescending { it.balance }.take(3)
+    val pendingCollectionPreviewRows = remember(pendingCollectionRows, isLoading) {
+        if (isLoading) emptyList() else pendingCollectionRows.sortedByDescending { it.balance }.take(3)
     }
-    val totalPendingCollection = remember(pendingCollectionRows) {
-        pendingCollectionRows.sumOf { it.balance }
+    val totalPendingCollection = remember(pendingCollectionRows, isLoading) {
+        if (isLoading) 0.0 else pendingCollectionRows.sumOf { it.balance }
     }
     val pngExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
         uri?.let {
@@ -238,7 +240,12 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         )
     }
 
-    val backgroundPainter = painterResource(id = R.drawable.vet_background_logo)
+    val backgroundPainter = rememberAsyncImagePainter(
+        model = ImageRequest.Builder(context)
+            .data(R.drawable.vet_background_logo)
+            .crossfade(false)
+            .build()
+    )
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -308,7 +315,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                 )
             }
 
-            if (pendingCollectionRows.isNotEmpty()) {
+            if (!isLoading && pendingCollectionRows.isNotEmpty()) {
                 item {
                     DashboardCollectionPreview(
                         rows = pendingCollectionPreviewRows,
@@ -991,8 +998,19 @@ fun LowStockAlert(
                         Text("PDF")
                     }
                 }
-                lowStockProducts.forEach { product ->
-                    LowStockDashboardRow(product = product)
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 280.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(
+                        items = lowStockProducts,
+                        key = { it.productId },
+                        contentType = { "dashboard-low-stock-row" }
+                    ) { product ->
+                        LowStockDashboardRow(product = product)
+                    }
                 }
             }
         }

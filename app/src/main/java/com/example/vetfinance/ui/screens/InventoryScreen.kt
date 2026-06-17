@@ -439,14 +439,7 @@ private fun InventoryAlertBanner(
 ) {
     val lowStockCount = lowStockProducts.size
     val visibleLowStockProducts = remember(lowStockProducts) {
-        lowStockProducts
-            .sortedWith(
-                compareBy<Product> { product ->
-                    val threshold = product.lowStockThreshold ?: 1.0
-                    if (threshold > 0) product.stock / threshold else product.stock
-                }.thenBy { it.name.lowercase(Locale.getDefault()) }
-            )
-            .take(8)
+        lowStockProducts.take(8)
     }
     Surface(
         modifier = Modifier
@@ -486,7 +479,9 @@ private fun InventoryAlertBanner(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.error.copy(alpha = 0.25f))
                     visibleLowStockProducts.forEach { product ->
-                        LowStockProductRow(product = product, onAdjustStock = onAdjustStock)
+                        key(product.productId) {
+                            LowStockProductRow(product = product, onAdjustStock = onAdjustStock)
+                        }
                     }
                     if (lowStockProducts.size > 8) {
                         Text(
@@ -940,7 +935,11 @@ fun StockMovementHistoryDialog(
                 Text("Todavia no hay movimientos de stock para este producto.")
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(movements, key = { it.movementId }) { movement ->
+                    items(
+                        items = movements,
+                        key = { it.movementId },
+                        contentType = { "stock-movement" }
+                    ) { movement ->
                         Column {
                             Text(stockMovementLabel(movement.movementType), fontWeight = FontWeight.Bold)
                             Text("${sdf.format(Date(movement.movementDate))} - Cambio: ${movement.quantityChange} - Stock: ${movement.stockAfter}")
@@ -1060,7 +1059,11 @@ fun CostHistoryDialog(
                 Text(stringResource(R.string.cost_history_empty))
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items(history) { item ->
+                    items(
+                        items = history,
+                        key = { historyItem -> "${historyItem.orderDate}-${historyItem.supplierName}-${historyItem.costAtTime}-${historyItem.quantity}" },
+                        contentType = { "cost-history" }
+                    ) { item ->
                         Column {
                             Text(item.supplierName ?: stringResource(R.string.label_no_supplier), fontWeight = FontWeight.Bold)
                             Text(stringResource(R.string.cost_history_item, sdf.format(Date(item.orderDate)), formatCurrency(item.costAtTime), item.quantity.toString()))

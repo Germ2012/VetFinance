@@ -43,26 +43,31 @@ data class CategoryProfitRow(
     val profit: Double
 )
 
+@Immutable
 data class FinancialSummaryRow(
     val salesTotal: Double,
     val grossProfit: Double
 )
 
+@Immutable
 data class StockHealthRow(
     val optimalCount: Int,
     val lowStockCount: Int
 )
 
+@Immutable
 data class CashClosingSalesRow(
     val salesCount: Int,
     val salesTotal: Double
 )
 
+@Immutable
 data class CashClosingDebtRow(
     val debtIncreases: Double,
     val debtAdjustments: Double
 )
 
+@Immutable
 data class GlobalSearchRow(
     val id: String,
     val type: String,
@@ -70,6 +75,7 @@ data class GlobalSearchRow(
     val subtitle: String
 )
 
+@Immutable
 data class DebtCollectionRow(
     @Embedded val client: Client,
     val totalSold: Double,
@@ -77,6 +83,7 @@ data class DebtCollectionRow(
     val balance: Double
 )
 
+@Immutable
 data class DebtCollectionSummary(
     val clientCount: Int,
     val totalPending: Double,

@@ -1,9 +1,11 @@
 package com.example.vetfinance.data
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Embedded
 import androidx.room.Junction
 import androidx.room.Relation
 
+@Immutable
 data class SaleWithProducts(
     @Embedded val sale: Sale,
     @Relation(
