@@ -25,21 +25,22 @@ import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.RestockOrderItem
 import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.data.Supplier
-import com.example.vetfinance.viewmodel.VetViewModel
+import com.example.vetfinance.viewmodel.RestockViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.util.*
 import kotlin.math.ceil
-import ui.utils.NumberTransformation
+import com.example.vetfinance.ui.utils.NumberTransformation
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddRestockScreen( // Renamed
-    viewModel: VetViewModel,
-    navController: NavController
+fun AddRestockScreen(
+    navController: NavController,
+    viewModel: RestockViewModel = hiltViewModel()
 ) {
     val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
     val allProducts by viewModel.inventory.collectAsStateWithLifecycle()

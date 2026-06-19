@@ -15,12 +15,10 @@ import androidx.compose.material.icons.filled.AddShoppingCart
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Inventory
-import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +35,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import com.example.vetfinance.R
 import com.example.vetfinance.data.CartItem
 import com.example.vetfinance.data.Client
@@ -46,33 +47,34 @@ import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
 import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
 import com.example.vetfinance.viewmodel.SaleUiEvent
 import com.example.vetfinance.viewmodel.SaleViewModel
-import com.example.vetfinance.viewmodel.VetViewModel
-import ui.utils.NumberTransformation
-import ui.utils.formatCurrency
+import com.example.vetfinance.ui.components.SkeletonLine
+import com.example.vetfinance.ui.utils.NumberTransformation
+import com.example.vetfinance.ui.utils.formatCurrency
 import java.util.Locale
 import android.widget.Toast
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddSaleScreen(
-    viewModel: VetViewModel,
     navController: NavHostController,
     saleViewModel: SaleViewModel = hiltViewModel()
 ) {
     val saleUiState by saleViewModel.uiState.collectAsStateWithLifecycle()
     val cart = saleUiState.cart
     val total = saleUiState.total
-    val showAddProductDialog by viewModel.showAddProductDialog.collectAsStateWithLifecycle()
-    val visibleInventory by viewModel.saleVisibleInventory.collectAsStateWithLifecycle()
-    val visibleStats by viewModel.saleInventoryStats.collectAsStateWithLifecycle()
-    val allProductsList by viewModel.inventory.collectAsStateWithLifecycle()
-    val frequentProducts by viewModel.frequentSaleProducts.collectAsStateWithLifecycle()
-    val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
-    val clients by viewModel.clients.collectAsStateWithLifecycle()
-    val searchQuery by viewModel.productSearchQuery.collectAsStateWithLifecycle()
-    val saleFilter by viewModel.saleInventoryFilter.collectAsStateWithLifecycle()
-    val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
-    val clientNameSuggestions by viewModel.clientNameSuggestions.collectAsStateWithLifecycle()
+    val showAddProductDialog by saleViewModel.showAddProductDialog.collectAsStateWithLifecycle()
+    val saleInventoryItems = saleViewModel.saleInventoryPaginated.collectAsLazyPagingItems()
+    LaunchedEffect(saleInventoryItems) {
+        saleViewModel.pagingRefreshEvents.collect {
+            saleInventoryItems.refresh()
+        }
+    }
+    val suppliers by saleViewModel.suppliers.collectAsStateWithLifecycle()
+    val clients by saleViewModel.clients.collectAsStateWithLifecycle()
+    val searchQuery by saleViewModel.productSearchQuery.collectAsStateWithLifecycle()
+    val saleFilter by saleViewModel.saleInventoryFilter.collectAsStateWithLifecycle()
+    val productNameSuggestions by saleViewModel.productNameSuggestions.collectAsStateWithLifecycle()
+    val clientNameSuggestions by saleViewModel.clientNameSuggestions.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
 
@@ -86,6 +88,12 @@ fun AddSaleScreen(
     val showDoseDialog = saleUiState.showDoseSaleDialog
     val productForDoseSale = saleUiState.productForDoseSale
     val saleTypeDialogProduct = saleUiState.saleTypeDialogProduct
+    val allProductsListState = if (showAddProductDialog || saleTypeDialogProduct != null) {
+        saleViewModel.inventory.collectAsStateWithLifecycle()
+    } else {
+        remember { mutableStateOf<List<Product>>(emptyList()) }
+    }
+    val allProductsList = allProductsListState.value
 
     LaunchedEffect(saleViewModel) {
         saleViewModel.events.collect { event ->
@@ -101,11 +109,11 @@ fun AddSaleScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            viewModel.clearProductSearchQuery()
-            viewModel.clearSaleInventoryFilter()
+            saleViewModel.clearProductSearchQuery()
+            saleViewModel.clearSaleInventoryFilter()
             saleViewModel.dismissFractionalSaleDialog()
             saleViewModel.dismissDoseSaleDialog()
-            viewModel.clearClientNameSuggestions()
+            saleViewModel.clearClientNameSuggestions()
         }
     }
 
@@ -170,13 +178,12 @@ fun AddSaleScreen(
         ProductDialog(
             product = null,
             allProducts = allProductsList,
-            onDismiss = { viewModel.onDismissAddProductDialog() },
+            onDismiss = { saleViewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
-                viewModel.insertOrUpdateProduct(newProduct)
-                viewModel.onDismissAddProductDialog()
+                saleViewModel.insertOrUpdateProduct(newProduct)
             },
             productNameSuggestions = productNameSuggestions,
-            onProductNameChange = { viewModel.onProductNameChange(it) },
+            onProductNameChange = { saleViewModel.onProductNameChange(it) },
             suppliers = suppliers
         )
     }
@@ -242,7 +249,7 @@ fun AddSaleScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { viewModel.onShowAddProductDialog() }) {
+                    IconButton(onClick = { saleViewModel.onShowAddProductDialog() }) {
                         Icon(Icons.Default.Add, contentDescription = stringResource(R.string.content_description_add_new_product))
                     }
                 }
@@ -274,7 +281,7 @@ fun AddSaleScreen(
                 onClientNameChange = {
                     saleClientName = it
                     selectedSaleClientId = null
-                    viewModel.onClientNameChange(it)
+                    saleViewModel.onClientNameChange(it)
                 }
             )
 
@@ -284,15 +291,15 @@ fun AddSaleScreen(
                     onClientSelected = { client ->
                         saleClientName = client.name
                         selectedSaleClientId = client.clientId
-                        viewModel.clearClientNameSuggestions()
+                        saleViewModel.clearClientNameSuggestions()
                     }
                 )
             }
 
             SaleSearchPanel(
                 searchQuery = searchQuery,
-                onSearchChange = { viewModel.onProductSearchQueryChange(it) },
-                onClearSearch = { viewModel.clearProductSearchQuery() }
+                onSearchChange = { saleViewModel.onProductSearchQueryChange(it) },
+                onClearSearch = { saleViewModel.clearProductSearchQuery() }
             )
 
             AnimatedVisibility(visible = cart.isNotEmpty()) {
@@ -312,68 +319,173 @@ fun AddSaleScreen(
             ) {
                 item {
                     SaleSelectorHeader(
-                        visibleCount = visibleInventory.size,
-                        productCount = visibleStats.productCount,
-                        serviceCount = visibleStats.serviceCount,
-                        doseCount = visibleStats.doseCount
+                        visibleCount = saleInventoryItems.itemCount,
+                        filter = saleFilter
                     )
                 }
                 item {
                     SaleProductFilterRow(
                         selectedFilter = saleFilter,
-                        onFilterSelected = { viewModel.onSaleInventoryFilterSelected(it) }
+                        onFilterSelected = { saleViewModel.onSaleInventoryFilterSelected(it) }
                     )
                 }
-                if (frequentProducts.isNotEmpty() && saleFilter == "Todos" && searchQuery.isBlank()) {
-                    item {
-                        SaleInlineBanner(
-                            icon = Icons.Default.PointOfSale,
-                            title = "Frecuentes primero",
-                            body = "Ordenados segun lo que mas vendes para cargar mas rapido."
-                        )
+                if (saleInventoryItems.loadState.refresh is LoadState.Loading) {
+                    items(8, contentType = { "sale-product-placeholder" }) {
+                        SaleProductPlaceholder()
                     }
-                }
-                if (visibleInventory.isEmpty()) {
+                } else if (saleInventoryItems.itemCount == 0) {
                     item {
                         SaleEmptyProductState(
                             searchQuery = searchQuery,
-                            onAddProduct = { viewModel.onShowAddProductDialog() }
+                            onAddProduct = { saleViewModel.onShowAddProductDialog() }
                         )
                     }
                 } else {
                     items(
-                        items = visibleInventory,
-                        key = { it.productId },
-                        contentType = { product ->
-                            when {
-                                product.isService -> "service"
-                                product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> "dose"
-                                else -> "product"
+                        count = saleInventoryItems.itemCount,
+                        key = saleInventoryItems.itemKey { it.productId },
+                        contentType = { index ->
+                            saleInventoryItems[index]?.let { product ->
+                                when {
+                                    product.isService -> "service"
+                                    product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> "dose"
+                                    else -> "product"
+                                }
+                            } ?: "placeholder"
+                        }
+                    ) { index ->
+                        val product = saleInventoryItems[index]
+                        if (product == null) {
+                            SaleProductPlaceholder()
+                        } else {
+                            Column {
+                                SaleProductCompactRow(
+                                    product = product,
+                                    quantityInCart = cartQuantityByProductId[product.productId] ?: 0.0,
+                                    onAdd = {
+                                        when {
+                                            product.isContainer -> saleViewModel.openSaleTypeDialog(product)
+                                            product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> saleViewModel.openFractionalSaleDialog(product)
+                                            product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> saleViewModel.openDoseSaleDialog(product)
+                                            else -> saleViewModel.addToCart(product)
+                                        }
+                                    },
+                                    onRemove = {
+                                        val itemToRemove = lastCartItemByProductId[product.productId]
+                                        if (itemToRemove != null) {
+                                            saleViewModel.removeFromCart(itemToRemove)
+                                        }
+                                    }
+                                )
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                             }
                         }
-                    ) { product ->
-                        ProductSelectionItem(
-                            product = product,
-                            quantityInCart = cartQuantityByProductId[product.productId] ?: 0.0,
-                            onAdd = {
-                                when {
-                                    product.isContainer -> saleViewModel.openSaleTypeDialog(product)
-                                    product.sellingMethod == SELLING_METHOD_BY_WEIGHT_OR_AMOUNT -> saleViewModel.openFractionalSaleDialog(product)
-                                    product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> saleViewModel.openDoseSaleDialog(product)
-                                    else -> saleViewModel.addToCart(product)
-                                }
-                            },
-                            onRemove = {
-                                val itemToRemove = lastCartItemByProductId[product.productId]
-                                if (itemToRemove != null) {
-                                    saleViewModel.removeFromCart(itemToRemove)
-                                }
-                            }
-                        )
+                    }
+                    if (saleInventoryItems.loadState.append is LoadState.Loading) {
+                        item(contentType = "sale-product-placeholder") {
+                            SaleProductPlaceholder()
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SaleProductCompactRow(
+    product: Product,
+    quantityInCart: Double,
+    onAdd: () -> Unit,
+    onRemove: () -> Unit
+) {
+    val isInCart = quantityInCart > 0.0
+    val typeText = when {
+        product.isService -> "Servicio"
+        product.sellingMethod == SELLING_METHOD_DOSE_ONLY -> "Dosis"
+        else -> "Producto"
+    }
+    val unit = product.unitMeasure?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
+    val stockText = if (product.isService || product.sellingMethod == SELLING_METHOD_DOSE_ONLY) {
+        typeText
+    } else {
+        "Stock ${formatCurrency(product.stock).replace(",00", "")}$unit"
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 76.dp)
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                product.name,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                listOfNotNull(typeText, product.category?.takeIf { it.isNotBlank() }).joinToString(" | "),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                "Gs. ${formatCurrency(product.price)} | $stockText",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            IconButton(
+                onClick = onRemove,
+                enabled = isInCart,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.product_selection_remove_content_description))
+            }
+            Text(
+                text = if (isInCart) formatCompactQuantity(quantityInCart) else "0",
+                modifier = Modifier.widthIn(min = 28.dp),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1
+            )
+            FilledIconButton(
+                onClick = onAdd,
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.product_selection_add_content_description))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SaleProductPlaceholder() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 76.dp)
+            .padding(vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SkeletonLine(modifier = Modifier.fillMaxWidth(0.58f), height = 10.dp)
+        SkeletonLine(modifier = Modifier.fillMaxWidth(0.38f), height = 8.dp)
+        SkeletonLine(modifier = Modifier.fillMaxWidth(0.46f), height = 8.dp)
     }
 }
 
@@ -586,9 +698,7 @@ private fun SaleCartPanel(
 @Composable
 private fun SaleSelectorHeader(
     visibleCount: Int,
-    productCount: Int,
-    serviceCount: Int,
-    doseCount: Int
+    filter: String
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
@@ -598,68 +708,9 @@ private fun SaleSelectorHeader(
         ) {
             Column {
                 Text("Seleccionar producto o servicio", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("$visibleCount opciones disponibles", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("$visibleCount resultados cargados | Vista: $filter", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.Default.Inventory, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            SaleMiniMetric("Productos", productCount.toString(), Icons.Default.Inventory, Modifier.weight(1f))
-            SaleMiniMetric("Servicios", serviceCount.toString(), Icons.Default.MedicalServices, Modifier.weight(1f))
-            SaleMiniMetric("Dosis", doseCount.toString(), Icons.Default.WarningAmber, Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun SaleMiniMetric(
-    label: String,
-    value: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier
-) {
-    Surface(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
-    ) {
-        Row(
-            modifier = Modifier.padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-            Column {
-                Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-}
-
-@Composable
-private fun SaleInlineBanner(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
-    body: String
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.secondaryContainer
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
-            Column {
-                Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                Text(body, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
-            }
         }
     }
 }

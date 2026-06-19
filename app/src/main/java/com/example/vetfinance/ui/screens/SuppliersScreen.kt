@@ -17,13 +17,14 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Supplier
-import com.example.vetfinance.viewmodel.VetViewModel
+import com.example.vetfinance.viewmodel.SuppliersViewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SuppliersScreen(
-    viewModel: VetViewModel,
-    navController: NavController
+    navController: NavController,
+    viewModel: SuppliersViewModel = hiltViewModel()
 ) {
     val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
     val showSupplierDialog by viewModel.showSupplierDialog.collectAsStateWithLifecycle()
@@ -42,7 +43,7 @@ fun SuppliersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.screen_title_suppliers)) }, 
+                title = { Text(stringResource(R.string.screen_title_suppliers)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.content_description_back))
@@ -66,7 +67,7 @@ fun SuppliersScreen(
             if (suppliers.isEmpty()) {
                 item {
                     Text(
-                        text = stringResource(R.string.suppliers_empty_list), 
+                        text = stringResource(R.string.suppliers_empty_list),
                         modifier = Modifier.fillMaxWidth().padding(16.dp)
                     )
                 }
@@ -98,13 +99,13 @@ fun SupplierListItem(
         ) {
             Text(text = supplier.name, style = MaterialTheme.typography.titleMedium)
             supplier.contactPerson?.takeIf { it.isNotBlank() }?.let {
-                Text(text = stringResource(R.string.supplier_contact_person_label, it), style = MaterialTheme.typography.bodyMedium) 
+                Text(text = stringResource(R.string.supplier_contact_person_label, it), style = MaterialTheme.typography.bodyMedium)
             }
             supplier.phone?.takeIf { it.isNotBlank() }?.let {
-                Text(text = stringResource(R.string.supplier_phone_label, it), style = MaterialTheme.typography.bodyMedium) 
+                Text(text = stringResource(R.string.supplier_phone_label, it), style = MaterialTheme.typography.bodyMedium)
             }
             supplier.email?.takeIf { it.isNotBlank() }?.let {
-                Text(text = stringResource(R.string.supplier_email_label, it), style = MaterialTheme.typography.bodyMedium) 
+                Text(text = stringResource(R.string.supplier_email_label, it), style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

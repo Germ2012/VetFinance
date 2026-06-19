@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
-    id("androidx.room") // Added Room Gradle plugin
+    id("androidx.room")
 }
 
 android {
@@ -58,24 +58,21 @@ android {
     }
 }
 
-// Added Room schema location configuration
 room {
     schemaDirectory("$projectDir/schemas")
 }
 
 dependencies {
-    // ---- Core y Lifecycle KTX ----
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.runtime.compose) // <-- AÑADIDO
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.activity)
     implementation(libs.androidx.constraintlayout)
 
-    // ---- Jetpack Compose ----
     val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
     androidTestImplementation(composeBom)
@@ -84,45 +81,31 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
-    // ---- Hilt (Inyección de Dependencias) ----
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
     implementation(libs.hilt.navigation.compose)
     implementation(libs.hilt.work)
     ksp(libs.hilt.compiler.work)
 
-    // ---- Navigation y Componentes de UI ----
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.coil.compose)
 
-    // ---- Room (Base de Datos Local) ----
     implementation(libs.room.runtime)
     ksp(libs.room.compiler)
     implementation(libs.room.ktx)
     implementation(libs.room.paging)
 
-    // ---- Paging (Paginación de datos) ----
     implementation(libs.androidx.paging.runtime)
     implementation(libs.androidx.paging.compose)
 
-    // ---- Gráficos ----
     implementation(libs.ycharts)
-
-    // ---- Calendario ----
     implementation(libs.calendar.compose)
-
-    // ---- WorkManager ----
     implementation(libs.work.manager.ktx)
-
-    // ---- CSV ----
     implementation("org.apache.commons:commons-csv:1.11.0")
-
-    // ---- Desugaring ----
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 
-    // ---- Testing ----
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)

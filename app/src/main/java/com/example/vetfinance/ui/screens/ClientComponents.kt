@@ -15,8 +15,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
-import ui.utils.NumberTransformation
-import ui.utils.formatCurrency
+import com.example.vetfinance.ui.utils.NumberTransformation
+import com.example.vetfinance.ui.utils.formatCurrency
 
 @Composable
 fun ClientItem(client: Client, onPayClick: () -> Unit, onItemClick: () -> Unit) {
@@ -67,7 +67,7 @@ fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> 
         confirmButton = {
             Button(
                 onClick = {
-                    // CORRECCIÓN APLICADA: No se necesita .replace(".", "")
+
                     val paymentAmount = amount.toDoubleOrNull() ?: 0.0
                     if (paymentAmount > 0) {
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)

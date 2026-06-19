@@ -26,7 +26,7 @@ fun SupplierDialog(
     var email by remember(supplier) { mutableStateOf(supplier?.email ?: "") }
 
     var nameError by remember { mutableStateOf<String?>(null) }
-    // Solución: Obtener el string aquí, fuera del onClick
+
     val nameRequiredError = stringResource(R.string.error_supplier_name_required)
 
     Dialog(onDismissRequest = onDismiss) {

@@ -2,9 +2,10 @@ package com.example.vetfinance
 
 import android.content.Context
 import androidx.room.Room
+import androidx.room.RoomDatabase
 import com.example.vetfinance.data.AppDatabase
 import com.example.vetfinance.data.AppointmentDao
-import com.example.vetfinance.data.AppointmentLogDao // Importación añadida
+import com.example.vetfinance.data.AppointmentLogDao
 import com.example.vetfinance.data.ClientDao
 import com.example.vetfinance.data.ClientDebtHistoryDao
 import com.example.vetfinance.data.PaymentDao
@@ -38,6 +39,8 @@ object AppModule {
             AppDatabase::class.java,
             "vet_database"
         )
+            .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
+            .addCallback(AppDatabase.SEARCH_INDEX_CALLBACK)
             .addMigrations(
                 AppDatabase.MIGRATION_19_20,
                 AppDatabase.MIGRATION_20_21,
@@ -52,7 +55,7 @@ object AppModule {
             .build()
     }
 
-    // --- DAO Providers ---
+
     @Provides
     fun provideProductDao(db: AppDatabase): ProductDao = db.productDao()
 
@@ -86,7 +89,7 @@ object AppModule {
     @Provides
     fun provideRestockDao(db: AppDatabase): RestockDao = db.restockDao()
 
-    // DAO Provider añadido del segundo código
+
     @Provides
     fun provideAppointmentLogDao(db: AppDatabase): AppointmentLogDao = db.appointmentLogDao()
 
@@ -100,7 +103,6 @@ object AppModule {
     fun provideStockMovementDao(db: AppDatabase): StockMovementDao = db.stockMovementDao()
 
 
-    // --- Repository Provider (Actualizado) ---
     @Provides
     @Singleton
     fun provideRepository(
@@ -119,7 +121,7 @@ object AppModule {
         clientDebtHistoryDao: ClientDebtHistoryDao,
         supplierDebtDao: SupplierDebtDao,
         stockMovementDao: StockMovementDao,
-        appointmentLogDao: AppointmentLogDao, // Parámetro añadido
+        appointmentLogDao: AppointmentLogDao,
         @ApplicationContext context: Context
     ): VetRepository {
         return VetRepository(
@@ -138,7 +140,7 @@ object AppModule {
             clientDebtHistoryDao,
             supplierDebtDao,
             stockMovementDao,
-            appointmentLogDao, // Argumento añadido
+            appointmentLogDao,
             context
         )
     }

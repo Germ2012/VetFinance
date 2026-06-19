@@ -38,7 +38,7 @@ fun AddAppointmentDialog(
     var clientMenuExpanded by remember { mutableStateOf(false) }
     var petMenuExpanded by remember { mutableStateOf(false) }
 
-    // Filtra la lista de mascotas basándose en el cliente seleccionado
+
     val petsOfSelectedClient = remember(selectedClient) {
         petsWithOwners.filter { it.owner.clientId == selectedClient?.clientId }
     }
@@ -48,7 +48,7 @@ fun AddAppointmentDialog(
         title = { Text(stringResource(R.string.add_appointment_dialog_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                // Menú desplegable para Clientes
+
                 ExposedDropdownMenuBox(
                     expanded = clientMenuExpanded,
                     onExpandedChange = { clientMenuExpanded = !clientMenuExpanded }
@@ -70,7 +70,7 @@ fun AddAppointmentDialog(
                                 text = { Text(client.name) },
                                 onClick = {
                                     selectedClient = client
-                                    selectedPet = null // Resetea la mascota al cambiar de dueño
+                                    selectedPet = null
                                     clientMenuExpanded = false
                                 }
                             )
@@ -78,7 +78,7 @@ fun AddAppointmentDialog(
                     }
                 }
 
-                // Menú desplegable para Mascotas (habilitado solo si se ha seleccionado un cliente)
+
                 ExposedDropdownMenuBox(
                     expanded = petMenuExpanded,
                     onExpandedChange = { if (selectedClient != null) petMenuExpanded = !petMenuExpanded }
@@ -108,7 +108,7 @@ fun AddAppointmentDialog(
                     }
                 }
 
-                // Campo de texto para la descripción
+
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },

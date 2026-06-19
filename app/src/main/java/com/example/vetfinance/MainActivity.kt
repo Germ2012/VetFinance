@@ -1,4 +1,3 @@
-
 package com.example.vetfinance
 
 
@@ -23,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -32,13 +30,11 @@ import androidx.navigation.compose.rememberNavController
 import com.example.vetfinance.navigation.AppNavigation
 import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.ui.theme.VetFinanceTheme
-import com.example.vetfinance.viewmodel.VetViewModel
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    // --- Inicio del código de permisos ---
 
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -50,15 +46,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // 2. Función que verifica y solicita el permiso si es necesario.
+
     private fun askNotificationPermission() {
-        // Esta comprobación solo es necesaria para Android 13 (API nivel 33) y superior.
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Se comprueba si el permiso ya ha sido concedido.
+
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
                 PackageManager.PERMISSION_GRANTED
             ) {
-                // Si no está concedido, se lanza el diálogo de solicitud de permiso.
+
                 requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
         }
@@ -67,11 +63,11 @@ class MainActivity : ComponentActivity() {
         installSplashScreen()
         super.onCreate(savedInstanceState)
 
-        // 3. Se llama a la función para pedir el permiso justo al crear la actividad.
+
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides this) {
                 VetFinanceTheme {
-                    MainScreen(viewModel = hiltViewModel<VetViewModel>())
+                    MainScreen()
                 }
             }
         }
@@ -82,7 +78,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: VetViewModel) {
+fun MainScreen() {
     val navController = rememberNavController()
     val navItems = remember {
         listOf(
@@ -159,7 +155,7 @@ fun MainScreen(viewModel: VetViewModel) {
         }
     ) { innerPadding ->
         Box(modifier = Modifier.padding(innerPadding)) {
-            AppNavigation(navController = navController, viewModel = viewModel)
-        }
+        AppNavigation(navController = navController)
     }
+}
 }

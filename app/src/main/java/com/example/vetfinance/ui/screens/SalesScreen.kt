@@ -1,6 +1,10 @@
 package com.example.vetfinance.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -12,6 +16,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -20,34 +25,47 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.vetfinance.R
-import com.example.vetfinance.data.Product
-import com.example.vetfinance.data.SaleProductCrossRef
-import com.example.vetfinance.data.SaleWithProducts
+import com.example.vetfinance.data.SaleDetailLine
+import com.example.vetfinance.data.SaleListItem
 import com.example.vetfinance.navigation.Screen
-import com.example.vetfinance.viewmodel.VetViewModel
-import ui.utils.formatCurrency
+import com.example.vetfinance.viewmodel.SalesHistoryViewModel
+import com.example.vetfinance.ui.components.HighVolumeModeToggle
+import com.example.vetfinance.ui.utils.formatCurrency
 import java.text.SimpleDateFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.util.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
-    val filteredSales by viewModel.filteredSales.collectAsStateWithLifecycle()
+fun SalesScreen(
+    navController: NavController,
+    viewModel: SalesHistoryViewModel = hiltViewModel()
+) {
+    val sales = viewModel.salesPaginated.collectAsLazyPagingItems()
+    LaunchedEffect(sales) {
+        viewModel.pagingRefreshEvents.collect {
+            sales.refresh()
+        }
+    }
+    val salesSummary by viewModel.salesListSummary.collectAsStateWithLifecycle()
     val selectedDate by viewModel.selectedSaleDateFilter.collectAsStateWithLifecycle()
-    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val appSettings by viewModel.appSettings.collectAsStateWithLifecycle()
-    val visibleSalesTotal = remember(filteredSales) { filteredSales.sumOf { it.sale.totalAmount } }
 
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
-    var saleToDelete by remember { mutableStateOf<SaleWithProducts?>(null) }
-    var secureSaleToDelete by remember { mutableStateOf<SaleWithProducts?>(null) }
+    var saleToDelete by remember { mutableStateOf<SaleListItem?>(null) }
+    var secureSaleToDelete by remember { mutableStateOf<SaleListItem?>(null) }
+    var selectedSale by remember { mutableStateOf<SaleListItem?>(null) }
+    var highVolumeMode by rememberSaveable { mutableStateOf(true) }
 
-    // --- DIÁLOGOS ---
+
     if (saleToDelete != null) {
         AlertDialog(
             onDismissRequest = { saleToDelete = null },
@@ -80,6 +98,20 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
         )
     }
 
+    selectedSale?.let { sale ->
+        val detailFlow = remember(sale.saleId) { viewModel.getSaleDetailLines(sale.saleId) }
+        val details by detailFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+        SaleDetailSheet(
+            sale = sale,
+            details = details,
+            onDismiss = { selectedSale = null },
+            onDelete = {
+                saleToDelete = sale
+                selectedSale = null
+            }
+        )
+    }
+
     if (showDatePicker) {
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
@@ -88,10 +120,10 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                     onClick = {
                         val selectedMillis = datePickerState.selectedDateMillis
                         if (selectedMillis != null) {
-                            // Convertir el millis UTC a una fecha local (LocalDate)
+
                             val localDate = Instant.ofEpochMilli(selectedMillis)
                                 .atZone(ZoneId.of("UTC")).toLocalDate()
-                            // Convertir esa fecha local al inicio del día en la zona horaria del dispositivo
+
                             val startOfDayMillis = localDate.atStartOfDay(ZoneId.systemDefault())
                                 .toInstant().toEpochMilli()
 
@@ -112,7 +144,6 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
     }
 
 
-    // --- PANTALLA PRINCIPAL ---
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = { navController.navigate(Screen.AddSale.route) }) {
@@ -121,7 +152,7 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
         }
     ) { paddingValues ->
         Column(modifier = Modifier.padding(paddingValues).padding(16.dp)) {
-            // --- BARRA DE FILTRO ---
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -151,18 +182,28 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
             }
             Spacer(modifier = Modifier.height(12.dp))
             SalesSummaryStrip(
-                saleCount = filteredSales.size,
-                totalAmount = visibleSalesTotal,
+                saleCount = salesSummary.salesCount,
+                totalAmount = salesSummary.salesTotal,
                 selectedDate = selectedDate
             )
             Spacer(modifier = Modifier.height(12.dp))
+            HighVolumeModeToggle(
+                enabled = highVolumeMode,
+                onEnabledChange = { highVolumeMode = it }
+            )
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // --- LISTA DE VENTAS ---
-            if (isLoading && filteredSales.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+
+            if (sales.loadState.refresh is LoadState.Loading) {
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(if (highVolumeMode) 0.dp else 8.dp),
+                    contentPadding = PaddingValues(bottom = 96.dp)
+                ) {
+                    items(8, contentType = { "sale-placeholder" }) {
+                        SaleListPlaceholder(highVolumeMode = highVolumeMode)
+                    }
                 }
-            } else if (filteredSales.isEmpty()) {
+            } else if (sales.itemCount == 0) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     val message = if (selectedDate != null) stringResource(R.string.no_sales_for_date)
                     else stringResource(R.string.no_sales_recorded)
@@ -172,15 +213,45 @@ fun SalesScreen(viewModel: VetViewModel, navController: NavController) {
                     )
                 }
             } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 96.dp)
-                ) {
-                    items(filteredSales, key = { it.sale.saleId }) { sale ->
-                        SaleItem(
-                            saleWithProducts = sale,
-                            onDelete = { saleToDelete = sale }
-                        )
+                CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
+                        contentPadding = PaddingValues(bottom = 96.dp)
+                    ) {
+                        items(
+                            count = sales.itemCount,
+                            key = sales.itemKey { it.saleId },
+                            contentType = { if (highVolumeMode) "sale-row-dense" else "sale-row" }
+                        ) { index ->
+                            val sale = sales[index]
+                            if (sale != null) {
+                                if (highVolumeMode) {
+                                    SaleListRow(
+                                        sale = sale,
+                                        highVolumeMode = true,
+                                        onOpen = { selectedSale = sale },
+                                        onDelete = { saleToDelete = sale }
+                                    )
+                                } else {
+                                    Column {
+                                        SaleListRow(
+                                            sale = sale,
+                                            highVolumeMode = false,
+                                            onOpen = { selectedSale = sale },
+                                            onDelete = { saleToDelete = sale }
+                                        )
+                                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                                    }
+                                }
+                            } else {
+                                SaleListPlaceholder(highVolumeMode = highVolumeMode)
+                            }
+                        }
+                        if (sales.loadState.append is LoadState.Loading) {
+                            item(contentType = "sale-placeholder") {
+                                SaleListPlaceholder(highVolumeMode = highVolumeMode)
+                            }
+                        }
                     }
                 }
             }
@@ -195,7 +266,7 @@ private fun SalesSummaryStrip(
     selectedDate: Long?
 ) {
     val periodText = if (selectedDate == null) {
-        "Todas las ventas visibles"
+        "Ultimos 30 dias"
     } else {
         val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
         "Ventas del ${sdf.format(Date(selectedDate))}"
@@ -272,68 +343,145 @@ private fun SalesEmptyState(
 }
 
 @Composable
-fun SaleItem(
-    saleWithProducts: SaleWithProducts,
+private fun SaleListRow(
+    sale: SaleListItem,
+    highVolumeMode: Boolean,
+    onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-        elevation = CardDefaults.cardElevation(1.dp)
+    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()) }
+    val dateText = remember(sale.date) { dateFormat.format(Date(sale.date)) }
+    val clientText = sale.clientName ?: "Cliente general"
+    val totalText = remember(sale.totalAmount) { "Gs. ${formatCurrency(sale.totalAmount)}" }
+    val rowInteractionSource = remember { MutableInteractionSource() }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (highVolumeMode) 52.dp else 76.dp)
+            .clickable(
+                interactionSource = rowInteractionSource,
+                indication = null,
+                onClick = onOpen
+            )
+            .padding(vertical = if (highVolumeMode) 6.dp else 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // --- ENCABEZADO DE LA TARJETA ---
+        if (!highVolumeMode) {
+            Icon(
+                Icons.AutoMirrored.Filled.ReceiptLong,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(if (highVolumeMode) 1.dp else 3.dp)
+        ) {
+            Text(
+                if (highVolumeMode) clientText else dateText,
+                style = if (highVolumeMode) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                if (highVolumeMode) "$dateText | ${sale.itemCount} items" else clientText,
+                style = if (highVolumeMode) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!highVolumeMode) {
+                Text(
+                    "${sale.itemCount} items",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Text(
+            text = totalText,
+            style = if (highVolumeMode) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1
+        )
+        if (!highVolumeMode) {
+            IconButton(onClick = onDelete) {
+                Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.content_description_delete_sale))
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SaleDetailSheet(
+    sale: SaleListItem,
+    details: List<SaleDetailLine>,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()) }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ReceiptLong,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(22.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text("Detalle de venta", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(
-                        text = dateFormat.format(Date(saleWithProducts.sale.date)),
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold
+                        dateFormat.format(Date(sale.date)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        sale.clientName ?: "Cliente general",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.content_description_delete_sale))
                 }
             }
-            Spacer(modifier = Modifier.height(8.dp))
             HorizontalDivider()
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // --- DETALLES DE PRODUCTOS/SERVICIOS ---
-            if (saleWithProducts.crossRefs.isEmpty()) {
+            if (details.isEmpty()) {
                 Text(
                     text = stringResource(R.string.no_details_available),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     fontStyle = FontStyle.Italic
                 )
             } else {
-                saleWithProducts.crossRefs.forEach { detail ->
-                    val product = saleWithProducts.products.find { it.productId == detail.productId }
-                    if (product != null) {
-                        SaleDetailItem(saleDetail = detail, product = product)
+                LazyColumn(
+                    modifier = Modifier.heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(
+                        items = details,
+                        key = { it.crossRefId },
+                        contentType = { "sale-detail-line" }
+                    ) { detail ->
+                        SaleDetailRow(detail = detail)
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // --- TOTAL DE LA VENTA ---
             Text(
-                text = stringResource(R.string.sale_item_total_prefix, formatCurrency(saleWithProducts.sale.totalAmount)),
-                style = MaterialTheme.typography.titleMedium,
+                text = stringResource(R.string.sale_item_total_prefix, formatCurrency(sale.totalAmount)),
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.align(Alignment.End)
             )
@@ -342,9 +490,8 @@ fun SaleItem(
 }
 
 @Composable
-fun SaleDetailItem(saleDetail: SaleProductCrossRef, product: Product) {
-    val isDoseSale = saleDetail.overridePrice != null
-
+private fun SaleDetailRow(detail: SaleDetailLine) {
+    val isDoseSale = detail.overridePrice != null
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -353,35 +500,69 @@ fun SaleDetailItem(saleDetail: SaleProductCrossRef, product: Product) {
         verticalAlignment = Alignment.Top
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(product.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                detail.productName ?: "Producto eliminado",
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium
+            )
 
-            // Lógica para mostrar las notas de cada ítem (servicio/dosis)
-            if (isDoseSale && !saleDetail.notes.isNullOrBlank()) {
+
+            if (isDoseSale && !detail.notes.isNullOrBlank()) {
                 Text(
-                    text = "\"${saleDetail.notes}\"",
+                    text = "\"${detail.notes}\"",
                     style = MaterialTheme.typography.bodySmall,
                     fontStyle = FontStyle.Italic
                 )
             }
 
-            // Muestra la cantidad si no es una venta por dosis con precio manual
+
             if (!isDoseSale) {
                 Text(
                     text = stringResource(
                         R.string.sale_detail_item_quantity_prefix,
-                        formatCurrency(saleDetail.quantitySold).removeSuffix(".00").removeSuffix(",00")
+                        formatCurrency(detail.quantitySold).removeSuffix(".00").removeSuffix(",00")
                     ),
                     style = MaterialTheme.typography.bodySmall
                 )
             }
         }
 
-        val priceToShow = saleDetail.overridePrice ?: (saleDetail.priceAtTimeOfSale * saleDetail.quantitySold)
+        val priceToShow = detail.overridePrice ?: (detail.priceAtTimeOfSale * detail.quantitySold)
         Text(
             text = formatCurrency(priceToShow),
             fontWeight = FontWeight.Medium,
             modifier = Modifier.padding(start = 8.dp),
             style = MaterialTheme.typography.bodyMedium
         )
+    }
+}
+
+@Composable
+private fun SaleListPlaceholder(highVolumeMode: Boolean = false) {
+    if (highVolumeMode) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(52.dp)
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text("Cargando venta...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("Cargando venta...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }

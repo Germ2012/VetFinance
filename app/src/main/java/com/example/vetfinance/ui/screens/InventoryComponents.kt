@@ -34,9 +34,9 @@ import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
 import com.example.vetfinance.data.SELLING_METHOD_BY_WEIGHT_OR_AMOUNT
 import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
-import com.example.vetfinance.data.Supplier // Added import
-import ui.utils.NumberTransformation
-import ui.utils.formatCurrency
+import com.example.vetfinance.data.Supplier
+import com.example.vetfinance.ui.utils.NumberTransformation
+import com.example.vetfinance.ui.utils.formatCurrency
 import java.util.Locale
 import android.util.Log
 
@@ -64,7 +64,7 @@ fun ProductDialog(
     var unitMeasure by remember(product) { mutableStateOf(product?.unitMeasure ?: "") }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
 
-    // Estados para la funcionalidad de contenedor
+
     var isContainer by remember(product) { mutableStateOf(product?.isContainer ?: false) }
     var containerSize by remember(product) { mutableStateOf(product?.containerSize?.toString() ?: "") }
     var selectedContainedProductId by remember(product) { mutableStateOf(product?.containedProductId) }
@@ -272,10 +272,10 @@ fun ProductDialog(
                     modifier = Modifier.padding(top = 8.dp)
                 ) {
                     OutlinedTextField(
-                        value = selectedSupplier?.name ?: stringResource(R.string.label_select_supplier_optional), 
+                        value = selectedSupplier?.name ?: stringResource(R.string.label_select_supplier_optional),
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text(stringResource(R.string.label_supplier)) }, 
+                        label = { Text(stringResource(R.string.label_supplier)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = supplierDropdownExpanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
@@ -283,9 +283,9 @@ fun ProductDialog(
                         expanded = supplierDropdownExpanded,
                         onDismissRequest = { supplierDropdownExpanded = false }
                     ) {
-                        // Option for no supplier
+
                         DropdownMenuItem(
-                            text = { Text(stringResource(R.string.label_no_supplier)) }, 
+                            text = { Text(stringResource(R.string.label_no_supplier)) },
                             onClick = {
                                 selectedSupplierId = null
                                 supplierDropdownExpanded = false
@@ -370,7 +370,7 @@ fun ProductDialog(
                         isContainer = isContainer,
                         containerSize = if (isContainer) containerSize.toDoubleOrNull() else null,
                         containedProductId = if (isContainer) selectedContainedProductId else null,
-                        supplierIdFk = selectedSupplierId, // Save selected supplier ID
+                        supplierIdFk = selectedSupplierId,
                         category = category.ifBlank { null },
                         unitMeasure = unitMeasure.ifBlank { null }
                     )

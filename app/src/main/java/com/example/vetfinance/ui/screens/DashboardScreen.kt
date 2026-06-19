@@ -71,6 +71,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -87,6 +88,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
@@ -101,7 +103,7 @@ import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.domain.model.GlobalSearchResult
 import com.example.vetfinance.ui.components.SkeletonLine
 import com.example.vetfinance.ui.theme.Elevation
-import com.example.vetfinance.viewmodel.VetViewModel
+import com.example.vetfinance.viewmodel.DashboardViewModel
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -109,22 +111,26 @@ import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import ui.utils.formatCurrency
+import com.example.vetfinance.ui.utils.formatCurrency
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
+fun DashboardScreen(
+    navController: NavController,
+    viewModel: DashboardViewModel = hiltViewModel()
+) {
     val salesToday by viewModel.salesSummaryToday.collectAsStateWithLifecycle()
     val upcomingTreatments by viewModel.upcomingTreatments.collectAsStateWithLifecycle()
     val upcomingAppointments by viewModel.upcomingAppointments.collectAsStateWithLifecycle()
     val upcomingSupplierDebts by viewModel.upcomingSupplierDebts.collectAsStateWithLifecycle()
     val petsWithOwners by viewModel.petsWithOwners.collectAsStateWithLifecycle()
-    val inventory by viewModel.inventory.collectAsStateWithLifecycle()
+    val services by viewModel.services.collectAsStateWithLifecycle()
     val suppliers by viewModel.suppliers.collectAsStateWithLifecycle()
     val lowStockProducts by viewModel.lowStockProductsByName.collectAsStateWithLifecycle()
-    val pendingCollectionRows by viewModel.pendingCollectionRows.collectAsStateWithLifecycle()
+    val pendingCollectionPreviewRows by viewModel.pendingCollectionPreviewRows.collectAsStateWithLifecycle()
+    val pendingCollectionSummary by viewModel.pendingCollectionSummary.collectAsStateWithLifecycle()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
     val globalSearchQuery by viewModel.globalSearchQuery.collectAsStateWithLifecycle()
     val globalSearchResults by viewModel.globalSearchResults.collectAsStateWithLifecycle()
@@ -138,14 +144,17 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var treatmentForNextDialog by remember { mutableStateOf<Treatment?>(null) }
+    LaunchedEffect(Unit) {
+        viewModel.refreshAppSettings()
+    }
     val sortedLowStockProducts = remember(lowStockProducts, isLoading) {
         if (isLoading) emptyList() else lowStockProducts
     }
-    val pendingCollectionPreviewRows = remember(pendingCollectionRows, isLoading) {
-        if (isLoading) emptyList() else pendingCollectionRows.sortedByDescending { it.balance }.take(3)
+    val visiblePendingCollectionRows = remember(pendingCollectionPreviewRows, isLoading) {
+        if (isLoading) emptyList() else pendingCollectionPreviewRows
     }
-    val totalPendingCollection = remember(pendingCollectionRows, isLoading) {
-        if (isLoading) 0.0 else pendingCollectionRows.sumOf { it.balance }
+    val totalPendingCollection = remember(pendingCollectionSummary, isLoading) {
+        if (isLoading) 0.0 else pendingCollectionSummary.totalPending
     }
     val pngExportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
         uri?.let {
@@ -171,7 +180,12 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
             }
         }
     }
-    val services = remember(inventory) { inventory.filter { it.isService } }
+    val dialogProductsState = if (showAddProductDialog) {
+        viewModel.inventory.collectAsStateWithLifecycle()
+    } else {
+        remember { mutableStateOf<List<Product>>(emptyList()) }
+    }
+    val dialogProducts = dialogProductsState.value
     val petForDialog = remember(treatmentForNextDialog, petsWithOwners) {
         treatmentForNextDialog?.let { treatment ->
             petsWithOwners.find { it.pet.petId == treatment.petIdFk }
@@ -182,13 +196,13 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
         upcomingAppointments,
         upcomingSupplierDebts,
         upcomingTreatments,
-        pendingCollectionRows
+        pendingCollectionSummary
     ) {
         lowStockProducts.size +
             upcomingAppointments.size +
             upcomingSupplierDebts.size +
             upcomingTreatments.size +
-            pendingCollectionRows.size
+            pendingCollectionSummary.clientCount
     }
     val defaultClinicName = stringResource(R.string.dashboard_summary_of_the_day)
     val clinicName = remember(appSettings.clinicName, defaultClinicName) {
@@ -222,7 +236,7 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
-            allProducts = inventory,
+            allProducts = dialogProducts,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct -> viewModel.insertOrUpdateProduct(newProduct) },
             productNameSuggestions = productNameSuggestions,
@@ -315,10 +329,10 @@ fun DashboardScreen(viewModel: VetViewModel, navController: NavController) {
                 )
             }
 
-            if (!isLoading && pendingCollectionRows.isNotEmpty()) {
+            if (!isLoading && pendingCollectionSummary.clientCount > 0) {
                 item {
                     DashboardCollectionPreview(
-                        rows = pendingCollectionPreviewRows,
+                        rows = visiblePendingCollectionRows,
                         totalPending = totalPendingCollection,
                         onCollect = { row -> viewModel.onShowPaymentDialog(row.client) },
                         onViewAll = { navController.navigate(Screen.DebtClients.route) }

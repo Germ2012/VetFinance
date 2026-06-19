@@ -1,5 +1,3 @@
-// ruta: app/src/main/java/com/example/vetfinance/ui/screens/PetsScreen.kt
-
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.foundation.clickable
@@ -20,19 +18,20 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.PetWithOwner
-import com.example.vetfinance.viewmodel.VetViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.vetfinance.viewmodel.PetViewModel
 
 @Composable
 fun PetsScreen(
-    viewModel: VetViewModel,
-    navController: NavController
+    navController: NavController,
+    viewModel: PetViewModel = hiltViewModel()
 ) {
-    // Se obtienen las mascotas filtradas y la consulta de búsqueda del ViewModel
+
     val petsWithOwners by viewModel.filteredPetsWithOwners.collectAsStateWithLifecycle()
     val searchQuery by viewModel.petSearchQuery.collectAsStateWithLifecycle()
 
-    // Limpia la búsqueda al salir de la pantalla
+
     DisposableEffect(Unit) {
         onDispose {
             viewModel.clearPetSearchQuery()
@@ -60,7 +59,7 @@ fun PetsScreen(
                 modifier = Modifier.padding(vertical = 16.dp)
             )
 
-            // Barra de búsqueda para filtrar por nombre de mascota o dueño
+
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { viewModel.onPetSearchQueryChange(it) },
@@ -78,7 +77,7 @@ fun PetsScreen(
             )
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Muestra la lista de mascotas o un mensaje si no hay resultados
+
             if (petsWithOwners.isEmpty()) {
                 Box(
                     modifier = Modifier.fillMaxSize(),

@@ -7,7 +7,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 
 
 sealed class Screen(val route: String, val title: String, val icon: ImageVector) {
-    // Pantallas principales que aparecen en la barra de navegación inferior
+
     object Dashboard : Screen("dashboard", "Dashboard", Icons.Default.Dashboard)
     object Sales : Screen("sales", "Ventas", Icons.Default.PointOfSale)
     object Reports : Screen("reports", "Reportes", Icons.Default.Assessment)
@@ -15,7 +15,7 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object Clients : Screen("clients", "Clientes", Icons.Default.People)
     object Calendar : Screen("calendar", "Calendario", Icons.Default.CalendarMonth)
 
-    // Pantallas secundarias a las que se navega desde otras partes de la app
+
     object AddSale : Screen("add_sale", "Nueva Venta", Icons.Default.Add)
     object ClientDetail : Screen("client_detail/{clientId}", "Detalle de Cliente", Icons.AutoMirrored.Filled.ReceiptLong)
     object DebtClients : Screen("debt_clients", "Clientes con Deuda", Icons.Default.People)
@@ -23,6 +23,6 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     object PetDetail : Screen("pet_detail/{petId}", "Detalle de Mascota", Icons.Default.Pets)
     object Suppliers : Screen("suppliers", "Proveedores", Icons.Default.LocalShipping)
     object Restock : Screen("restock", "Reabastecer", Icons.Default.AddShoppingCart)
-    object AddRestock : Screen("add_restock", "Añadir Reabastecimiento", Icons.Default.Add) // Added
+    object AddRestock : Screen("add_restock", "Añadir Reabastecimiento", Icons.Default.Add)
     object Settings : Screen("settings", "Ajustes", Icons.Default.Settings)
 }

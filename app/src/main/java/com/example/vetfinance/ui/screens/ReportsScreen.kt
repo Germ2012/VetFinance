@@ -50,6 +50,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.compose.itemKey
 import co.yml.charts.axis.AxisData
 import co.yml.charts.common.model.Point
 import co.yml.charts.ui.barchart.BarChart
@@ -57,7 +61,7 @@ import co.yml.charts.ui.barchart.models.BarChartData
 import co.yml.charts.ui.barchart.models.BarData
 import co.yml.charts.ui.barchart.models.BarStyle
 import com.example.vetfinance.R
-import com.example.vetfinance.data.Client
+import com.example.vetfinance.data.DebtCollectionRow
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.TopSellingProduct
 import com.example.vetfinance.domain.model.CategoryProfitReport
@@ -69,10 +73,10 @@ import com.example.vetfinance.viewmodel.HistoricalPeriod
 import com.example.vetfinance.viewmodel.ReportPeriodType
 import com.example.vetfinance.viewmodel.TopProductsMetric
 import com.example.vetfinance.viewmodel.TopProductsPeriod
-import com.example.vetfinance.viewmodel.VetViewModel
+import com.example.vetfinance.viewmodel.ReportsViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
-import ui.utils.formatCurrency
+import com.example.vetfinance.ui.utils.formatCurrency
 import java.text.SimpleDateFormat
 import java.time.format.DateTimeFormatter
 import java.util.*
@@ -81,7 +85,7 @@ import java.util.zip.ZipOutputStream
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ReportsScreen(viewModel: VetViewModel) {
+fun ReportsScreen(viewModel: ReportsViewModel = hiltViewModel()) {
     val pagerState = rememberPagerState(pageCount = { 6 })
     val scope = rememberCoroutineScope()
     val tabTitles = listOf(
@@ -180,7 +184,7 @@ private fun ReportsHeader() {
 }
 
 @Composable
-private fun CashClosingTab(viewModel: VetViewModel) {
+private fun CashClosingTab(viewModel: ReportsViewModel) {
     val summary by viewModel.cashClosingSummary.collectAsStateWithLifecycle()
 
     LazyColumn(
@@ -268,7 +272,7 @@ private fun CashClosingTab(viewModel: VetViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SalesAndBackupTab(viewModel: VetViewModel) {
+fun SalesAndBackupTab(viewModel: ReportsViewModel) {
     val salesSummary by viewModel.salesSummary.collectAsStateWithLifecycle()
     val grossProfit by viewModel.grossProfitSummary.collectAsStateWithLifecycle()
     val selectedHistoricalPeriod by viewModel.selectedHistoricalPeriod.collectAsStateWithLifecycle()
@@ -381,7 +385,7 @@ fun SalesAndBackupTab(viewModel: VetViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PeriodSelector(viewModel: VetViewModel) {
+fun PeriodSelector(viewModel: ReportsViewModel) {
     val periodType by viewModel.reportPeriodType.collectAsStateWithLifecycle()
     val availablePeriods by viewModel.availableHistoricalPeriods.collectAsStateWithLifecycle()
     val selectedPeriod by viewModel.selectedHistoricalPeriod.collectAsStateWithLifecycle()
@@ -403,7 +407,7 @@ fun PeriodSelector(viewModel: VetViewModel) {
             modifier = Modifier.padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-        // Menú para seleccionar el TIPO de período (Día, Semana, Mes)
+
         ExposedDropdownMenuBox(
             expanded = periodTypeExpanded,
             onExpandedChange = { periodTypeExpanded = !periodTypeExpanded },
@@ -435,7 +439,7 @@ fun PeriodSelector(viewModel: VetViewModel) {
             }
         }
 
-        // Menú para seleccionar el período HISTÓRICO específico
+
         ExposedDropdownMenuBox(
             expanded = historicalPeriodExpanded,
             onExpandedChange = { historicalPeriodExpanded = !historicalPeriodExpanded },
@@ -481,7 +485,7 @@ fun PeriodSelector(viewModel: VetViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TopProductsReportTab(viewModel: VetViewModel) {
+fun TopProductsReportTab(viewModel: ReportsViewModel) {
     val topProducts by viewModel.topSellingProducts.collectAsStateWithLifecycle()
     val selectedProduct by viewModel.selectedTopProduct.collectAsStateWithLifecycle()
     val selectedPeriod by viewModel.topProductsPeriod.collectAsStateWithLifecycle()
@@ -557,7 +561,7 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
                     .steps(5)
                     .labelAndAxisLinePadding(20.dp)
                     .labelData { value ->
-                        // CORREGIDO: Se usa el operador módulo (%) que es más estándar y robusto.
+
                         if (selectedMetric == TopProductsMetric.REVENUE) {
                             "Gs. ${formatCurrency(value.toDouble()).replace(",00", "")}"
                         } else if (value % 1.0f == 0f) {
@@ -620,7 +624,7 @@ fun TopProductsReportTab(viewModel: VetViewModel) {
 }
 
 @Composable
-fun ProfitabilityReportTab(viewModel: VetViewModel) {
+fun ProfitabilityReportTab(viewModel: ReportsViewModel) {
     val productReports by viewModel.productProfitReports.collectAsStateWithLifecycle()
     val clientReports by viewModel.clientPurchaseReports.collectAsStateWithLifecycle()
     val categoryReports by viewModel.categoryProfitReports.collectAsStateWithLifecycle()
@@ -843,13 +847,23 @@ fun LegendItem(
 }
 
 @Composable
-fun DebtsReportTab(viewModel: VetViewModel) {
+fun DebtsReportTab(viewModel: ReportsViewModel) {
     val totalDebt by viewModel.totalDebt.collectAsStateWithLifecycle()
     val formattedDebt = stringResource(R.string.label_client_debt_amount, formatCurrency(totalDebt ?: 0.0))
-    val clients by viewModel.clients.collectAsStateWithLifecycle()
-    val clientsWithDebt = remember(clients) { clients.filter { it.debtAmount > 0 }.sortedByDescending { it.debtAmount } }
-    val averageDebt = remember(clientsWithDebt) {
-        if (clientsWithDebt.isEmpty()) 0.0 else clientsWithDebt.sumOf { it.debtAmount } / clientsWithDebt.size
+    val debtSummary by viewModel.debtCollectionSummary.collectAsStateWithLifecycle()
+    val debtRows = viewModel.debtRowsPaginated.collectAsLazyPagingItems()
+    val averageDebt = remember(debtSummary) {
+        if (debtSummary.clientCount == 0) 0.0 else debtSummary.totalPending / debtSummary.clientCount
+    }
+    val loadedDebtRows = debtRows.itemSnapshotList.items
+    val maxDebt = remember(loadedDebtRows) {
+        loadedDebtRows.maxOfOrNull { it.balance } ?: 0.0
+    }
+
+    LaunchedEffect(debtRows) {
+        viewModel.pagingRefreshEvents.collect {
+            debtRows.refresh()
+        }
     }
 
     LazyColumn(
@@ -879,7 +893,7 @@ fun DebtsReportTab(viewModel: VetViewModel) {
             ) {
                 ReportMiniMetric(
                     label = "Clientes con deuda",
-                    value = clientsWithDebt.size.toString(),
+                    value = debtSummary.clientCount.toString(),
                     icon = Icons.Default.People,
                     modifier = Modifier.weight(1f)
                 )
@@ -891,7 +905,12 @@ fun DebtsReportTab(viewModel: VetViewModel) {
                 )
             }
         }
-        if (clientsWithDebt.isEmpty()) {
+        if (debtRows.loadState.refresh is LoadState.Loading) {
+            item(contentType = "debt-loading") {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+        if (debtSummary.clientCount == 0 && debtRows.loadState.refresh !is LoadState.Loading) {
             item {
                 ReportEmptyState(
                     icon = Icons.Default.CheckCircle,
@@ -900,34 +919,37 @@ fun DebtsReportTab(viewModel: VetViewModel) {
                 )
             }
         } else {
-            items(clientsWithDebt, key = { it.clientId }) { client ->
-                DebtClientReportRow(client = client, maxDebt = clientsWithDebt.first().debtAmount)
+            items(
+                count = debtRows.itemCount,
+                key = debtRows.itemKey { it.client.clientId },
+                contentType = { "debt-report-row" }
+            ) { index ->
+                debtRows[index]?.let { row ->
+                    DebtClientReportRow(row = row, maxDebt = maxDebt)
+                }
+            }
+            if (debtRows.loadState.append is LoadState.Loading) {
+                item(contentType = "debt-append-loading") {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
             }
         }
     }
 }
 
 @Composable
-fun InventoryReportTab(viewModel: VetViewModel) {
+fun InventoryReportTab(viewModel: ReportsViewModel) {
     val totalValue by viewModel.totalInventoryValue.collectAsStateWithLifecycle()
     val stockHealth by viewModel.stockHealthSummary.collectAsStateWithLifecycle()
     val formattedValue = stringResource(R.string.label_client_debt_amount, formatCurrency(totalValue ?: 0.0))
-    val inventory by viewModel.inventory.collectAsStateWithLifecycle()
-    val productsOnly = remember(inventory) {
-        inventory.filter { !it.isService }.sortedWith(
-            compareBy<Product> { product ->
-                val threshold = product.lowStockThreshold ?: 0.0
-                !(threshold > 0 && product.stock < threshold)
-            }.thenBy { it.name.lowercase(Locale.getDefault()) }
-        )
-    }
-    val lowStockCount = remember(productsOnly) {
-        productsOnly.count { product ->
-            val threshold = product.lowStockThreshold ?: 0.0
-            threshold > 0 && product.stock < threshold
+    val inventorySummary by viewModel.inventoryReportSummary.collectAsStateWithLifecycle()
+    val pagedProducts = viewModel.inventoryReportProductsPaginated.collectAsLazyPagingItems()
+
+    LaunchedEffect(pagedProducts) {
+        viewModel.pagingRefreshEvents.collect {
+            pagedProducts.refresh()
         }
     }
-    val totalUnits = remember(productsOnly) { productsOnly.sumOf { it.stock } }
 
     LazyColumn(
         modifier = Modifier
@@ -956,20 +978,20 @@ fun InventoryReportTab(viewModel: VetViewModel) {
             ) {
                 ReportMiniMetric(
                     label = "Productos",
-                    value = productsOnly.size.toString(),
+                    value = inventorySummary.productCount.toString(),
                     icon = Icons.Default.AddShoppingCart,
                     modifier = Modifier.weight(1f)
                 )
                 ReportMiniMetric(
                     label = "Alertas stock",
-                    value = lowStockCount.toString(),
+                    value = inventorySummary.lowStockCount.toString(),
                     icon = Icons.Default.WarningAmber,
                     modifier = Modifier.weight(1f),
-                    isWarning = lowStockCount > 0
+                    isWarning = inventorySummary.lowStockCount > 0
                 )
                 ReportMiniMetric(
                     label = "Unidades",
-                    value = formatCurrency(totalUnits).replace(",00", ""),
+                    value = formatCurrency(inventorySummary.totalUnits).replace(",00", ""),
                     icon = Icons.Default.CheckCircle,
                     modifier = Modifier.weight(1f)
                 )
@@ -978,7 +1000,12 @@ fun InventoryReportTab(viewModel: VetViewModel) {
         item {
             StockHealthCard(summary = stockHealth)
         }
-        if (productsOnly.isEmpty()) {
+        if (pagedProducts.loadState.refresh is LoadState.Loading) {
+            item(contentType = "inventory-report-loading") {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+        if (inventorySummary.productCount == 0 && pagedProducts.loadState.refresh !is LoadState.Loading) {
             item {
                 ReportEmptyState(
                     icon = Icons.Default.Inventory,
@@ -987,8 +1014,19 @@ fun InventoryReportTab(viewModel: VetViewModel) {
                 )
             }
         } else {
-            items(productsOnly, key = { it.productId }) { product ->
-                InventoryStockReportRow(product = product)
+            items(
+                count = pagedProducts.itemCount,
+                key = pagedProducts.itemKey { it.productId },
+                contentType = { "inventory-stock-report-row" }
+            ) { index ->
+                pagedProducts[index]?.let { product ->
+                    InventoryStockReportRow(product = product)
+                }
+            }
+            if (pagedProducts.loadState.append is LoadState.Loading) {
+                item(contentType = "inventory-report-append-loading") {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
             }
         }
     }
@@ -1581,8 +1619,9 @@ private fun ReportEmptyState(
 }
 
 @Composable
-private fun DebtClientReportRow(client: Client, maxDebt: Double) {
-    val ratio = if (maxDebt > 0) (client.debtAmount / maxDebt).coerceIn(0.0, 1.0).toFloat() else 0f
+private fun DebtClientReportRow(row: DebtCollectionRow, maxDebt: Double) {
+    val client = row.client
+    val ratio = if (maxDebt > 0) (row.balance / maxDebt).coerceIn(0.0, 1.0).toFloat() else 0f
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(8.dp),
@@ -1601,7 +1640,7 @@ private fun DebtClientReportRow(client: Client, maxDebt: Double) {
                     Text(client.name, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(client.phone ?: "Sin telefono", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text("Gs. ${formatCurrency(client.debtAmount)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text("Gs. ${formatCurrency(row.balance)}", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             }
             LinearProgressIndicator(
                 progress = { ratio },

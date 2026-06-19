@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -37,28 +38,31 @@ import com.example.vetfinance.ui.screens.RestockScreen
 import com.example.vetfinance.ui.screens.SalesScreen
 import com.example.vetfinance.ui.screens.SettingsScreen
 import com.example.vetfinance.ui.screens.SuppliersScreen
-import com.example.vetfinance.viewmodel.VetViewModel
+import com.example.vetfinance.viewmodel.AppMessagesViewModel
 
 @Composable
-fun AppNavigation(navController: NavHostController, viewModel: VetViewModel) {
-    val operationErrorMessage by viewModel.operationErrorMessage.collectAsStateWithLifecycle()
-    val operationSuccessMessage by viewModel.operationSuccessMessage.collectAsStateWithLifecycle()
+fun AppNavigation(
+    navController: NavHostController,
+    appMessagesViewModel: AppMessagesViewModel = hiltViewModel()
+) {
+    val operationErrorMessage by appMessagesViewModel.operationErrorMessage.collectAsStateWithLifecycle()
+    val operationSuccessMessage by appMessagesViewModel.operationSuccessMessage.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(operationSuccessMessage) {
         operationSuccessMessage?.let { message ->
             snackbarHostState.showSnackbar(message)
-            viewModel.clearOperationSuccessMessage()
+            appMessagesViewModel.clearOperationSuccessMessage()
         }
     }
 
     operationErrorMessage?.let { message ->
         AlertDialog(
-            onDismissRequest = { viewModel.clearOperationErrorMessage() },
+            onDismissRequest = { appMessagesViewModel.clearOperationErrorMessage() },
             title = { Text("Atencion") },
             text = { Text(message) },
             confirmButton = {
-                TextButton(onClick = { viewModel.clearOperationErrorMessage() }) {
+                TextButton(onClick = { appMessagesViewModel.clearOperationErrorMessage() }) {
                     Text("Aceptar")
                 }
             }
@@ -67,38 +71,38 @@ fun AppNavigation(navController: NavHostController, viewModel: VetViewModel) {
 
     Box {
         NavHost(navController = navController, startDestination = Screen.Dashboard.route) {
-            composable(Screen.Dashboard.route) { DashboardScreen(viewModel, navController) }
-            composable(Screen.Calendar.route) { CalendarScreen(viewModel) }
-            composable(Screen.Sales.route) { SalesScreen(viewModel, navController) }
-            composable(Screen.Reports.route) { ReportsScreen(viewModel) }
-            composable(Screen.Inventory.route) { InventoryScreen(viewModel) }
+            composable(Screen.Dashboard.route) { DashboardScreen(navController) }
+            composable(Screen.Calendar.route) { CalendarScreen() }
+            composable(Screen.Sales.route) { SalesScreen(navController) }
+            composable(Screen.Reports.route) { ReportsScreen() }
+            composable(Screen.Inventory.route) { InventoryScreen() }
             composable(Screen.Clients.route) { ClientsMenuScreen(navController) }
 
-            composable(Screen.AddSale.route) { AddSaleScreen(viewModel, navController) }
-            composable(Screen.DebtClients.route) { DebtClientsScreen(viewModel, navController) }
+            composable(Screen.AddSale.route) { AddSaleScreen(navController) }
+            composable(Screen.DebtClients.route) { DebtClientsScreen(navController) }
             composable(
                 route = Screen.ClientDetail.route,
                 arguments = listOf(navArgument("clientId") { type = NavType.StringType })
             ) { backStackEntry ->
                 val clientId = backStackEntry.arguments?.getString("clientId") ?: ""
-                ClientDetailScreen(viewModel, clientId, navController)
+                ClientDetailScreen(clientId, navController)
             }
 
-            composable(Screen.Pets.route) { PetsScreen(viewModel, navController) }
+            composable(Screen.Pets.route) { PetsScreen(navController) }
             composable(
                 route = Screen.PetDetail.route,
                 arguments = listOf(navArgument("petId") { type = NavType.StringType })
             ) { backStackEntry ->
                 val petId = backStackEntry.arguments?.getString("petId") ?: ""
-                PetDetailScreen(viewModel, petId, navController)
+                PetDetailScreen(petId, navController)
             }
 
-            composable("add_client_screen") { AddClientScreen(viewModel, navController) }
-            composable("add_pet_screen") { AddPetScreen(viewModel, navController) }
-            composable(Screen.Suppliers.route) { SuppliersScreen(viewModel, navController) }
-            composable(Screen.Restock.route) { RestockScreen(viewModel, navController) }
-            composable(Screen.AddRestock.route) { AddRestockScreen(viewModel, navController) }
-            composable(Screen.Settings.route) { SettingsScreen(viewModel, navController) }
+            composable("add_client_screen") { AddClientScreen(navController) }
+            composable("add_pet_screen") { AddPetScreen(navController) }
+            composable(Screen.Suppliers.route) { SuppliersScreen(navController) }
+            composable(Screen.Restock.route) { RestockScreen(navController) }
+            composable(Screen.AddRestock.route) { AddRestockScreen(navController) }
+            composable(Screen.Settings.route) { SettingsScreen(navController) }
         }
 
         SnackbarHost(

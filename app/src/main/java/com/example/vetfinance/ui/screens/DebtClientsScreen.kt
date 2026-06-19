@@ -33,18 +33,19 @@ import androidx.navigation.NavController
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.data.DebtCollectionRow
 import com.example.vetfinance.ui.components.SkeletonLine
-import com.example.vetfinance.viewmodel.VetViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ui.utils.formatCurrency // Importar formatCurrency
-import ui.utils.NumberTransformation
+import com.example.vetfinance.ui.utils.formatCurrency
+import com.example.vetfinance.ui.utils.NumberTransformation
+import com.example.vetfinance.viewmodel.DebtViewModel
 
 @Composable
-fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
-    val uiState by viewModel.debtClientsUiState.collectAsStateWithLifecycle()
+fun DebtClientsScreen(navController: NavController, viewModel: DebtViewModel = hiltViewModel()) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val searchQuery = uiState.searchQuery
     val showPaymentDialog = uiState.showPaymentDialog
     val clientForPayment = uiState.clientForPayment
@@ -52,6 +53,11 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
     val appSettings = uiState.appSettings
     val collectionSummary = uiState.collectionSummary
     val pagedRows = viewModel.debtCollectionRowsPaginated.collectAsLazyPagingItems()
+    LaunchedEffect(pagedRows) {
+        viewModel.pagingRefreshEvents.collect {
+            pagedRows.refresh()
+        }
+    }
     val haptic = LocalHapticFeedback.current
 
     var showOnlyWithDebt by remember { mutableStateOf(true) }
@@ -219,7 +225,7 @@ fun DebtClientsScreen(viewModel: VetViewModel, navController: NavController) {
                 onValueChange = { viewModel.onClientSearchQueryChange(it) },
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text(stringResource(R.string.debt_clients_search_placeholder)) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }, 
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
                         IconButton(onClick = { viewModel.clearClientSearchQuery() }) {

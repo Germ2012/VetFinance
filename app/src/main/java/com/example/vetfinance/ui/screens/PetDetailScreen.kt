@@ -16,16 +16,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.vetfinance.R
-import com.example.vetfinance.data.Product // Ensure Product is imported if not already
+import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.Treatment
-import com.example.vetfinance.viewmodel.VetViewModel
+import com.example.vetfinance.viewmodel.PetViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavController) {
+fun PetDetailScreen(
+    petId: String,
+    navController: NavController,
+    viewModel: PetViewModel = hiltViewModel()
+) {
     LaunchedEffect(key1 = petId) {
         viewModel.loadTreatmentsForPet(petId)
     }
@@ -40,7 +45,7 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsStateWithLifecycle()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
 
-    // Estados para manejar el diálogo de edición y eliminación
+
     var treatmentToEdit by remember { mutableStateOf<Treatment?>(null) }
     var treatmentToDelete by remember { mutableStateOf<Treatment?>(null) }
     var treatmentToRepeat by remember { mutableStateOf<Treatment?>(null) }
@@ -70,11 +75,11 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
         )
     }
 
-    // Diálogo de edición (muy similar al de añadir)
+
     treatmentToEdit?.let { treatment ->
         AddTreatmentDialog(
-            // Pasa los datos del tratamiento para pre-rellenar el diálogo
-            initialTreatment = treatment, 
+
+            initialTreatment = treatment,
             services = services,
             onDismiss = { treatmentToEdit = null },
             onConfirm = { description, weight, temperature, symptoms, diagnosis, treatmentPlan, nextDateMillis ->
@@ -97,7 +102,7 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
         )
     }
 
-    // Diálogo de confirmación para eliminar
+
     treatmentToRepeat?.let { treatment ->
         if (petWithOwner != null) {
             AddTreatmentDialog(
@@ -159,7 +164,7 @@ fun PetDetailScreen(viewModel: VetViewModel, petId: String, navController: NavCo
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
-            allProducts = inventory, 
+            allProducts = inventory,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.insertOrUpdateProduct(newProduct)
@@ -228,7 +233,7 @@ fun TreatmentHistoryItem(
     val nextDateString = treatment.nextTreatmentDate?.let {
         stringResource(R.string.treatment_item_next_appointment_prefix, dateFormat.format(Date(it)))
     } ?: stringResource(R.string.treatment_item_finished)
-    
+
     var menuExpanded by remember { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth()) {
@@ -247,7 +252,7 @@ fun TreatmentHistoryItem(
                 treatment.temperature?.let { Text(text = stringResource(R.string.treatment_item_temperature_prefix, it)) }
                 Text(text = nextDateString, style = MaterialTheme.typography.bodySmall)
             }
-            // Menú de opciones
+
             Box(modifier = Modifier.align(Alignment.TopEnd)) {
                 IconButton(onClick = { menuExpanded = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = "Más opciones")

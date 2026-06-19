@@ -13,7 +13,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
-import ui.utils.NumberTransformation
+import com.example.vetfinance.ui.utils.NumberTransformation
 
 @Composable
 fun AddOrEditClientDialog(
@@ -101,7 +101,7 @@ fun AddOrEditClientDialog(
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
-                        // CORRECCIÓN APLICADA: No se necesita .replace(".", "")
+
                         val debtAmount = debt.toDoubleOrNull() ?: 0.0
                         onConfirm(name, phone, debtAmount)
                     } else {

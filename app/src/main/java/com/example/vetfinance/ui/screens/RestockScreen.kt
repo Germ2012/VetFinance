@@ -21,19 +21,20 @@ import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.RestockHistoryItem
 import com.example.vetfinance.navigation.Screen
-import com.example.vetfinance.viewmodel.VetViewModel
-import ui.utils.formatCurrency
+import com.example.vetfinance.viewmodel.RestockViewModel
+import com.example.vetfinance.ui.utils.formatCurrency
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RestockScreen(
-    viewModel: VetViewModel,
-    navController: NavController
+    navController: NavController,
+    viewModel: RestockViewModel = hiltViewModel()
 ) {
     val restockHistory by viewModel.restockHistory.collectAsStateWithLifecycle()
     val lowStockProducts by viewModel.lowStockProducts.collectAsStateWithLifecycle()

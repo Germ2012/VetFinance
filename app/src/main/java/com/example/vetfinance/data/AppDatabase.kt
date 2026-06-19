@@ -39,14 +39,147 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun searchDao(): SearchDao
 
     companion object {
-        /**
-         * Migraciones conservadoras para evitar el borrado silencioso de datos.
-         *
-         * Antes se usaba fallbackToDestructiveMigration(), lo que podía eliminar toda la
-         * base local al cambiar el esquema. Estas migraciones cubren las versiones
-         * presentes en app/schemas (19 -> 22). Para versiones anteriores a 19, la app
-         * fallará de forma explícita en vez de borrar datos sin avisar.
-         */
+
+        val SEARCH_INDEX_CALLBACK = object : RoomDatabase.Callback() {
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                ensureSearchIndexes(db)
+            }
+        }
+
+        private fun ensureSearchIndexes(db: SupportSQLiteDatabase) {
+            val useFts5 = supportsFts5(db)
+            createProductsFts(db, useFts5)
+            createClientsFts(db, useFts5)
+            seedSearchIndexes(db)
+        }
+
+        private fun supportsFts5(db: SupportSQLiteDatabase): Boolean {
+            db.query("PRAGMA compile_options").use { cursor ->
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(0).contains("ENABLE_FTS5", ignoreCase = true)) {
+                        return true
+                    }
+                }
+            }
+            return false
+        }
+
+        private fun createProductsFts(db: SupportSQLiteDatabase, useFts5: Boolean) {
+            if (useFts5) {
+                db.execSQL("""
+                    CREATE VIRTUAL TABLE IF NOT EXISTS `products_fts` USING fts5(
+                        `productId` UNINDEXED,
+                        `name`,
+                        `category`,
+                        `supplierIdFk` UNINDEXED,
+                        tokenize = 'unicode61 remove_diacritics 2'
+                    )
+                """.trimIndent())
+            } else {
+                db.execSQL("""
+                    CREATE VIRTUAL TABLE IF NOT EXISTS `products_fts` USING fts4(
+                        `productId`,
+                        `name`,
+                        `category`,
+                        `supplierIdFk`,
+                        tokenize = unicode61
+                    )
+                """.trimIndent())
+            }
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS `products_fts_insert`
+                AFTER INSERT ON `products`
+                BEGIN
+                    INSERT INTO `products_fts`(`productId`, `name`, `category`, `supplierIdFk`)
+                    VALUES (new.`productId`, new.`name`, COALESCE(new.`category`, ''), COALESCE(new.`supplierIdFk`, ''));
+                END
+            """.trimIndent())
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS `products_fts_update`
+                AFTER UPDATE OF `name`, `category`, `supplierIdFk` ON `products`
+                BEGIN
+                    DELETE FROM `products_fts` WHERE `productId` = old.`productId`;
+                    INSERT INTO `products_fts`(`productId`, `name`, `category`, `supplierIdFk`)
+                    VALUES (new.`productId`, new.`name`, COALESCE(new.`category`, ''), COALESCE(new.`supplierIdFk`, ''));
+                END
+            """.trimIndent())
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS `products_fts_delete`
+                AFTER DELETE ON `products`
+                BEGIN
+                    DELETE FROM `products_fts` WHERE `productId` = old.`productId`;
+                END
+            """.trimIndent())
+        }
+
+        private fun createClientsFts(db: SupportSQLiteDatabase, useFts5: Boolean) {
+            if (useFts5) {
+                db.execSQL("""
+                    CREATE VIRTUAL TABLE IF NOT EXISTS `clients_fts` USING fts5(
+                        `clientId` UNINDEXED,
+                        `name`,
+                        `phone`,
+                        tokenize = 'unicode61 remove_diacritics 2'
+                    )
+                """.trimIndent())
+            } else {
+                db.execSQL("""
+                    CREATE VIRTUAL TABLE IF NOT EXISTS `clients_fts` USING fts4(
+                        `clientId`,
+                        `name`,
+                        `phone`,
+                        tokenize = unicode61
+                    )
+                """.trimIndent())
+            }
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS `clients_fts_insert`
+                AFTER INSERT ON `clients`
+                BEGIN
+                    INSERT INTO `clients_fts`(`clientId`, `name`, `phone`)
+                    VALUES (new.`clientId`, new.`name`, COALESCE(new.`phone`, ''));
+                END
+            """.trimIndent())
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS `clients_fts_update`
+                AFTER UPDATE OF `name`, `phone` ON `clients`
+                BEGIN
+                    DELETE FROM `clients_fts` WHERE `clientId` = old.`clientId`;
+                    INSERT INTO `clients_fts`(`clientId`, `name`, `phone`)
+                    VALUES (new.`clientId`, new.`name`, COALESCE(new.`phone`, ''));
+                END
+            """.trimIndent())
+            db.execSQL("""
+                CREATE TRIGGER IF NOT EXISTS `clients_fts_delete`
+                AFTER DELETE ON `clients`
+                BEGIN
+                    DELETE FROM `clients_fts` WHERE `clientId` = old.`clientId`;
+                END
+            """.trimIndent())
+        }
+
+        private fun seedSearchIndexes(db: SupportSQLiteDatabase) {
+            db.execSQL("DELETE FROM `products_fts` WHERE `productId` NOT IN (SELECT `productId` FROM `products`)")
+            db.execSQL("DELETE FROM `clients_fts` WHERE `clientId` NOT IN (SELECT `clientId` FROM `clients`)")
+            db.execSQL("""
+                INSERT INTO `products_fts`(`productId`, `name`, `category`, `supplierIdFk`)
+                SELECT p.`productId`, p.`name`, COALESCE(p.`category`, ''), COALESCE(p.`supplierIdFk`, '')
+                FROM `products` AS p
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM `products_fts` AS f WHERE f.`productId` = p.`productId`
+                )
+            """.trimIndent())
+            db.execSQL("""
+                INSERT INTO `clients_fts`(`clientId`, `name`, `phone`)
+                SELECT c.`clientId`, c.`name`, COALESCE(c.`phone`, '')
+                FROM `clients` AS c
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM `clients_fts` AS f WHERE f.`clientId` = c.`clientId`
+                )
+            """.trimIndent())
+        }
+
+
         val MIGRATION_19_20 = object : Migration(19, 20) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("""
@@ -118,7 +251,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         val MIGRATION_21_22 = object : Migration(21, 22) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // No hubo cambios estructurales entre los schemas 21 y 22.
+
             }
         }
 
@@ -263,11 +396,8 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         private fun migrateCompositeSaleDetailsToIndependentRows(db: SupportSQLiteDatabase) {
-            /*
-             * Vuelve a usar un ID propio para cada detalle de venta.
-             * Con la clave primaria compuesta (saleId, productId), dos dosis o dos
-             * líneas del mismo producto en una misma venta se pisaban entre sí.
-             */
+
+
             db.execSQL("""
                 CREATE TABLE IF NOT EXISTS `sales_products_cross_ref_new` (
                     `crossRefId` TEXT NOT NULL,

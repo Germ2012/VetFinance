@@ -1,13 +1,15 @@
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -20,18 +22,15 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Inventory
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -41,6 +40,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.example.vetfinance.R
@@ -51,23 +51,23 @@ import com.example.vetfinance.data.STOCK_MOVEMENT_RESTOCK
 import com.example.vetfinance.data.STOCK_MOVEMENT_SALE
 import com.example.vetfinance.data.STOCK_MOVEMENT_SALE_REVERSAL
 import com.example.vetfinance.data.StockMovement
+import com.example.vetfinance.ui.components.HighVolumeModeToggle
 import com.example.vetfinance.ui.components.SkeletonLine
-import com.example.vetfinance.viewmodel.VetViewModel
+import com.example.vetfinance.viewmodel.InventoryViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import ui.utils.formatCurrency
+import com.example.vetfinance.ui.utils.formatCurrency
+import kotlinx.coroutines.flow.distinctUntilChanged
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun InventoryScreen(viewModel: VetViewModel) {
+fun InventoryScreen(viewModel: InventoryViewModel = hiltViewModel()) {
     val uiState by viewModel.inventoryUiState.collectAsStateWithLifecycle()
     val showDialog = uiState.showAddProductDialog
     val filter = uiState.filter
-    val inventory = uiState.inventory
     val searchQuery = uiState.searchQuery
-    val lowStockProducts = uiState.lowStockProducts
     val suppliers = uiState.suppliers
     val appSettings = uiState.appSettings
     var productToEdit by remember { mutableStateOf<Product?>(null) }
@@ -80,22 +80,39 @@ fun InventoryScreen(viewModel: VetViewModel) {
     var secureStockProduct by remember { mutableStateOf<Product?>(null) }
     var secureStockValue by remember { mutableStateOf<Double?>(null) }
     var secureStockNote by remember { mutableStateOf("") }
-    var lowStockAlertExpanded by remember { mutableStateOf(false) }
+    var showLowStockSheet by remember { mutableStateOf(false) }
     val productNameSuggestions = uiState.productNameSuggestions
     val isLoading = uiState.isLoading
     val productCostHistory by viewModel.productCostHistory.collectAsStateWithLifecycle()
     val productStockMovements by viewModel.productStockMovements.collectAsStateWithLifecycle()
     val pagedProducts = viewModel.inventoryPaginated.collectAsLazyPagingItems()
+    LaunchedEffect(pagedProducts) {
+        viewModel.pagingRefreshEvents.collect {
+            pagedProducts.refresh()
+        }
+    }
+    val dialogProductsState = if (showDialog || productToEdit != null) {
+        viewModel.inventory.collectAsStateWithLifecycle()
+    } else {
+        remember { mutableStateOf<List<Product>>(emptyList()) }
+    }
+    val dialogProducts = dialogProductsState.value
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
-    val haptic = LocalHapticFeedback.current
+    val inventoryListState = rememberLazyListState()
+    var highVolumeMode by rememberSaveable { mutableStateOf(true) }
 
-    val productCount = remember(inventory) { inventory.count { !it.isService } }
-    val serviceCount = remember(inventory) { inventory.count { it.isService } }
-
-    LaunchedEffect(lowStockProducts.isEmpty()) {
-        if (lowStockProducts.isEmpty()) lowStockAlertExpanded = false
+    LaunchedEffect(inventoryListState) {
+        snapshotFlow { inventoryListState.isScrollInProgress }
+            .distinctUntilChanged()
+            .collect { isScrolling ->
+                if (isScrolling) {
+                    focusManager.clearFocus(force = true)
+                    keyboardController?.hide()
+                }
+            }
     }
+    val haptic = LocalHapticFeedback.current
 
     if (showDialog) {
         ProductDialog(
@@ -107,7 +124,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
-            allProducts = inventory,
+            allProducts = dialogProducts,
             suppliers = suppliers
         )
     }
@@ -125,7 +142,7 @@ fun InventoryScreen(viewModel: VetViewModel) {
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
-            allProducts = inventory,
+            allProducts = dialogProducts,
             suppliers = suppliers
         )
     }
@@ -243,6 +260,22 @@ fun InventoryScreen(viewModel: VetViewModel) {
             onAdjustStock = {
                 productForStockAdjustment = product
                 productForActions = null
+            },
+            onOpenContainer = {
+                viewModel.openContainerForBulkSale(product)
+                productForActions = null
+            }
+        )
+    }
+
+    if (showLowStockSheet) {
+        val lowStockProducts by viewModel.lowStockProductsByName.collectAsStateWithLifecycle()
+        LowStockSheet(
+            products = lowStockProducts,
+            onDismiss = { showLowStockSheet = false },
+            onAdjustStock = {
+                productForStockAdjustment = it
+                showLowStockSheet = false
             }
         )
     }
@@ -260,16 +293,14 @@ fun InventoryScreen(viewModel: VetViewModel) {
                 .padding(horizontal = 16.dp)
         ) {
             InventoryHeader(
-                productCount = productCount,
-                serviceCount = serviceCount,
-                lowStockCount = lowStockProducts.size
+                productCount = uiState.productCount,
+                serviceCount = uiState.serviceCount,
+                lowStockCount = uiState.lowStockCount
             )
-            AnimatedVisibility(visible = lowStockProducts.isNotEmpty()) {
+            AnimatedVisibility(visible = uiState.lowStockCount > 0) {
                 InventoryAlertBanner(
-                    lowStockProducts = lowStockProducts,
-                    expanded = lowStockAlertExpanded,
-                    onToggle = { lowStockAlertExpanded = !lowStockAlertExpanded },
-                    onAdjustStock = { productForStockAdjustment = it }
+                    lowStockCount = uiState.lowStockCount,
+                    onOpen = { showLowStockSheet = true }
                 )
             }
             Spacer(modifier = Modifier.height(12.dp))
@@ -300,12 +331,14 @@ fun InventoryScreen(viewModel: VetViewModel) {
             InventoryFilter(selectedFilter = filter, onFilterSelected = { viewModel.onInventoryFilterChanged(it) })
             InventoryListHeader(
                 showingCount = pagedProducts.itemCount,
-                totalCount = inventory.size,
-                filter = filter
+                totalCount = uiState.totalCount,
+                filter = filter,
+                highVolumeMode = highVolumeMode,
+                onHighVolumeModeChange = { highVolumeMode = it }
             )
             Spacer(modifier = Modifier.height(12.dp))
 
-            if ((isLoading && inventory.isEmpty()) || pagedProducts.loadState.refresh is LoadState.Loading) {
+            if ((isLoading && uiState.totalCount == 0) || pagedProducts.loadState.refresh is LoadState.Loading) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -316,46 +349,47 @@ fun InventoryScreen(viewModel: VetViewModel) {
                     }
                 }
             } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInputDismissKeyboard(
-                            onDismiss = {
-                                focusManager.clearFocus(force = true)
-                                keyboardController?.hide()
+                CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                    LazyColumn(
+                        state = inventoryListState,
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(0.dp),
+                        contentPadding = PaddingValues(bottom = 96.dp)
+                    ) {
+                        items(
+                            count = pagedProducts.itemCount,
+                            key = pagedProducts.itemKey { it.productId },
+                            contentType = { index ->
+                                pagedProducts[index]?.let {
+                                    val type = if (it.isService) "service" else "product"
+                                    if (highVolumeMode) "dense-$type" else type
+                                } ?: "placeholder"
                             }
-                        ),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 96.dp)
-                ) {
-                    items(
-                        count = pagedProducts.itemCount,
-                        key = pagedProducts.itemKey { it.productId },
-                        contentType = { index -> pagedProducts[index]?.let { if (it.isService) "service" else "product" } ?: "placeholder" }
-                    ) { index ->
-                        val product = pagedProducts[index]
-                        if (product != null) {
-                            InventoryItem(
-                                product = product,
-                                onEdit = { productToEdit = it },
-                                onShowActions = { productForActions = it },
-                                onOpenContainer = { viewModel.openContainerForBulkSale(it) }
-                            )
-                        } else {
-                            InventoryItemPlaceholder()
+                        ) { index ->
+                            val product = pagedProducts[index]
+                            if (product != null) {
+                                InventoryItem(
+                                    product = product,
+                                    highVolumeMode = highVolumeMode,
+                                    onOpen = { productForActions = it },
+                                    onShowActions = { productForActions = it }
+                                )
+                            } else {
+                                InventoryItemPlaceholder(highVolumeMode = highVolumeMode)
+                            }
                         }
-                    }
-                    if (pagedProducts.itemCount == 0 && !isLoading && pagedProducts.loadState.refresh !is LoadState.Loading) {
-                        item {
-                            InventoryEmptyState(
-                                message = stringResource(R.string.inventory_no_products_matching_filter),
-                                onAddClick = { viewModel.onShowAddProductDialog() }
-                            )
+                        if (pagedProducts.itemCount == 0 && !isLoading && pagedProducts.loadState.refresh !is LoadState.Loading) {
+                            item {
+                                InventoryEmptyState(
+                                    message = stringResource(R.string.inventory_no_products_matching_filter),
+                                    onAddClick = { viewModel.onShowAddProductDialog() }
+                                )
+                            }
                         }
-                    }
-                    if (pagedProducts.loadState.append is LoadState.Loading) {
-                        item {
-                            InventoryItemPlaceholder()
+                        if (pagedProducts.loadState.append is LoadState.Loading) {
+                            item {
+                                InventoryItemPlaceholder(highVolumeMode = highVolumeMode)
+                            }
                         }
                     }
                 }
@@ -363,22 +397,6 @@ fun InventoryScreen(viewModel: VetViewModel) {
         }
     }
 }
-
-private fun Modifier.pointerInputDismissKeyboard(onDismiss: () -> Unit): Modifier = this.then(
-    Modifier.pointerInput(Unit) {
-        awaitPointerEventScope {
-            var wasPressed = false
-            while (true) {
-                val event = awaitPointerEvent(PointerEventPass.Initial)
-                val isPressed = event.changes.any { it.pressed }
-                if (isPressed && !wasPressed) {
-                    onDismiss()
-                }
-                wasPressed = isPressed
-            }
-        }
-    }
-)
 
 @Composable
 private fun InventoryHeader(
@@ -432,64 +450,82 @@ private fun InventoryHeader(
 
 @Composable
 private fun InventoryAlertBanner(
-    lowStockProducts: List<Product>,
-    expanded: Boolean,
-    onToggle: () -> Unit,
-    onAdjustStock: (Product) -> Unit
+    lowStockCount: Int,
+    onOpen: () -> Unit
 ) {
-    val lowStockCount = lowStockProducts.size
-    val visibleLowStockProducts = remember(lowStockProducts) {
-        lowStockProducts.take(8)
-    }
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 12.dp)
-            .animateContentSize()
-            .clickable(onClick = onToggle),
+            .clickable(onClick = onOpen),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.errorContainer,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f))
     ) {
-        Column(
+        Row(
             modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                Column(modifier = Modifier.weight(1f)) {
-                    Text("Stock bajo", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                    Text(
-                        "$lowStockCount productos necesitan reposicion o ajuste.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                }
-                Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error
+            Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Stock bajo", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    "$lowStockCount productos necesitan reposicion o ajuste.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer
                 )
             }
+            TextButton(onClick = onOpen) {
+                Text("Ver lista")
+            }
+        }
+    }
+}
 
-            AnimatedVisibility(visible = expanded) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.error.copy(alpha = 0.25f))
-                    visibleLowStockProducts.forEach { product ->
-                        key(product.productId) {
-                            LowStockProductRow(product = product, onAdjustStock = onAdjustStock)
-                        }
-                    }
-                    if (lowStockProducts.size > 8) {
-                        Text(
-                            text = "Mostrando 8 de $lowStockCount alertas. Usa el filtro de inventario para ver el resto.",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onErrorContainer
-                        )
-                    }
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LowStockSheet(
+    products: List<Product>,
+    onDismiss: () -> Unit,
+    onAdjustStock: (Product) -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column {
+                    Text("Alertas de stock", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(
+                        "${products.size} productos ordenados por nombre",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Icon(Icons.Default.WarningAmber, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+            }
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                items(
+                    items = products,
+                    key = { it.productId },
+                    contentType = { "low-stock-row" }
+                ) { product ->
+                    LowStockProductRow(product = product, onAdjustStock = onAdjustStock)
                 }
             }
         }
@@ -502,56 +538,38 @@ private fun LowStockProductRow(
     onAdjustStock: (Product) -> Unit
 ) {
     val threshold = product.lowStockThreshold ?: 0.0
-    val stockRatio = if (threshold > 0) (product.stock / threshold).coerceIn(0.0, 1.0).toFloat() else 0f
     val unit = product.unitMeasure?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
 
-    Surface(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.20f))
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Column(
-            modifier = Modifier.padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        product.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        "Stock ${formatCurrency(product.stock).replace(",00", "")}$unit de minimo ${formatCurrency(threshold).replace(",00", "")}$unit",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                FilledTonalButton(
-                    onClick = { onAdjustStock(product) },
-                    shape = MaterialTheme.shapes.medium,
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text("Ajustar")
-                }
-            }
-            LinearProgressIndicator(
-                progress = { stockRatio },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(6.dp),
-                color = MaterialTheme.colorScheme.error,
-                trackColor = MaterialTheme.colorScheme.outlineVariant
+            Text(
+                product.name,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
+            Text(
+                "Stock ${formatCurrency(product.stock).replace(",00", "")}$unit de minimo ${formatCurrency(threshold).replace(",00", "")}$unit",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        FilledTonalButton(
+            onClick = { onAdjustStock(product) },
+            shape = MaterialTheme.shapes.medium,
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text("Ajustar")
         }
     }
 }
@@ -560,23 +578,31 @@ private fun LowStockProductRow(
 private fun InventoryListHeader(
     showingCount: Int,
     totalCount: Int,
-    filter: String
+    filter: String,
+    highVolumeMode: Boolean,
+    onHighVolumeModeChange: (Boolean) -> Unit
 ) {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            Icon(Icons.Default.FilterList, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-            Text("Vista: $filter", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.FilterList, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+                Text("Vista: $filter", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
+                Text("$showingCount de $totalCount", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(16.dp))
-            Text("$showingCount de $totalCount", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        HighVolumeModeToggle(enabled = highVolumeMode, onEnabledChange = onHighVolumeModeChange)
     }
 }
 
@@ -672,114 +698,93 @@ fun InventoryFilter(selectedFilter: String, onFilterSelected: (String) -> Unit) 
 @Composable
 fun InventoryItem(
     product: Product,
-    onEdit: (Product) -> Unit,
-    onShowActions: (Product) -> Unit,
-    onOpenContainer: (Product) -> Unit
+    highVolumeMode: Boolean,
+    onOpen: (Product) -> Unit,
+    onShowActions: (Product) -> Unit
 ) {
-    val stockRatio by remember(product.stock, product.lowStockThreshold) {
-        derivedStateOf {
-            val stockReference = (product.lowStockThreshold ?: product.stock.coerceAtLeast(1.0)).coerceAtLeast(1.0)
-            (product.stock / stockReference).coerceIn(0.0, 1.0).toFloat()
+    val isLowStock = remember(product.stock, product.lowStockThreshold) {
+        product.lowStockThreshold?.let { threshold ->
+            threshold > 0 && product.stock < threshold
+        } == true
+    }
+    val unit = remember(product.unitMeasure) {
+        product.unitMeasure?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
+    }
+    val typeText = remember(product.isService, product.isContainer, product.sellingMethod) {
+        when {
+            product.isService -> "Servicio"
+            product.isContainer -> "Contenedor"
+            else -> product.sellingMethod
         }
     }
-    val isLowStock by remember(product.stock, product.lowStockThreshold) {
-        derivedStateOf {
-            product.lowStockThreshold?.let { threshold ->
-                threshold > 0 && product.stock < threshold
-            } == true
-        }
+    val stockLabel = remember(product.isService, product.stock, unit) {
+        if (product.isService) null else "Stock ${formatCurrency(product.stock).replace(",00", "")}$unit"
+    }
+    val detailText = remember(typeText, product.category, stockLabel) {
+        listOfNotNull(typeText, product.category?.takeIf { it.isNotBlank() }, stockLabel).joinToString(" | ")
+    }
+    val priceText = remember(product.price) {
+        "Gs. ${formatCurrency(product.price)}"
+    }
+    val detailColor = if (isLowStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+    val rowInteractionSource = remember { MutableInteractionSource() }
+    val actionInteractionSource = remember { MutableInteractionSource() }
+    val compactMetric = remember(product.isService, product.stock, product.price, unit) {
+        if (product.isService) priceText else stockLabel ?: priceText
     }
 
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onEdit(product) },
-        shape = MaterialTheme.shapes.medium,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+            .height(if (highVolumeMode) 48.dp else 64.dp)
+            .clickable(
+                interactionSource = rowInteractionSource,
+                indication = null,
+                onClick = { onOpen(product) }
+            )
+            .padding(horizontal = 4.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(start = 16.dp, top = 14.dp, bottom = 14.dp, end = 0.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(if (highVolumeMode) 1.dp else 3.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Text(
+                product.name,
+                fontWeight = FontWeight.SemiBold,
+                style = if (highVolumeMode) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.bodyLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (!highVolumeMode) {
                 Text(
-                    product.name,
-                    fontWeight = FontWeight.Bold,
-                    style = MaterialTheme.typography.titleMedium,
+                    detailText,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = detailColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    AssistChip(
-                        onClick = {},
-                        label = {
-                            Text(
-                                if (product.isService) stringResource(R.string.inventory_item_type_service)
-                                else stringResource(R.string.inventory_item_type_product)
-                            )
-                        }
-                    )
-                    if (!product.isService) {
-                        AssistChip(onClick = {}, label = { Text(product.sellingMethod) })
-                    }
-                }
-                product.category?.takeIf { it.isNotBlank() }?.let {
-                    Text(
-                        "Categor\u00eda: $it",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                if (product.isContainer) {
-                    Spacer(modifier = Modifier.height(8.dp))
-                    FilledTonalButton(
-                        onClick = { onOpenContainer(product) },
-                        enabled = product.stock >= 1,
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Icon(Icons.Default.AddShoppingCart, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Abrir 1 para Venta a Granel")
-                    }
-                }
             }
-            Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(end = 8.dp)) {
-                Text(
-                    text = stringResource(R.string.text_prefix_gs) + " " + formatCurrency(product.price),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-                if (!product.isService) {
-                    val unit = product.unitMeasure?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
-                    Text(
-                        text = "Stock: ${formatCurrency(product.stock).replace(",00","")}$unit",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { stockRatio },
-                        modifier = Modifier
-                            .width(112.dp)
-                            .height(6.dp),
-                        color = if (isLowStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-                        trackColor = MaterialTheme.colorScheme.outlineVariant
-                    )
-                    if (isLowStock) {
-                        Text(
-                            text = "Bajo stock",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            }
-            Box(modifier = Modifier.align(Alignment.Top)) {
-                IconButton(onClick = { onShowActions(product) }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options_content_description))
-                }
+        }
+        Text(
+            text = if (highVolumeMode) compactMetric else priceText,
+            style = if (highVolumeMode) MaterialTheme.typography.labelLarge else MaterialTheme.typography.bodyMedium,
+            color = if (highVolumeMode && isLowStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            maxLines = 1
+        )
+        if (!highVolumeMode) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clickable(
+                        interactionSource = actionInteractionSource,
+                        indication = null,
+                        onClick = { onShowActions(product) }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options_content_description))
             }
         }
     }
@@ -794,7 +799,8 @@ private fun InventoryActionsSheet(
     onDelete: () -> Unit,
     onShowCostHistory: () -> Unit,
     onShowStockHistory: () -> Unit,
-    onAdjustStock: () -> Unit
+    onAdjustStock: () -> Unit,
+    onOpenContainer: () -> Unit
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -810,7 +816,12 @@ private fun InventoryActionsSheet(
                     Text(product.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 },
                 supportingContent = {
-                    Text(if (product.isService) stringResource(R.string.inventory_item_type_service) else product.sellingMethod)
+                    val stockText = if (product.isService) {
+                        stringResource(R.string.inventory_item_type_service)
+                    } else {
+                        "Stock ${formatCurrency(product.stock).replace(",00", "")} | ${product.sellingMethod}"
+                    }
+                    Text(stockText, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 },
                 leadingContent = {
                     Icon(Icons.Default.Inventory, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
@@ -839,6 +850,14 @@ private fun InventoryActionsSheet(
                     label = "Historial de stock",
                     onClick = onShowStockHistory
                 )
+                if (product.isContainer) {
+                    InventoryActionRow(
+                        icon = Icons.Default.AddShoppingCart,
+                        label = "Abrir 1 para venta a granel",
+                        enabled = product.stock >= 1,
+                        onClick = onOpenContainer
+                    )
+                }
                 InventoryActionRow(
                     icon = Icons.Default.Inventory,
                     label = "Ajustar stock",
@@ -853,6 +872,7 @@ private fun InventoryActionsSheet(
 private fun InventoryActionRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
+    enabled: Boolean = true,
     isDestructive: Boolean = false,
     onClick: () -> Unit
 ) {
@@ -862,10 +882,14 @@ private fun InventoryActionRow(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = if (isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                tint = when {
+                    !enabled -> MaterialTheme.colorScheme.onSurfaceVariant
+                    isDestructive -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.primary
+                }
             )
         },
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = if (enabled) Modifier.clickable(onClick = onClick) else Modifier
     )
 }
 
@@ -903,7 +927,22 @@ private fun InventoryEmptyState(
 }
 
 @Composable
-private fun InventoryItemPlaceholder() {
+private fun InventoryItemPlaceholder(highVolumeMode: Boolean = false) {
+    if (highVolumeMode) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .padding(horizontal = 4.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            SkeletonLine(modifier = Modifier.weight(1f), height = 10.dp)
+            SkeletonLine(modifier = Modifier.width(72.dp), height = 10.dp)
+        }
+        return
+    }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,

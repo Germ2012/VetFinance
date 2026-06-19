@@ -13,14 +13,15 @@ import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.data.Pet
-import com.example.vetfinance.viewmodel.VetViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.vetfinance.viewmodel.PetViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddPetScreen(
-    viewModel: VetViewModel,
-    navController: NavController
+    navController: NavController,
+    viewModel: PetViewModel = hiltViewModel()
 ) {
     var petName by remember { mutableStateOf("") }
     var ownerMenuExpanded by remember { mutableStateOf(false) }

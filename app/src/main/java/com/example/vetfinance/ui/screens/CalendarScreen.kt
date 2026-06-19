@@ -36,7 +36,7 @@ import com.example.vetfinance.data.APPOINTMENT_STATUS_PENDING
 import com.example.vetfinance.data.AppointmentWithDetails
 import com.example.vetfinance.data.Supplier
 import com.example.vetfinance.data.SupplierDebtWithSupplier
-import com.example.vetfinance.viewmodel.VetViewModel
+import com.example.vetfinance.viewmodel.CalendarViewModel
 import com.kizitonwose.calendar.compose.HorizontalCalendar
 import com.kizitonwose.calendar.compose.VerticalCalendar
 import com.kizitonwose.calendar.compose.rememberCalendarState
@@ -51,12 +51,13 @@ import java.time.format.TextStyle
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import ui.utils.NumberTransformation
-import ui.utils.formatCurrency
+import com.example.vetfinance.ui.utils.NumberTransformation
+import com.example.vetfinance.ui.utils.formatCurrency
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.hilt.navigation.compose.hiltViewModel
 
 @Composable
-fun CalendarScreen(viewModel: VetViewModel) {
+fun CalendarScreen(viewModel: CalendarViewModel = hiltViewModel()) {
     val selectedDate by viewModel.selectedCalendarDate.collectAsStateWithLifecycle()
     val appointments by viewModel.appointmentsOnSelectedDate.collectAsStateWithLifecycle()
     val supplierDebts by viewModel.supplierDebtsOnSelectedDate.collectAsStateWithLifecycle()
@@ -142,7 +143,7 @@ fun CalendarScreen(viewModel: VetViewModel) {
             }
         }
     ) { paddingValues ->
-        // --- LÓGICA DE DISEÑO INTEGRADA ---
+
         if (isLandscape) {
             Row(
                 modifier = Modifier
@@ -150,7 +151,7 @@ fun CalendarScreen(viewModel: VetViewModel) {
                     .padding(paddingValues)
             ) {
                 VerticalCalendar(
-                    modifier = Modifier.weight(1f), // Ocupa la mitad del ancho
+                    modifier = Modifier.weight(1f),
                     state = state,
                     dayContent = { day -> Day(day, selectedDate == day.date) { viewModel.onCalendarDateSelected(it.date) } },
                     monthHeader = { month ->

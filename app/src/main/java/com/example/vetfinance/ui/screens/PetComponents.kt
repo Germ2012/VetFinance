@@ -34,7 +34,7 @@ fun AddTreatmentDialog(
     onAddNewServiceClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
-    // Si hay un tratamiento inicial, usa sus datos, si no, usa valores vacíos.
+
     var selectedServiceText by remember(initialTreatment) { mutableStateOf(initialTreatment?.description ?: "") }
     var showDatePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialTreatment?.nextTreatmentDate)

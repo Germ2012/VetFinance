@@ -1,14 +1,15 @@
 package com.example.vetfinance.ui.screens
 
 import androidx.compose.runtime.*
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
-import com.example.vetfinance.viewmodel.VetViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.vetfinance.viewmodel.ClientEntryViewModel
 
 @Composable
 fun AddClientScreen(
-    viewModel: VetViewModel,
-    navController: NavController
+    navController: NavController,
+    viewModel: ClientEntryViewModel = hiltViewModel()
 ) {
     val clientSuggestions by viewModel.clientNameSuggestions.collectAsStateWithLifecycle()
 

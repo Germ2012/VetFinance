@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.paging.Pager
 import androidx.paging.PagingConfig
 import androidx.paging.PagingData
+import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.room.withTransaction
 import com.example.vetfinance.R
 import com.example.vetfinance.data.*
@@ -30,8 +31,221 @@ import kotlin.math.floor
 import kotlin.math.min
 
 private const val GENERAL_CLIENT_ID = "00000000-0000-0000-0000-000000000001"
+private val ftsTokenCleanupRegex = Regex("[^\\p{L}\\p{N}_]+")
+private val whitespaceRegex = Regex("\\s+")
 
-// Data class definition for backup
+private fun String.toFtsPrefixQuery(): String {
+    return trim()
+        .split(whitespaceRegex)
+        .map { token -> token.replace(ftsTokenCleanupRegex, "") }
+        .filter { it.isNotBlank() }
+        .joinToString(separator = " ") { token -> "$token*" }
+}
+
+private fun productSearchPagedQuery(filterType: String, ftsQuery: String): SimpleSQLiteQuery {
+    return SimpleSQLiteQuery(
+        """
+            SELECT p.*
+            FROM products AS p
+            INNER JOIN products_fts ON products_fts.productId = p.productId
+            WHERE
+                products_fts MATCH ?
+                AND (
+                    ? = 'Todos'
+                    OR (? = 'Productos' AND p.isService = 0 AND p.sellingMethod != 'Solo Dosis')
+                    OR (? = 'Servicios' AND p.isService = 1)
+                    OR (? = 'Dosis' AND p.isService = 0 AND p.sellingMethod = 'Solo Dosis')
+                    OR (? = 'Bajo stock' AND p.isService = 0 AND p.isContainer = 0 AND p.sellingMethod != 'Solo Dosis'
+                        AND COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
+                        AND p.stock < COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END))
+                )
+            ORDER BY p.name COLLATE NOCASE ASC
+        """.trimIndent(),
+        arrayOf(ftsQuery, filterType, filterType, filterType, filterType, filterType)
+    )
+}
+
+private fun productSuggestionQuery(ftsQuery: String, limit: Int): SimpleSQLiteQuery {
+    return SimpleSQLiteQuery(
+        """
+            SELECT p.*
+            FROM products AS p
+            INNER JOIN products_fts ON products_fts.productId = p.productId
+            WHERE products_fts MATCH ?
+            ORDER BY p.name COLLATE NOCASE ASC
+            LIMIT ?
+        """.trimIndent(),
+        arrayOf(ftsQuery, limit)
+    )
+}
+
+private fun debtClientsSearchQuery(ftsQuery: String): SimpleSQLiteQuery {
+    return SimpleSQLiteQuery(
+        """
+            SELECT c.*
+            FROM clients AS c
+            INNER JOIN clients_fts ON clients_fts.clientId = c.clientId
+            WHERE c.debtAmount > 0
+                AND clients_fts MATCH ?
+            ORDER BY c.name COLLATE NOCASE ASC
+        """.trimIndent(),
+        arrayOf(ftsQuery)
+    )
+}
+
+private fun clientsSearchQuery(ftsQuery: String): SimpleSQLiteQuery {
+    return SimpleSQLiteQuery(
+        """
+            SELECT c.*
+            FROM clients AS c
+            INNER JOIN clients_fts ON clients_fts.clientId = c.clientId
+            WHERE clients_fts MATCH ?
+            ORDER BY c.name COLLATE NOCASE ASC
+        """.trimIndent(),
+        arrayOf(ftsQuery)
+    )
+}
+
+private fun clientSuggestionQuery(ftsQuery: String, limit: Int): SimpleSQLiteQuery {
+    return SimpleSQLiteQuery(
+        """
+            SELECT c.*
+            FROM clients AS c
+            INNER JOIN clients_fts ON clients_fts.clientId = c.clientId
+            WHERE clients_fts MATCH ?
+            ORDER BY c.name COLLATE NOCASE ASC
+            LIMIT ?
+        """.trimIndent(),
+        arrayOf(ftsQuery, limit)
+    )
+}
+
+private fun debtCollectionRowsSearchQuery(
+    ftsQuery: String,
+    includeZeroDebt: Boolean,
+    minimumDebt: Double,
+    sortMode: String
+): SimpleSQLiteQuery {
+    return SimpleSQLiteQuery(
+        """
+            SELECT
+                c.*,
+                COALESCE(salesByClient.totalSold, 0.0) AS totalSold,
+                COALESCE(paymentsByClient.totalPaid, 0.0) AS totalPaid,
+                c.debtAmount AS balance
+            FROM clients AS c
+            INNER JOIN clients_fts ON clients_fts.clientId = c.clientId
+            LEFT JOIN (
+                SELECT clientIdFk, SUM(totalAmount) AS totalSold
+                FROM sales
+                GROUP BY clientIdFk
+            ) AS salesByClient ON salesByClient.clientIdFk = c.clientId
+            LEFT JOIN (
+                SELECT clientIdFk, SUM(amount) AS totalPaid
+                FROM payments
+                GROUP BY clientIdFk
+            ) AS paymentsByClient ON paymentsByClient.clientIdFk = c.clientId
+            WHERE
+                clients_fts MATCH ?
+                AND (? = 1 OR c.debtAmount > 0.0)
+                AND c.debtAmount >= ?
+            ORDER BY
+                CASE WHEN ? = 'Menor deuda' THEN c.debtAmount END ASC,
+                CASE WHEN ? = 'Nombre' THEN c.name END COLLATE NOCASE ASC,
+                CASE WHEN ? = 'Mayor deuda' THEN c.debtAmount END DESC,
+                c.name COLLATE NOCASE ASC
+        """.trimIndent(),
+        arrayOf(ftsQuery, if (includeZeroDebt) 1 else 0, minimumDebt, sortMode, sortMode, sortMode)
+    )
+}
+
+private fun debtCollectionSummarySearchQuery(
+    ftsQuery: String,
+    includeZeroDebt: Boolean,
+    minimumDebt: Double
+): SimpleSQLiteQuery {
+    return SimpleSQLiteQuery(
+        """
+            SELECT
+                COUNT(*) AS clientCount,
+                COALESCE(SUM(balance), 0.0) AS totalPending,
+                COALESCE(SUM(totalPaid), 0.0) AS totalPaid
+            FROM (
+                SELECT
+                    c.clientId,
+                    COALESCE(paymentsByClient.totalPaid, 0.0) AS totalPaid,
+                    c.debtAmount AS balance
+                FROM clients AS c
+                INNER JOIN clients_fts ON clients_fts.clientId = c.clientId
+                LEFT JOIN (
+                    SELECT clientIdFk, SUM(amount) AS totalPaid
+                    FROM payments
+                    GROUP BY clientIdFk
+                ) AS paymentsByClient ON paymentsByClient.clientIdFk = c.clientId
+                WHERE
+                    clients_fts MATCH ?
+                    AND (? = 1 OR c.debtAmount > 0.0)
+                    AND c.debtAmount >= ?
+            )
+        """.trimIndent(),
+        arrayOf(ftsQuery, if (includeZeroDebt) 1 else 0, minimumDebt)
+    )
+}
+
+private fun globalSearchQuery(rawQuery: String, ftsQuery: String, limit: Int): SimpleSQLiteQuery {
+    return SimpleSQLiteQuery(
+        """
+            SELECT id, type, title, subtitle
+            FROM (
+                SELECT
+                    c.clientId AS id,
+                    'client' AS type,
+                    'Cliente: ' || c.name AS title,
+                    COALESCE(c.phone, 'Sin telefono') AS subtitle,
+                    0 AS priority,
+                    c.name AS sortName
+                FROM clients AS c
+                INNER JOIN clients_fts ON clients_fts.clientId = c.clientId
+                WHERE clients_fts MATCH ?
+
+                UNION ALL
+
+                SELECT
+                    p.petId AS id,
+                    'pet' AS type,
+                    'Mascota: ' || p.name AS title,
+                    'Dueno: ' || c.name AS subtitle,
+                    1 AS priority,
+                    p.name AS sortName
+                FROM pets AS p
+                INNER JOIN clients AS c ON c.clientId = p.ownerIdFk
+                WHERE ? != ''
+                    AND (
+                        p.name LIKE '%' || ? || '%'
+                        OR c.name LIKE '%' || ? || '%'
+                    )
+
+                UNION ALL
+
+                SELECT
+                    p.productId AS id,
+                    'product' AS type,
+                    CASE WHEN p.isService = 1 THEN 'Servicio: ' ELSE 'Producto: ' END || p.name AS title,
+                    COALESCE(p.category, p.sellingMethod) AS subtitle,
+                    2 AS priority,
+                    p.name AS sortName
+                FROM products AS p
+                INNER JOIN products_fts ON products_fts.productId = p.productId
+                WHERE products_fts MATCH ?
+            )
+            ORDER BY priority ASC, sortName COLLATE NOCASE ASC
+            LIMIT ?
+        """.trimIndent(),
+        arrayOf(ftsQuery, rawQuery, rawQuery, rawQuery, ftsQuery, limit)
+    )
+}
+
+
 private data class ParsedBackupData(
     val clients: List<Client>,
     val products: List<Product>,
@@ -195,8 +409,12 @@ class VetRepository @Inject constructor(
 
             val updatedContainerStock = containerProduct.stock - 1.0
             val updatedContainedStock = containedProduct.stock + amountToTransfer
-            productDao.update(containerProduct.copy(stock = updatedContainerStock))
-            productDao.update(containedProduct.copy(stock = updatedContainedStock))
+            if (productDao.decrementStockIfEnough(containerProduct.productId, 1.0) == 0) {
+                throw IllegalStateException("No hay stock disponible del contenedor ${containerProduct.name}.")
+            }
+            if (productDao.incrementStock(containedProduct.productId, amountToTransfer) == 0) {
+                throw IllegalStateException("Producto contenido no encontrado.")
+            }
             recordStockMovement(
                 product = containerProduct,
                 movementType = STOCK_MOVEMENT_CONTAINER_OPEN,
@@ -230,15 +448,16 @@ class VetRepository @Inject constructor(
         }
     }
 
-    suspend fun deleteSale(saleWithProducts: SaleWithProducts) {
-        val sale = saleWithProducts.sale
+    suspend fun deleteSaleById(saleId: String) {
         db.withTransaction {
-            val saleDetails = saleDao.getSaleDetailsBySaleId(sale.saleId)
+            val saleDetails = saleDao.getSaleDetailsBySaleId(saleId)
             for (detail in saleDetails) {
                 val product = productDao.getProductById(detail.productId)
                 if (product != null && !product.isService && product.sellingMethod != SELLING_METHOD_DOSE_ONLY) {
                     val newStock = product.stock + detail.quantitySold
-                    productDao.update(product.copy(stock = newStock))
+                    if (productDao.incrementStock(product.productId, detail.quantitySold) == 0) {
+                        throw IllegalStateException("Producto no encontrado: ${product.name}")
+                    }
                     recordStockMovement(
                         product = product,
                         movementType = STOCK_MOVEMENT_SALE_REVERSAL,
@@ -248,23 +467,58 @@ class VetRepository @Inject constructor(
                     )
                 }
             }
-            saleDao.deleteSaleProductCrossRefs(sale.saleId)
-            saleDao.deleteSale(sale)
+            saleDao.deleteSaleProductCrossRefs(saleId)
+            saleDao.deleteSaleById(saleId)
         }
     }
 
-    // --- Pagination Methods ---
+
     fun getProductsPaginated(filterType: String, searchQuery: String): Flow<PagingData<Product>> {
+        val ftsQuery = searchQuery.toFtsPrefixQuery()
         return Pager(
             config = PagingConfig(pageSize = 20, enablePlaceholders = false),
-            pagingSourceFactory = { productDao.getProductsPagedSource(filterType, searchQuery) }
+            pagingSourceFactory = {
+                if (ftsQuery.isBlank()) {
+                    productDao.getProductsPagedSource(filterType)
+                } else {
+                    productDao.searchProductsPagedSource(productSearchPagedQuery(filterType, ftsQuery))
+                }
+            }
+        ).flow
+    }
+
+    fun getSalesPaginated(startDate: Long?, endDate: Long?): Flow<PagingData<SaleListItem>> {
+        return Pager(
+            config = PagingConfig(pageSize = 30, enablePlaceholders = false),
+            pagingSourceFactory = { saleDao.getSalesPagedSource(startDate, endDate) }
+        ).flow
+    }
+
+    fun getPaymentsForClientPaginated(clientId: String): Flow<PagingData<Payment>> {
+        return Pager(
+            config = PagingConfig(pageSize = 30, enablePlaceholders = false),
+            pagingSourceFactory = { paymentDao.getPaymentsForClientPagedSource(clientId) }
+        ).flow
+    }
+
+    fun getDebtHistoryForClientPaginated(clientId: String): Flow<PagingData<ClientDebtHistory>> {
+        return Pager(
+            config = PagingConfig(pageSize = 30, enablePlaceholders = false),
+            pagingSourceFactory = { clientDebtHistoryDao.getHistoryForClientPagedSource(clientId) }
         ).flow
     }
 
     fun getDebtClientsPaginated(searchQuery: String): Flow<PagingData<Client>> {
+        val ftsQuery = searchQuery.toFtsPrefixQuery()
         return Pager(
             config = PagingConfig(pageSize = 20, enablePlaceholders = false),
-            pagingSourceFactory = { clientDao.getDebtClientsPagedSource(searchQuery) }
+            pagingSourceFactory = {
+                if (ftsQuery.isBlank()) {
+                    clientDao.getDebtClientsPagedSource()
+                } else {
+                    clientDao.searchDebtClientsPagedSource(debtClientsSearchQuery(ftsQuery))
+                }
+            }
         ).flow
     }
 
@@ -274,27 +528,45 @@ class VetRepository @Inject constructor(
         minimumDebt: Double,
         sortMode: String
     ): Flow<PagingData<DebtCollectionRow>> {
+        val ftsQuery = searchQuery.toFtsPrefixQuery()
         return Pager(
             config = PagingConfig(pageSize = 20, enablePlaceholders = false),
             pagingSourceFactory = {
-                clientDao.getDebtCollectionRowsPagedSource(
-                    searchQuery = searchQuery,
-                    includeZeroDebt = if (includeZeroDebt) 1 else 0,
-                    minimumDebt = minimumDebt,
-                    sortMode = sortMode
-                )
+                if (ftsQuery.isBlank()) {
+                    clientDao.getDebtCollectionRowsPagedSource(
+                        includeZeroDebt = if (includeZeroDebt) 1 else 0,
+                        minimumDebt = minimumDebt,
+                        sortMode = sortMode
+                    )
+                } else {
+                    clientDao.searchDebtCollectionRowsPagedSource(
+                        debtCollectionRowsSearchQuery(
+                            ftsQuery = ftsQuery,
+                            includeZeroDebt = includeZeroDebt,
+                            minimumDebt = minimumDebt,
+                            sortMode = sortMode
+                        )
+                    )
+                }
             }
         ).flow
     }
 
     fun getClientsPaginated(searchQuery: String): Flow<PagingData<Client>> {
+        val ftsQuery = searchQuery.toFtsPrefixQuery()
         return Pager(
             config = PagingConfig(pageSize = 20, enablePlaceholders = false),
-            pagingSourceFactory = { clientDao.getClientsPagedSource(searchQuery) }
+            pagingSourceFactory = {
+                if (ftsQuery.isBlank()) {
+                    clientDao.getClientsPagedSource()
+                } else {
+                    clientDao.searchClientsPagedSource(clientsSearchQuery(ftsQuery))
+                }
+            }
         ).flow
     }
 
-    // --- Query Methods (Flows and suspend) ---
+
     fun getAppointmentsForDate(date: LocalDate): Flow<List<AppointmentWithDetails>> {
         val startOfDay = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val endOfDay = date.plusDays(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -324,34 +596,77 @@ class VetRepository @Inject constructor(
     fun getDebtTotalsForRange(startDate: Long, endDate: Long, adjustmentType: String): Flow<CashClosingDebtRow> =
         clientDebtHistoryDao.getDebtTotalsForRange(startDate, endDate, adjustmentType)
     fun getPendingCollectionRows(): Flow<List<DebtCollectionRow>> = clientDao.getPendingCollectionRows()
-    fun getDebtCollectionSummary(searchQuery: String, includeZeroDebt: Boolean, minimumDebt: Double): Flow<DebtCollectionSummary> =
-        clientDao.getDebtCollectionSummary(
-            searchQuery = searchQuery,
-            includeZeroDebt = if (includeZeroDebt) 1 else 0,
-            minimumDebt = minimumDebt
-        )
+    fun getDebtCollectionPreviewRows(limit: Int = 3): Flow<List<DebtCollectionRow>> =
+        clientDao.getDebtCollectionPreviewRows(limit)
+    fun getDebtCollectionSummary(searchQuery: String, includeZeroDebt: Boolean, minimumDebt: Double): Flow<DebtCollectionSummary> {
+        val ftsQuery = searchQuery.toFtsPrefixQuery()
+        return if (ftsQuery.isBlank()) {
+            clientDao.getDebtCollectionSummary(
+                includeZeroDebt = if (includeZeroDebt) 1 else 0,
+                minimumDebt = minimumDebt
+            )
+        } else {
+            clientDao.searchDebtCollectionSummary(
+                debtCollectionSummarySearchQuery(
+                    ftsQuery = ftsQuery,
+                    includeZeroDebt = includeZeroDebt,
+                    minimumDebt = minimumDebt
+                )
+            )
+        }
+    }
     fun getTotalDebt(): Flow<Double?> = clientDao.getTotalDebt()
     fun getTotalInventoryValue(): Flow<Double?> = productDao.getTotalInventoryValue()
     fun getStockHealthSummary(): Flow<StockHealthRow> = productDao.getStockHealthSummary()
+    fun getInventoryCounts(): Flow<InventoryCountsRow> = productDao.getInventoryCounts()
+    fun getLowStockProductsByName(): Flow<List<Product>> = productDao.getLowStockProductsByName()
+    fun getServices(): Flow<List<Product>> = productDao.getServices()
+    fun getInventoryReportSummary(): Flow<InventoryReportSummaryRow> = productDao.getInventoryReportSummary()
+    fun getInventoryReportProductsPaginated(): Flow<PagingData<Product>> {
+        return Pager(
+            config = PagingConfig(pageSize = 30, enablePlaceholders = false),
+            pagingSourceFactory = { productDao.getInventoryReportProductsPagedSource() }
+        ).flow
+    }
     fun getProductProfitReports(startDate: Long, endDate: Long): Flow<List<ProductProfitReportRow>> =
         saleDao.getProductProfitReports(startDate, endDate)
     fun getClientPurchaseReports(startDate: Long, endDate: Long, limit: Int): Flow<List<ClientPurchaseReportRow>> =
         clientDao.getClientPurchaseReports(startDate, endDate, limit)
-    fun searchGlobal(query: String, limit: Int = 12): Flow<List<GlobalSearchRow>> =
-        searchDao.searchGlobal(query.trim(), limit)
-    fun searchProductSuggestions(query: String, limit: Int = 8): Flow<List<Product>> =
-        productDao.searchProductSuggestions(query.trim(), limit)
-    fun searchClientSuggestions(query: String, limit: Int = 6): Flow<List<Client>> =
-        clientDao.searchClientSuggestions(query.trim(), limit)
+    fun searchGlobal(query: String, limit: Int = 12): Flow<List<GlobalSearchRow>> {
+        val rawQuery = query.trim()
+        val ftsQuery = rawQuery.toFtsPrefixQuery()
+        return if (ftsQuery.isBlank()) {
+            kotlinx.coroutines.flow.flowOf(emptyList())
+        } else {
+            searchDao.searchGlobal(globalSearchQuery(rawQuery, ftsQuery, limit))
+        }
+    }
+    fun searchProductSuggestions(query: String, limit: Int = 8): Flow<List<Product>> {
+        val ftsQuery = query.toFtsPrefixQuery()
+        return if (ftsQuery.isBlank()) {
+            kotlinx.coroutines.flow.flowOf(emptyList())
+        } else {
+            productDao.searchProductSuggestions(productSuggestionQuery(ftsQuery, limit))
+        }
+    }
+    fun searchClientSuggestions(query: String, limit: Int = 6): Flow<List<Client>> {
+        val ftsQuery = query.toFtsPrefixQuery()
+        return if (ftsQuery.isBlank()) {
+            kotlinx.coroutines.flow.flowOf(emptyList())
+        } else {
+            clientDao.searchClientSuggestions(clientSuggestionQuery(ftsQuery, limit))
+        }
+    }
     fun getAllProducts(): Flow<List<Product>> = productDao.getAllProducts()
-    fun getAllSales(): Flow<List<SaleWithProducts>> = saleDao.getAllSalesWithProducts()
+    fun getAllSalesSimple(): Flow<List<Sale>> = saleDao.getAllSalesSimple()
     fun getAllClients(): Flow<List<Client>> = clientDao.getAllClients()
     suspend fun getClientById(clientId: String): Client? = clientDao.getClientById(clientId)
-    fun getAllPayments(): Flow<List<Payment>> = paymentDao.getAllPaymentsSimple()
-    fun getAllDebtHistory(): Flow<List<ClientDebtHistory>> = clientDebtHistoryDao.getAllDebtHistorySimple()
+    fun getClientByIdFlow(clientId: String): Flow<Client?> = clientDao.getClientByIdFlow(clientId)
     fun getAllSuppliers(): Flow<List<Supplier>> = supplierDao.getAllSuppliers()
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>> = paymentDao.getPaymentsForClient(clientId)
+    fun getPaymentSummaryForClient(clientId: String): Flow<ClientPaymentSummaryRow> = paymentDao.getPaymentSummaryForClient(clientId)
     fun getDebtHistoryForClient(clientId: String): Flow<List<ClientDebtHistory>> = clientDebtHistoryDao.getHistoryForClient(clientId)
+    fun getDebtHistorySummaryForClient(clientId: String): Flow<ClientDebtHistorySummaryRow> = clientDebtHistoryDao.getSummaryForClient(clientId)
     fun getProductCostHistory(productId: String): Flow<List<ProductCostHistoryItem>> = restockDao.getProductCostHistory(productId)
     fun getProductStockMovements(productId: String): Flow<List<StockMovement>> = stockMovementDao.getMovementsForProduct(productId)
     fun getSupplierDebtsForDate(date: LocalDate): Flow<List<SupplierDebtWithSupplier>> {
@@ -368,9 +683,14 @@ class VetRepository @Inject constructor(
     fun getUpcomingTreatments(): Flow<List<Treatment>> = treatmentDao.getUpcomingTreatments()
     suspend fun getUpcomingTreatmentsForRange(startDate: Long, endDate: Long): List<Treatment> = treatmentDao.getUpcomingTreatmentsForRange(startDate, endDate)
     suspend fun getSaleDetailsBySaleId(saleId: String): List<SaleProductCrossRef> = saleDao.getSaleDetailsBySaleId(saleId)
+    fun getSaleDetailLines(saleId: String): Flow<List<SaleDetailLine>> = saleDao.getSaleDetailLines(saleId)
+    fun getSalesListSummary(startDate: Long?, endDate: Long?): Flow<CashClosingSalesRow> =
+        saleDao.getSalesListSummary(startDate, endDate)
+    fun getSalePeriods(periodType: String, limit: Int = 365): Flow<List<SalePeriodRow>> =
+        saleDao.getSalePeriods(periodType, limit)
     suspend fun getProductById(productId: String): Product? = productDao.getProductById(productId)
 
-    // --- Insertion and Update Methods (CRUD) ---
+
     suspend fun insertOrUpdateProduct(product: Product) {
         val existingProduct = productDao.getProductById(product.productId)
         if (existingProduct == null) {
@@ -394,7 +714,14 @@ class VetRepository @Inject constructor(
             val change = newStock - currentProduct.stock
             if (kotlin.math.abs(change) < 0.0001) return@withTransaction
 
-            productDao.update(currentProduct.copy(stock = newStock))
+            val updatedRows = if (change > 0.0) {
+                productDao.incrementStock(currentProduct.productId, change)
+            } else {
+                productDao.decrementStockIfEnough(currentProduct.productId, kotlin.math.abs(change))
+            }
+            if (updatedRows == 0) {
+                throw IllegalStateException("No se pudo ajustar el stock de ${currentProduct.name}.")
+            }
             recordStockMovement(
                 product = currentProduct,
                 movementType = STOCK_MOVEMENT_MANUAL_ADJUSTMENT,
@@ -530,7 +857,11 @@ class VetRepository @Inject constructor(
                 if (shouldDiscountStock(productForSale)) {
                     productForSale = ensureStockAvailable(productForSale, cartItem.quantity)
                     val stockAfterSale = productForSale.stock - cartItem.quantity
-                    productDao.update(productForSale.copy(stock = stockAfterSale))
+                    if (productDao.decrementStockIfEnough(productForSale.productId, cartItem.quantity) == 0) {
+                        throw IllegalStateException(
+                            "Stock insuficiente para ${productForSale.name}. Disponible: ${productForSale.stock}, solicitado: ${cartItem.quantity}"
+                        )
+                    }
                     recordStockMovement(
                         product = productForSale,
                         movementType = STOCK_MOVEMENT_SALE,
@@ -574,7 +905,9 @@ class VetRepository @Inject constructor(
             if (containersToOpen > 0) {
                 val updatedContainerStock = container.stock - containersToOpen
                 val addedQuantity = containersToOpen * containerSize
-                productDao.update(container.copy(stock = updatedContainerStock))
+                if (productDao.decrementStockIfEnough(container.productId, containersToOpen.toDouble()) == 0) {
+                    throw IllegalStateException("No hay stock disponible del contenedor ${container.name}.")
+                }
                 recordStockMovement(
                     product = container,
                     movementType = STOCK_MOVEMENT_CONTAINER_OPEN,
@@ -583,7 +916,9 @@ class VetRepository @Inject constructor(
                     note = "Apertura automatica para venta fraccionada"
                 )
                 currentProduct = currentProduct.copy(stock = currentProduct.stock + addedQuantity)
-                productDao.update(currentProduct)
+                if (productDao.incrementStock(currentProduct.productId, addedQuantity) == 0) {
+                    throw IllegalStateException("Producto no encontrado: ${currentProduct.name}")
+                }
                 recordStockMovement(
                     product = currentProduct,
                     movementType = STOCK_MOVEMENT_CONTAINER_OPEN,
@@ -604,7 +939,7 @@ class VetRepository @Inject constructor(
     }
 
     suspend fun performRestock(order: RestockOrder, items: List<RestockOrderItem>, supplierDebtDueDate: Long? = null) {
-        require(items.isNotEmpty()) { "La reposición debe tener al menos un producto." }
+        require(items.isNotEmpty()) { "La reposicion debe tener al menos un producto." }
         require(items.all { it.quantity > 0.0 && it.costPerUnit >= 0.0 }) {
             "Las cantidades deben ser mayores a cero y los costos no pueden ser negativos."
         }
@@ -615,14 +950,12 @@ class VetRepository @Inject constructor(
 
             items.forEach { item ->
                 val product = productDao.getProductById(item.productIdFk)
-                    ?: throw IllegalStateException("Producto no encontrado en reposición.")
+                    ?: throw IllegalStateException("Producto no encontrado en reposicion.")
                 if (!product.isService) {
                     val updatedStock = product.stock + item.quantity
-                    val updatedProduct = product.copy(
-                        stock = updatedStock,
-                        cost = item.costPerUnit
-                    )
-                    productDao.update(updatedProduct)
+                    if (productDao.incrementStockAndSetCost(product.productId, item.quantity, item.costPerUnit) == 0) {
+                        throw IllegalStateException("Producto no encontrado en reposicion.")
+                    }
                     recordStockMovement(
                         product = product,
                         movementType = STOCK_MOVEMENT_RESTOCK,
@@ -650,7 +983,7 @@ class VetRepository @Inject constructor(
         }
     }
 
-    // --- Export and Import Logic ---
+
     private fun <T> listToCsvString(data: List<T>, headers: Array<String>, recordToStringArray: (T) -> Array<String>): String {
         StringWriter().use { writer ->
             val csvFormat = CSVFormat.Builder.create(CSVFormat.DEFAULT).setHeader(*headers).build()
@@ -666,7 +999,7 @@ class VetRepository @Inject constructor(
     suspend fun exportarDatosCompletos(): Map<String, String> = withContext(Dispatchers.IO) {
         val csvMap = mutableMapOf<String, String>()
 
-        // Clients, Suppliers, Products, Pets, Treatments, Sales, etc.
+
         val clientHeaders = arrayOf("clientId", "name", "phone", "address", "debtAmount")
         val clients = clientDao.getAllClients().first()
         if (clients.isNotEmpty()) {
@@ -857,7 +1190,7 @@ class VetRepository @Inject constructor(
 
     @Throws(BackupValidationException::class)
     private fun validateAndParseBackupData(archivos: Map<String, String>): ParsedBackupData {
-        // Parsing
+
         val clients = parseCSV(archivos["clients.csv"], ::parseClient)
         val products = parseCSV(archivos["products.csv"], ::parseProduct)
         val pets = parseCSV(archivos["pets.csv"], ::parsePet)
@@ -874,7 +1207,7 @@ class VetRepository @Inject constructor(
         val restockOrderItems = parseCSV(archivos["restock_order_items.csv"], ::parseRestockOrderItem)
         val stockMovements = parseCSV(archivos["stock_movements.csv"], ::parseStockMovement)
 
-        // Validation
+
         val clientIds = clients.map { it.clientId }.toSet()
         val petIds = pets.map { it.petId }.toSet()
         val productIds = products.map { it.productId }.toSet()
@@ -945,7 +1278,7 @@ class VetRepository @Inject constructor(
         }
     }
 
-    // --- CSV Parsers ---
+
     private inline fun <T> parseCSV(content: String?, parser: (CSVRecord) -> T): List<T> {
         if (content.isNullOrBlank()) return emptyList()
         val format = CSVFormat.Builder.create(CSVFormat.DEFAULT)

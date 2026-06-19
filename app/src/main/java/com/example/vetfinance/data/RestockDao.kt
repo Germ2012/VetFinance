@@ -45,13 +45,13 @@ interface RestockDao {
             p.name as productName,
             s.name as supplierName,
             ro.orderDate as orderDate,
-            roi.costPerUnit as costAtTime, 
+            roi.costPerUnit as costAtTime,
             roi.quantity as quantity
         FROM restock_order_items AS roi
-        INNER JOIN restock_orders AS ro ON roi.orderIdFk = ro.orderId 
-        INNER JOIN products AS p ON roi.productIdFk = p.productId 
+        INNER JOIN restock_orders AS ro ON roi.orderIdFk = ro.orderId
+        INNER JOIN products AS p ON roi.productIdFk = p.productId
         LEFT JOIN suppliers AS s ON ro.supplierIdFk = s.supplierId
-        WHERE ro.orderDate >= :startDate AND ro.orderDate <= :endDate 
+        WHERE ro.orderDate >= :startDate AND ro.orderDate <= :endDate
         ORDER BY ro.orderDate DESC
     """)
     suspend fun getRestockHistoryForDateRange(startDate: Long, endDate: Long): List<RestockHistoryItem>
