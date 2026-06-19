@@ -1,5 +1,6 @@
 package com.example.vetfinance.ui.screens
 
+import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -69,6 +70,7 @@ import com.example.vetfinance.domain.model.ClientPurchaseReport
 import com.example.vetfinance.domain.model.ProductProfitReport
 import com.example.vetfinance.domain.model.SalesTrendComparisonPoint
 import com.example.vetfinance.domain.model.StockHealthSummary
+import com.example.vetfinance.viewmodel.BackupImportUiState
 import com.example.vetfinance.viewmodel.HistoricalPeriod
 import com.example.vetfinance.viewmodel.ReportPeriodType
 import com.example.vetfinance.viewmodel.TopProductsMetric
@@ -277,6 +279,7 @@ fun SalesAndBackupTab(viewModel: ReportsViewModel) {
     val grossProfit by viewModel.grossProfitSummary.collectAsStateWithLifecycle()
     val selectedHistoricalPeriod by viewModel.selectedHistoricalPeriod.collectAsStateWithLifecycle()
     val salesTrendComparison by viewModel.salesTrendComparison.collectAsStateWithLifecycle()
+    val backupImportUiState by viewModel.backupImportUiState.collectAsStateWithLifecycle()
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -287,10 +290,19 @@ fun SalesAndBackupTab(viewModel: ReportsViewModel) {
 
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
-            scope.launch {
-                val resultado = viewModel.importarDatosDesdeZIP(it, context)
-                Toast.makeText(context, resultado, Toast.LENGTH_LONG).show()
+            try {
+                context.contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: SecurityException) {
             }
+            viewModel.importarDatosDesdeZIP(it)
+            Toast.makeText(context, "Importacion iniciada en segundo plano.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    LaunchedEffect(backupImportUiState.finishedToken) {
+        val message = backupImportUiState.message
+        if (backupImportUiState.finishedToken != null && !message.isNullOrBlank()) {
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     }
 
@@ -366,6 +378,7 @@ fun SalesAndBackupTab(viewModel: ReportsViewModel) {
         }
         item {
             BackupPanel(
+                importState = backupImportUiState,
                 onImport = { importLauncher.launch(arrayOf("application/zip")) },
                 onExport = {
                     val timestamp = SimpleDateFormat("yyyy-MM-dd_HHmmss", Locale.getDefault()).format(Date())
@@ -1151,6 +1164,7 @@ private fun ReportModuleHeader(
 
 @Composable
 private fun BackupPanel(
+    importState: BackupImportUiState,
     onImport: () -> Unit,
     onExport: () -> Unit
 ) {
@@ -1174,15 +1188,38 @@ private fun BackupPanel(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                OutlinedButton(onClick = onImport, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) {
+                OutlinedButton(
+                    onClick = onImport,
+                    enabled = !importState.isRunning,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
                     Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.button_import))
                 }
-                Button(onClick = onExport, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) {
+                Button(
+                    onClick = onExport,
+                    enabled = !importState.isRunning,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
                     Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.button_export))
+                }
+            }
+            AnimatedVisibility(visible = importState.isRunning) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LinearProgressIndicator(
+                        progress = { (importState.progress / 100f).coerceIn(0f, 1f) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Text(
+                        importState.message ?: "Importando respaldo...",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
                 }
             }
         }

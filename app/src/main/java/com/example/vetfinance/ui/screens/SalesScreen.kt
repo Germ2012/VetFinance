@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
@@ -35,6 +36,7 @@ import com.example.vetfinance.data.SaleListItem
 import com.example.vetfinance.navigation.Screen
 import com.example.vetfinance.viewmodel.SalesHistoryViewModel
 import com.example.vetfinance.ui.components.HighVolumeModeToggle
+import com.example.vetfinance.ui.components.HighVolumeSuggestion
 import com.example.vetfinance.ui.utils.formatCurrency
 import java.text.SimpleDateFormat
 import java.time.Instant
@@ -63,7 +65,7 @@ fun SalesScreen(
     var saleToDelete by remember { mutableStateOf<SaleListItem?>(null) }
     var secureSaleToDelete by remember { mutableStateOf<SaleListItem?>(null) }
     var selectedSale by remember { mutableStateOf<SaleListItem?>(null) }
-    var highVolumeMode by rememberSaveable { mutableStateOf(true) }
+    var highVolumeMode by rememberSaveable { mutableStateOf(false) }
 
 
     if (saleToDelete != null) {
@@ -115,6 +117,7 @@ fun SalesScreen(
     if (showDatePicker) {
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
+            properties = DialogProperties(dismissOnClickOutside = false),
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -191,6 +194,14 @@ fun SalesScreen(
                 enabled = highVolumeMode,
                 onEnabledChange = { highVolumeMode = it }
             )
+            if (!highVolumeMode) {
+                Spacer(modifier = Modifier.height(8.dp))
+                HighVolumeSuggestion(
+                    itemCount = salesSummary.salesCount,
+                    threshold = 1000,
+                    onEnable = { highVolumeMode = true }
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
 
 

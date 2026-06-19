@@ -29,6 +29,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import com.example.vetfinance.R
 import com.example.vetfinance.data.APPOINTMENT_STATUS_CANCELLED
 import com.example.vetfinance.data.APPOINTMENT_STATUS_COMPLETED
@@ -427,6 +428,7 @@ fun AddSupplierDebtDialog(
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = dueDate)
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
+            properties = DialogProperties(dismissOnClickOutside = false),
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { millis ->
@@ -442,6 +444,7 @@ fun AddSupplierDebtDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false),
         title = { Text(stringResource(R.string.supplier_debt_dialog_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

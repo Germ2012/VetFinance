@@ -2,10 +2,16 @@ package com.example.vetfinance.viewmodel
 
 import android.content.Context
 import android.net.Uri
+import androidx.lifecycle.Observer
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import androidx.paging.cachedIn
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import androidx.work.workDataOf
 import com.example.vetfinance.data.DebtCollectionRow
 import com.example.vetfinance.data.DebtCollectionSummary
 import com.example.vetfinance.data.InventoryReportSummaryRow
@@ -28,15 +34,18 @@ import com.example.vetfinance.domain.usecase.GetFinancialSummaryUseCase
 import com.example.vetfinance.domain.usecase.GetProductProfitReportsUseCase
 import com.example.vetfinance.domain.usecase.GetSalesTrendComparisonUseCase
 import com.example.vetfinance.domain.usecase.GetStockHealthSummaryUseCase
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -50,11 +59,20 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
 import java.util.Locale
+import java.util.UUID
 import javax.inject.Inject
+
+data class BackupImportUiState(
+    val isRunning: Boolean = false,
+    val progress: Int = 0,
+    val message: String? = null,
+    val finishedToken: String? = null
+)
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ReportsViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val repository: VetRepository,
     private val getDebtCollectionPageUseCase: GetDebtCollectionPageUseCase,
     private val getDebtCollectionSummaryUseCase: GetDebtCollectionSummaryUseCase,
@@ -67,6 +85,21 @@ class ReportsViewModel @Inject constructor(
     private val getClientPurchaseReportsUseCase: GetClientPurchaseReportsUseCase,
     private val appEventBus: AppEventBus
 ) : ViewModel() {
+
+    private val workManager = WorkManager.getInstance(appContext)
+    private val _importWorkId = MutableStateFlow<UUID?>(null)
+
+    val backupImportUiState: StateFlow<BackupImportUiState> = _importWorkId
+        .flatMapLatest { workId ->
+            if (workId == null) {
+                flowOf(BackupImportUiState())
+            } else {
+                workManager.workInfoFlow(workId).map { workInfo ->
+                    workInfo.toBackupImportUiState(workId)
+                }
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), BackupImportUiState())
 
     val pagingRefreshEvents: SharedFlow<Unit> = appEventBus.pagingRefreshEvents
 
@@ -241,10 +274,66 @@ class ReportsViewModel @Inject constructor(
 
     suspend fun exportarDatosCompletos(): Map<String, String> = repository.exportarDatosCompletos()
 
-    suspend fun importarDatosDesdeZIP(uri: Uri, context: Context): String {
-        val result = repository.importarDatosDesdeZIP(uri, context)
-        appEventBus.emitPagingRefresh()
-        return result
+    fun importarDatosDesdeZIP(uri: Uri) {
+        val request = OneTimeWorkRequestBuilder<BackupImportWorker>()
+            .setInputData(workDataOf(BackupImportWorker.KEY_URI to uri.toString()))
+            .build()
+
+        _importWorkId.value = request.id
+        workManager.enqueueUniqueWork(
+            BackupImportWorker.UNIQUE_WORK_NAME,
+            ExistingWorkPolicy.REPLACE,
+            request
+        )
+    }
+
+    private fun WorkInfo?.toBackupImportUiState(workId: UUID): BackupImportUiState {
+        if (this == null) {
+            return BackupImportUiState(isRunning = true, progress = 0, message = "Preparando importacion...")
+        }
+
+        val progressValue = progress.getInt(BackupImportWorker.KEY_PROGRESS, 0)
+        val progressMessage = progress.getString(BackupImportWorker.KEY_MESSAGE)
+        val outputMessage = outputData.getString(BackupImportWorker.KEY_MESSAGE)
+        return when (state) {
+            WorkInfo.State.ENQUEUED -> BackupImportUiState(
+                isRunning = true,
+                progress = progressValue,
+                message = "Importacion en cola..."
+            )
+            WorkInfo.State.RUNNING -> BackupImportUiState(
+                isRunning = true,
+                progress = progressValue.coerceIn(0, 99),
+                message = progressMessage ?: "Importando respaldo..."
+            )
+            WorkInfo.State.SUCCEEDED -> BackupImportUiState(
+                progress = 100,
+                message = outputMessage ?: "Importacion completada.",
+                finishedToken = "${workId}:success"
+            )
+            WorkInfo.State.FAILED -> BackupImportUiState(
+                message = outputMessage ?: "La importacion fallo.",
+                finishedToken = "${workId}:failed"
+            )
+            WorkInfo.State.BLOCKED -> BackupImportUiState(
+                isRunning = true,
+                progress = progressValue,
+                message = "Esperando tareas previas..."
+            )
+            WorkInfo.State.CANCELLED -> BackupImportUiState(
+                message = "Importacion cancelada.",
+                finishedToken = "${workId}:cancelled"
+            )
+        }
+    }
+
+    private fun WorkManager.workInfoFlow(workId: UUID): Flow<WorkInfo?> = callbackFlow {
+        val liveData = getWorkInfoByIdLiveData(workId)
+        val observer = Observer<WorkInfo> { workInfo ->
+            trySend(workInfo)
+        }
+        liveData.observeForever(observer)
+        awaitClose { liveData.removeObserver(observer) }
     }
 
     private fun generateHistoricalPeriods(periodRows: List<SalePeriodRow>, type: ReportPeriodType): List<HistoricalPeriod> {

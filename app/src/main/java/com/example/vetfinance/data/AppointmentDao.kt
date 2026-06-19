@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -26,6 +27,9 @@ interface AppointmentDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(appointments: List<Appointment>)
+
+    @Upsert
+    suspend fun upsertAll(appointments: List<Appointment>)
 
     @Query("DELETE FROM appointments")
     suspend fun deleteAllAppointments()

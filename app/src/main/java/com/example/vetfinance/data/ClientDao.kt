@@ -8,6 +8,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RawQuery
 import androidx.room.Update
+import androidx.room.Upsert
 import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 
@@ -18,6 +19,9 @@ interface ClientDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(clients: List<Client>)
+
+    @Upsert
+    suspend fun upsertAll(clients: List<Client>)
 
     @Update
     suspend fun update(client: Client)

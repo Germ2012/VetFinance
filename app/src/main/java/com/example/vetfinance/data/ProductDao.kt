@@ -8,6 +8,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RawQuery
 import androidx.room.Update
+import androidx.room.Upsert
 import androidx.sqlite.db.SupportSQLiteQuery
 import kotlinx.coroutines.flow.Flow
 
@@ -15,6 +16,9 @@ import kotlinx.coroutines.flow.Flow
 interface ProductDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(products: List<Product>)
+
+    @Upsert
+    suspend fun upsertAll(products: List<Product>)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProduct(product: Product)
@@ -31,20 +35,32 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE productId = :productId")
     suspend fun getProductById(productId: String): Product?
 
+    @Query("SELECT * FROM products WHERE productId = :productId")
+    fun getProductByIdFlow(productId: String): Flow<Product?>
+
     @Query("""
         SELECT *
-        FROM products
+        FROM products AS p
         WHERE
             (
                 :filterType = 'Todos'
-                OR (:filterType = 'Productos' AND isService = 0 AND sellingMethod != 'Solo Dosis')
-                OR (:filterType = 'Servicios' AND isService = 1)
-                OR (:filterType = 'Dosis' AND isService = 0 AND sellingMethod = 'Solo Dosis')
-                OR (:filterType = 'Bajo stock' AND isService = 0 AND isContainer = 0 AND sellingMethod != 'Solo Dosis'
-                    AND COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
-                    AND stock < COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END))
+                OR (:filterType = 'Productos' AND p.isService = 0 AND p.sellingMethod != 'Solo Dosis')
+                OR (:filterType = 'Servicios' AND p.isService = 1)
+                OR (:filterType = 'Dosis' AND p.isService = 0 AND p.sellingMethod = 'Solo Dosis')
+                OR (:filterType = 'Bajo stock' AND p.isService = 0 AND p.isContainer = 0 AND p.sellingMethod != 'Solo Dosis'
+                    AND COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
+                    AND (
+                        p.stock + COALESCE((
+                            SELECT SUM(c.stock * COALESCE(c.containerSize, 0.0))
+                            FROM products AS c
+                            WHERE c.isContainer = 1
+                                AND c.containedProductId = p.productId
+                                AND c.stock > 0.0
+                                AND COALESCE(c.containerSize, 0.0) > 0.0
+                        ), 0.0)
+                    ) < COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END))
             )
-        ORDER BY name ASC
+        ORDER BY p.name ASC
     """)
     fun getProductsPagedSource(filterType: String): PagingSource<Int, Product>
 
@@ -54,6 +70,19 @@ interface ProductDao {
     @RawQuery(observedEntities = [Product::class])
     fun searchProductSuggestions(query: SupportSQLiteQuery): Flow<List<Product>>
 
+    @Query("""
+        SELECT *
+        FROM products
+        WHERE isService = 0
+            AND isContainer = 0
+        ORDER BY name COLLATE NOCASE ASC
+        LIMIT :limit
+    """)
+    fun getContainedProductCandidates(limit: Int): Flow<List<Product>>
+
+    @RawQuery(observedEntities = [Product::class])
+    fun searchContainedProductCandidates(query: SupportSQLiteQuery): Flow<List<Product>>
+
     @Query("SELECT SUM(cost * stock) FROM products WHERE isService = 0")
     fun getTotalInventoryValue(): Flow<Double?>
 
@@ -61,22 +90,40 @@ interface ProductDao {
         SELECT
             COALESCE(SUM(
                 CASE
-                    WHEN COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
-                        AND stock < COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END)
+                    WHEN COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
+                        AND (
+                            p.stock + COALESCE((
+                                SELECT SUM(c.stock * COALESCE(c.containerSize, 0.0))
+                                FROM products AS c
+                                WHERE c.isContainer = 1
+                                    AND c.containedProductId = p.productId
+                                    AND c.stock > 0.0
+                                    AND COALESCE(c.containerSize, 0.0) > 0.0
+                            ), 0.0)
+                        ) < COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END)
                     THEN 1 ELSE 0
                 END
             ), 0) AS lowStockCount,
             COALESCE(SUM(
                 CASE
-                    WHEN COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) <= 0.0
-                        OR stock >= COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END)
+                    WHEN COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) <= 0.0
+                        OR (
+                            p.stock + COALESCE((
+                                SELECT SUM(c.stock * COALESCE(c.containerSize, 0.0))
+                                FROM products AS c
+                                WHERE c.isContainer = 1
+                                    AND c.containedProductId = p.productId
+                                    AND c.stock > 0.0
+                                    AND COALESCE(c.containerSize, 0.0) > 0.0
+                            ), 0.0)
+                        ) >= COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END)
                     THEN 1 ELSE 0
                 END
             ), 0) AS optimalCount
-        FROM products
-        WHERE isService = 0
-            AND isContainer = 0
-            AND sellingMethod != 'Solo Dosis'
+        FROM products AS p
+        WHERE p.isService = 0
+            AND p.isContainer = 0
+            AND p.sellingMethod != 'Solo Dosis'
     """)
     fun getStockHealthSummary(): Flow<StockHealthRow>
 
@@ -87,57 +134,113 @@ interface ProductDao {
             COALESCE(SUM(CASE WHEN isService = 1 THEN 1 ELSE 0 END), 0) AS serviceCount,
             COALESCE(SUM(
                 CASE
-                    WHEN isService = 0
-                        AND isContainer = 0
-                        AND sellingMethod != 'Solo Dosis'
-                        AND COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
-                        AND stock < COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END)
+                    WHEN p.isService = 0
+                        AND p.isContainer = 0
+                        AND p.sellingMethod != 'Solo Dosis'
+                        AND COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
+                        AND (
+                            p.stock + COALESCE((
+                                SELECT SUM(c.stock * COALESCE(c.containerSize, 0.0))
+                                FROM products AS c
+                                WHERE c.isContainer = 1
+                                    AND c.containedProductId = p.productId
+                                    AND c.stock > 0.0
+                                    AND COALESCE(c.containerSize, 0.0) > 0.0
+                            ), 0.0)
+                        ) < COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END)
                     THEN 1 ELSE 0
                 END
             ), 0) AS lowStockCount
-        FROM products
+        FROM products AS p
     """)
     fun getInventoryCounts(): Flow<InventoryCountsRow>
 
     @Query("""
         SELECT *
-        FROM products
-        WHERE isService = 0
-            AND isContainer = 0
-            AND sellingMethod != 'Solo Dosis'
-            AND COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
-            AND stock < COALESCE(lowStockThreshold, CASE WHEN sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END)
-        ORDER BY name COLLATE NOCASE ASC
+        FROM products AS p
+        WHERE p.isService = 0
+            AND p.isContainer = 0
+            AND p.sellingMethod != 'Solo Dosis'
+            AND COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
+            AND (
+                p.stock + COALESCE((
+                    SELECT SUM(c.stock * COALESCE(c.containerSize, 0.0))
+                    FROM products AS c
+                    WHERE c.isContainer = 1
+                        AND c.containedProductId = p.productId
+                        AND c.stock > 0.0
+                        AND COALESCE(c.containerSize, 0.0) > 0.0
+                ), 0.0)
+            ) < COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END)
+        ORDER BY p.name COLLATE NOCASE ASC
     """)
     fun getLowStockProductsByName(): Flow<List<Product>>
+
+    @Query("""
+        SELECT p.productId
+        FROM products AS p
+        WHERE p.isService = 0
+            AND p.isContainer = 0
+            AND p.sellingMethod != 'Solo Dosis'
+            AND COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
+            AND (
+                p.stock + COALESCE((
+                    SELECT SUM(c.stock * COALESCE(c.containerSize, 0.0))
+                    FROM products AS c
+                    WHERE c.isContainer = 1
+                        AND c.containedProductId = p.productId
+                        AND c.stock > 0.0
+                        AND COALESCE(c.containerSize, 0.0) > 0.0
+                ), 0.0)
+            ) < COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END)
+    """)
+    fun getLowStockProductIds(): Flow<List<String>>
 
     @Query("""
         SELECT
             COUNT(*) AS productCount,
             COALESCE(SUM(
                 CASE
-                    WHEN COALESCE(lowStockThreshold, 0.0) > 0.0
-                        AND stock < COALESCE(lowStockThreshold, 0.0)
+                    WHEN COALESCE(p.lowStockThreshold, 0.0) > 0.0
+                        AND (
+                            p.stock + COALESCE((
+                                SELECT SUM(c.stock * COALESCE(c.containerSize, 0.0))
+                                FROM products AS c
+                                WHERE c.isContainer = 1
+                                    AND c.containedProductId = p.productId
+                                    AND c.stock > 0.0
+                                    AND COALESCE(c.containerSize, 0.0) > 0.0
+                            ), 0.0)
+                        ) < COALESCE(p.lowStockThreshold, 0.0)
                     THEN 1 ELSE 0
                 END
             ), 0) AS lowStockCount,
-            COALESCE(SUM(stock), 0.0) AS totalUnits
-        FROM products
-        WHERE isService = 0
+            COALESCE(SUM(p.stock), 0.0) AS totalUnits
+        FROM products AS p
+        WHERE p.isService = 0
     """)
     fun getInventoryReportSummary(): Flow<InventoryReportSummaryRow>
 
     @Query("""
         SELECT *
-        FROM products
-        WHERE isService = 0
+        FROM products AS p
+        WHERE p.isService = 0
         ORDER BY
             CASE
-                WHEN COALESCE(lowStockThreshold, 0.0) > 0.0
-                    AND stock < COALESCE(lowStockThreshold, 0.0)
+                WHEN COALESCE(p.lowStockThreshold, 0.0) > 0.0
+                    AND (
+                        p.stock + COALESCE((
+                            SELECT SUM(c.stock * COALESCE(c.containerSize, 0.0))
+                            FROM products AS c
+                            WHERE c.isContainer = 1
+                                AND c.containedProductId = p.productId
+                                AND c.stock > 0.0
+                                AND COALESCE(c.containerSize, 0.0) > 0.0
+                        ), 0.0)
+                    ) < COALESCE(p.lowStockThreshold, 0.0)
                 THEN 0 ELSE 1
             END,
-            name COLLATE NOCASE ASC
+            p.name COLLATE NOCASE ASC
     """)
     fun getInventoryReportProductsPagedSource(): PagingSource<Int, Product>
 

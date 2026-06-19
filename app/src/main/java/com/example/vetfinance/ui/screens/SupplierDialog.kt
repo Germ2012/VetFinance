@@ -11,6 +11,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Supplier
 
@@ -29,7 +30,10 @@ fun SupplierDialog(
 
     val nameRequiredError = stringResource(R.string.error_supplier_name_required)
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false)
+    ) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()

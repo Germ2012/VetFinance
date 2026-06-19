@@ -6,6 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -18,6 +19,9 @@ interface PetDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(pets: List<Pet>)
+
+    @Upsert
+    suspend fun upsertAll(pets: List<Pet>)
 
     @Transaction
     @Query("SELECT * FROM pets ORDER BY name ASC")

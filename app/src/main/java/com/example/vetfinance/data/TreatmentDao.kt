@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -21,6 +22,9 @@ interface TreatmentDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(treatments: List<Treatment>)
+
+    @Upsert
+    suspend fun upsertAll(treatments: List<Treatment>)
 
     @Query("SELECT * FROM treatments WHERE petIdFk = :petId ORDER BY treatmentDate DESC")
     fun getTreatmentsForPet(petId: String): Flow<List<Treatment>>

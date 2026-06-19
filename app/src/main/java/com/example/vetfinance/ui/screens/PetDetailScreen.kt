@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
@@ -44,6 +45,8 @@ fun PetDetailScreen(
     val services = remember(inventory) { inventory.filter { it.isService } }
     val showAddProductDialog by viewModel.showAddProductDialog.collectAsStateWithLifecycle()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
+    val containedProductSuggestions by viewModel.containedProductSuggestions.collectAsStateWithLifecycle()
+    val selectedContainedProduct by viewModel.selectedContainedProduct.collectAsStateWithLifecycle()
 
 
     var treatmentToEdit by remember { mutableStateOf<Treatment?>(null) }
@@ -164,13 +167,16 @@ fun PetDetailScreen(
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
-            allProducts = inventory,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 viewModel.insertOrUpdateProduct(newProduct)
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
+            containedProductSuggestions = containedProductSuggestions,
+            selectedContainedProduct = selectedContainedProduct,
+            onContainedProductSearchChange = { viewModel.onContainedProductSearchChange(it) },
+            onContainedProductSelected = { viewModel.onContainedProductSelected(it) },
             suppliers = suppliers
         )
     }
@@ -318,6 +324,7 @@ fun PetObservationsDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false),
         title = { Text("Observaciones generales") },
         text = {
             OutlinedTextField(

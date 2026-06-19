@@ -44,6 +44,8 @@ class PetViewModel @Inject constructor(
 
     private val _clientNameSuggestionQuery = MutableStateFlow("")
     private val _productNameSuggestionQuery = MutableStateFlow("")
+    private val _containedProductSearchQuery = MutableStateFlow("")
+    private val _selectedContainedProductId = MutableStateFlow<String?>(null)
     private val _treatmentHistory = MutableStateFlow<List<Treatment>>(emptyList())
     val treatmentHistory: StateFlow<List<Treatment>> = _treatmentHistory.asStateFlow()
 
@@ -76,6 +78,19 @@ class PetViewModel @Inject constructor(
             if (query.isBlank()) flowOf(emptyList()) else repository.searchProductSuggestions(query)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val containedProductSuggestions: StateFlow<List<Product>> = _containedProductSearchQuery
+        .debounce(PET_SEARCH_DEBOUNCE_MS)
+        .map { it.trim() }
+        .distinctUntilChanged()
+        .flatMapLatest { query -> repository.searchContainedProductCandidates(query) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val selectedContainedProduct: StateFlow<Product?> = _selectedContainedProductId
+        .flatMapLatest { productId ->
+            if (productId.isNullOrBlank()) flowOf(null) else repository.getProductByIdFlow(productId)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val debouncedPetSearchQuery = _petSearchQuery
         .debounce(PET_SEARCH_DEBOUNCE_MS)
@@ -118,6 +133,19 @@ class PetViewModel @Inject constructor(
         _productNameSuggestionQuery.value = ""
     }
 
+    fun onContainedProductSearchChange(query: String) {
+        _containedProductSearchQuery.value = query
+    }
+
+    fun onContainedProductSelected(productId: String?) {
+        _selectedContainedProductId.value = productId
+    }
+
+    fun clearContainedProductSelection() {
+        _containedProductSearchQuery.value = ""
+        _selectedContainedProductId.value = null
+    }
+
     fun onShowAddProductDialog() {
         _showAddProductDialog.value = true
     }
@@ -125,6 +153,7 @@ class PetViewModel @Inject constructor(
     fun onDismissAddProductDialog() {
         _showAddProductDialog.value = false
         clearProductNameSuggestions()
+        clearContainedProductSelection()
     }
 
     fun loadTreatmentsForPet(petId: String) = viewModelScope.launch {

@@ -45,6 +45,8 @@ class InventoryViewModel @Inject constructor(
     private val _inventoryFilter = MutableStateFlow("Todos")
     private val _productSearchQuery = MutableStateFlow("")
     private val _productNameSuggestionQuery = MutableStateFlow("")
+    private val _containedProductSearchQuery = MutableStateFlow("")
+    private val _selectedContainedProductId = MutableStateFlow<String?>(null)
     private val _productCostHistory = MutableStateFlow<List<ProductCostHistoryItem>>(emptyList())
     private val _productStockMovements = MutableStateFlow<List<StockMovement>>(emptyList())
     private val _appSettings = MutableStateFlow(repository.getAppSettings())
@@ -78,6 +80,19 @@ class InventoryViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val containedProductSuggestions: StateFlow<List<Product>> = _containedProductSearchQuery
+        .debounce(INVENTORY_SEARCH_DEBOUNCE_MS)
+        .map { it.trim() }
+        .distinctUntilChanged()
+        .flatMapLatest { query -> repository.searchContainedProductCandidates(query) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val selectedContainedProduct: StateFlow<Product?> = _selectedContainedProductId
+        .flatMapLatest { productId ->
+            if (productId.isNullOrBlank()) flowOf(null) else repository.getProductByIdFlow(productId)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     val inventoryPaginated: Flow<PagingData<Product>> = combine(
         _inventoryFilter,
         debouncedProductSearchQuery
@@ -90,6 +105,10 @@ class InventoryViewModel @Inject constructor(
 
     val lowStockProductsByName: StateFlow<List<Product>> = repository.getLowStockProductsByName()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val lowStockProductIds: StateFlow<Set<String>> = repository.getLowStockProductIds()
+        .map { ids -> ids.toSet() }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     private val inventoryBaseUiState: Flow<InventoryScreenUiState> = combine(
         _showAddProductDialog,
@@ -150,6 +169,19 @@ class InventoryViewModel @Inject constructor(
         _productNameSuggestionQuery.value = ""
     }
 
+    fun onContainedProductSearchChange(query: String) {
+        _containedProductSearchQuery.value = query
+    }
+
+    fun onContainedProductSelected(productId: String?) {
+        _selectedContainedProductId.value = productId
+    }
+
+    fun clearContainedProductSelection() {
+        _containedProductSearchQuery.value = ""
+        _selectedContainedProductId.value = null
+    }
+
     fun onShowAddProductDialog() {
         _showAddProductDialog.value = true
     }
@@ -157,6 +189,7 @@ class InventoryViewModel @Inject constructor(
     fun onDismissAddProductDialog() {
         _showAddProductDialog.value = false
         clearProductNameSuggestions()
+        clearContainedProductSelection()
     }
 
     fun insertOrUpdateProduct(product: Product) = executeWithLoading {

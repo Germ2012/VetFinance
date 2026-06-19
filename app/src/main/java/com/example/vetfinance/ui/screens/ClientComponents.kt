@@ -13,6 +13,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Client
 import com.example.vetfinance.ui.utils.NumberTransformation
@@ -51,6 +52,7 @@ fun PaymentDialog(client: Client, onDismiss: () -> Unit, onConfirm: (Double) -> 
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false),
         title = { Text(stringResource(R.string.payment_dialog_title, client.name)) },
         text = {
             OutlinedTextField(

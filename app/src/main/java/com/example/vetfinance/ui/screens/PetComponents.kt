@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.Treatment
@@ -49,6 +50,7 @@ fun AddTreatmentDialog(
     if (showDatePicker) {
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
+            properties = DialogProperties(dismissOnClickOutside = false),
             confirmButton = {
                 TextButton(onClick = {
                     val selectedMillis = datePickerState.selectedDateMillis
@@ -72,6 +74,7 @@ fun AddTreatmentDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false),
         title = { Text(stringResource(id = R.string.add_treatment_dialog_title)) },
         text = {
             Column(

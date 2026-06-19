@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -14,6 +15,9 @@ interface SupplierDebtDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(debts: List<SupplierDebt>)
+
+    @Upsert
+    suspend fun upsertAll(debts: List<SupplierDebt>)
 
     @Update
     suspend fun update(debt: SupplierDebt)

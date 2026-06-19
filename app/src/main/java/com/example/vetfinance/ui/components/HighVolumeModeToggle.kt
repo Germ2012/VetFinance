@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +40,40 @@ fun HighVolumeModeToggle(
                 )
             }
             Switch(checked = enabled, onCheckedChange = onEnabledChange)
+        }
+    }
+}
+
+@Composable
+fun HighVolumeSuggestion(
+    itemCount: Int,
+    threshold: Int,
+    onEnable: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (itemCount < threshold) return
+
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.secondaryContainer
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Volumen alto detectado", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "$itemCount registros visibles pueden fluir mejor en modo compacto.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+            }
+            TextButton(onClick = onEnable) {
+                Text("Activar")
+            }
         }
     }
 }

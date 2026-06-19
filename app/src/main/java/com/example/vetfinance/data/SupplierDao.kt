@@ -17,6 +17,9 @@ interface SupplierDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(suppliers: List<Supplier>)
 
+    @Upsert
+    suspend fun upsertAll(suppliers: List<Supplier>)
+
     @Update
     suspend fun update(supplier: Supplier)
 

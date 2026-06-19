@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
@@ -74,6 +75,8 @@ fun AddSaleScreen(
     val searchQuery by saleViewModel.productSearchQuery.collectAsStateWithLifecycle()
     val saleFilter by saleViewModel.saleInventoryFilter.collectAsStateWithLifecycle()
     val productNameSuggestions by saleViewModel.productNameSuggestions.collectAsStateWithLifecycle()
+    val containedProductSuggestions by saleViewModel.containedProductSuggestions.collectAsStateWithLifecycle()
+    val selectedContainedProduct by saleViewModel.selectedContainedProduct.collectAsStateWithLifecycle()
     val clientNameSuggestions by saleViewModel.clientNameSuggestions.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -88,12 +91,7 @@ fun AddSaleScreen(
     val showDoseDialog = saleUiState.showDoseSaleDialog
     val productForDoseSale = saleUiState.productForDoseSale
     val saleTypeDialogProduct = saleUiState.saleTypeDialogProduct
-    val allProductsListState = if (showAddProductDialog || saleTypeDialogProduct != null) {
-        saleViewModel.inventory.collectAsStateWithLifecycle()
-    } else {
-        remember { mutableStateOf<List<Product>>(emptyList()) }
-    }
-    val allProductsList = allProductsListState.value
+    val saleTypeBulkProduct by saleViewModel.saleTypeBulkProduct.collectAsStateWithLifecycle()
 
     LaunchedEffect(saleViewModel) {
         saleViewModel.events.collect { event ->
@@ -114,6 +112,7 @@ fun AddSaleScreen(
             saleViewModel.dismissFractionalSaleDialog()
             saleViewModel.dismissDoseSaleDialog()
             saleViewModel.clearClientNameSuggestions()
+            saleViewModel.clearContainedProductSelection()
         }
     }
 
@@ -132,6 +131,7 @@ fun AddSaleScreen(
     if (showExitCartDialog) {
         AlertDialog(
             onDismissRequest = { showExitCartDialog = false },
+            properties = DialogProperties(dismissOnClickOutside = false),
             title = { Text("Carrito activo") },
             text = { Text("Hay productos cargados. Podes guardar temporalmente el carrito y volver luego, o salir limpiandolo.") },
             confirmButton = {
@@ -177,13 +177,16 @@ fun AddSaleScreen(
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
-            allProducts = allProductsList,
             onDismiss = { saleViewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct ->
                 saleViewModel.insertOrUpdateProduct(newProduct)
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { saleViewModel.onProductNameChange(it) },
+            containedProductSuggestions = containedProductSuggestions,
+            selectedContainedProduct = selectedContainedProduct,
+            onContainedProductSearchChange = { saleViewModel.onContainedProductSearchChange(it) },
+            onContainedProductSelected = { saleViewModel.onContainedProductSelected(it) },
             suppliers = suppliers
         )
     }
@@ -215,7 +218,7 @@ fun AddSaleScreen(
     saleTypeDialogProduct?.let { product ->
         SaleTypeDialog(
             product = product,
-            allProducts = allProductsList,
+            bulkProduct = saleTypeBulkProduct,
             onDismiss = { saleViewModel.closeSaleTypeDialog() },
             onSellByUnit = {
                 saleViewModel.addToCart(product)
@@ -843,6 +846,7 @@ fun EditCartItemPriceDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false),
         title = { Text("Precio final") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -896,7 +900,10 @@ fun FractionalSaleDialog(
         else -> ""
     }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false)
+    ) {
         Card {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -994,6 +1001,7 @@ fun DoseSaleDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false),
         title = { Text(stringResource(R.string.dialog_title_add_dose, product.name)) },
         text = {
             Column {
@@ -1034,17 +1042,14 @@ fun DoseSaleDialog(
 @Composable
 fun SaleTypeDialog(
     product: Product,
-    allProducts: List<Product>,
+    bulkProduct: Product?,
     onDismiss: () -> Unit,
     onSellByUnit: () -> Unit,
     onSellBulk: (Product) -> Unit
 ) {
-    val bulkProduct = remember(product, allProducts) {
-        allProducts.find { it.productId == product.containedProductId }
-    }
-
     AlertDialog(
         onDismissRequest = onDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false),
         title = { Text(stringResource(R.string.dialog_title_select_sale_type)) },
         text = { Text(stringResource(R.string.dialog_message_select_sale_type, product.name)) },
         confirmButton = {

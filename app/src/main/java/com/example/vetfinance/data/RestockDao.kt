@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Immutable
@@ -36,8 +37,14 @@ interface RestockDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllOrders(orders: List<RestockOrder>)
 
+    @Upsert
+    suspend fun upsertAllOrders(orders: List<RestockOrder>)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllOrderItems(items: List<RestockOrderItem>)
+
+    @Upsert
+    suspend fun upsertAllOrderItems(items: List<RestockOrderItem>)
 
     @Transaction
     @Query("""

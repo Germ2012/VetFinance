@@ -5,6 +5,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -18,8 +19,14 @@ interface SaleDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllSales(sales: List<Sale>)
 
+    @Upsert
+    suspend fun upsertAllSales(sales: List<Sale>)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllSaleProductCrossRefs(crossRefs: List<SaleProductCrossRef>)
+
+    @Upsert
+    suspend fun upsertAllSaleProductCrossRefs(crossRefs: List<SaleProductCrossRef>)
 
     @Query("DELETE FROM sales WHERE saleId = :saleId")
     suspend fun deleteSaleById(saleId: String)

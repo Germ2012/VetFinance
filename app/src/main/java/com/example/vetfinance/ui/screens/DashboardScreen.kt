@@ -132,6 +132,8 @@ fun DashboardScreen(
     val pendingCollectionPreviewRows by viewModel.pendingCollectionPreviewRows.collectAsStateWithLifecycle()
     val pendingCollectionSummary by viewModel.pendingCollectionSummary.collectAsStateWithLifecycle()
     val productNameSuggestions by viewModel.productNameSuggestions.collectAsStateWithLifecycle()
+    val containedProductSuggestions by viewModel.containedProductSuggestions.collectAsStateWithLifecycle()
+    val selectedContainedProduct by viewModel.selectedContainedProduct.collectAsStateWithLifecycle()
     val globalSearchQuery by viewModel.globalSearchQuery.collectAsStateWithLifecycle()
     val globalSearchResults by viewModel.globalSearchResults.collectAsStateWithLifecycle()
     val petIdToNameMap by viewModel.petIdToNameMap.collectAsStateWithLifecycle()
@@ -180,12 +182,6 @@ fun DashboardScreen(
             }
         }
     }
-    val dialogProductsState = if (showAddProductDialog) {
-        viewModel.inventory.collectAsStateWithLifecycle()
-    } else {
-        remember { mutableStateOf<List<Product>>(emptyList()) }
-    }
-    val dialogProducts = dialogProductsState.value
     val petForDialog = remember(treatmentForNextDialog, petsWithOwners) {
         treatmentForNextDialog?.let { treatment ->
             petsWithOwners.find { it.pet.petId == treatment.petIdFk }
@@ -236,11 +232,14 @@ fun DashboardScreen(
     if (showAddProductDialog) {
         ProductDialog(
             product = null,
-            allProducts = dialogProducts,
             onDismiss = { viewModel.onDismissAddProductDialog() },
             onConfirm = { newProduct -> viewModel.insertOrUpdateProduct(newProduct) },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
+            containedProductSuggestions = containedProductSuggestions,
+            selectedContainedProduct = selectedContainedProduct,
+            onContainedProductSearchChange = { viewModel.onContainedProductSearchChange(it) },
+            onContainedProductSelected = { viewModel.onContainedProductSelected(it) },
             suppliers = suppliers
         )
     }

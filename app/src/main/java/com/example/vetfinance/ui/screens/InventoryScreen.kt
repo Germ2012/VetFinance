@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.paging.LoadState
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.paging.compose.collectAsLazyPagingItems
@@ -52,6 +53,7 @@ import com.example.vetfinance.data.STOCK_MOVEMENT_SALE
 import com.example.vetfinance.data.STOCK_MOVEMENT_SALE_REVERSAL
 import com.example.vetfinance.data.StockMovement
 import com.example.vetfinance.ui.components.HighVolumeModeToggle
+import com.example.vetfinance.ui.components.HighVolumeSuggestion
 import com.example.vetfinance.ui.components.SkeletonLine
 import com.example.vetfinance.viewmodel.InventoryViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -85,22 +87,19 @@ fun InventoryScreen(viewModel: InventoryViewModel = hiltViewModel()) {
     val isLoading = uiState.isLoading
     val productCostHistory by viewModel.productCostHistory.collectAsStateWithLifecycle()
     val productStockMovements by viewModel.productStockMovements.collectAsStateWithLifecycle()
+    val lowStockProductIds by viewModel.lowStockProductIds.collectAsStateWithLifecycle()
+    val containedProductSuggestions by viewModel.containedProductSuggestions.collectAsStateWithLifecycle()
+    val selectedContainedProduct by viewModel.selectedContainedProduct.collectAsStateWithLifecycle()
     val pagedProducts = viewModel.inventoryPaginated.collectAsLazyPagingItems()
     LaunchedEffect(pagedProducts) {
         viewModel.pagingRefreshEvents.collect {
             pagedProducts.refresh()
         }
     }
-    val dialogProductsState = if (showDialog || productToEdit != null) {
-        viewModel.inventory.collectAsStateWithLifecycle()
-    } else {
-        remember { mutableStateOf<List<Product>>(emptyList()) }
-    }
-    val dialogProducts = dialogProductsState.value
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val inventoryListState = rememberLazyListState()
-    var highVolumeMode by rememberSaveable { mutableStateOf(true) }
+    var highVolumeMode by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(inventoryListState) {
         snapshotFlow { inventoryListState.isScrollInProgress }
@@ -124,7 +123,10 @@ fun InventoryScreen(viewModel: InventoryViewModel = hiltViewModel()) {
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
-            allProducts = dialogProducts,
+            containedProductSuggestions = containedProductSuggestions,
+            selectedContainedProduct = selectedContainedProduct,
+            onContainedProductSearchChange = { viewModel.onContainedProductSearchChange(it) },
+            onContainedProductSelected = { viewModel.onContainedProductSelected(it) },
             suppliers = suppliers
         )
     }
@@ -135,14 +137,19 @@ fun InventoryScreen(viewModel: InventoryViewModel = hiltViewModel()) {
             onDismiss = {
                 productToEdit = null
                 viewModel.clearProductNameSuggestions()
+                viewModel.clearContainedProductSelection()
             },
             onConfirm = { updatedProduct ->
                 viewModel.insertOrUpdateProduct(updatedProduct)
                 productToEdit = null
+                viewModel.clearContainedProductSelection()
             },
             productNameSuggestions = productNameSuggestions,
             onProductNameChange = { viewModel.onProductNameChange(it) },
-            allProducts = dialogProducts,
+            containedProductSuggestions = containedProductSuggestions,
+            selectedContainedProduct = selectedContainedProduct,
+            onContainedProductSearchChange = { viewModel.onContainedProductSearchChange(it) },
+            onContainedProductSelected = { viewModel.onContainedProductSelected(it) },
             suppliers = suppliers
         )
     }
@@ -336,6 +343,13 @@ fun InventoryScreen(viewModel: InventoryViewModel = hiltViewModel()) {
                 highVolumeMode = highVolumeMode,
                 onHighVolumeModeChange = { highVolumeMode = it }
             )
+            if (!highVolumeMode) {
+                HighVolumeSuggestion(
+                    itemCount = uiState.totalCount,
+                    threshold = 500,
+                    onEnable = { highVolumeMode = true }
+                )
+            }
             Spacer(modifier = Modifier.height(12.dp))
 
             if ((isLoading && uiState.totalCount == 0) || pagedProducts.loadState.refresh is LoadState.Loading) {
@@ -371,6 +385,7 @@ fun InventoryScreen(viewModel: InventoryViewModel = hiltViewModel()) {
                                 InventoryItem(
                                     product = product,
                                     highVolumeMode = highVolumeMode,
+                                    isLowStock = product.productId in lowStockProductIds,
                                     onOpen = { productForActions = it },
                                     onShowActions = { productForActions = it }
                                 )
@@ -699,14 +714,10 @@ fun InventoryFilter(selectedFilter: String, onFilterSelected: (String) -> Unit) 
 fun InventoryItem(
     product: Product,
     highVolumeMode: Boolean,
+    isLowStock: Boolean,
     onOpen: (Product) -> Unit,
     onShowActions: (Product) -> Unit
 ) {
-    val isLowStock = remember(product.stock, product.lowStockThreshold) {
-        product.lowStockThreshold?.let { threshold ->
-            threshold > 0 && product.stock < threshold
-        } == true
-    }
     val unit = remember(product.unitMeasure) {
         product.unitMeasure?.takeIf { it.isNotBlank() }?.let { " $it" } ?: ""
     }
@@ -1026,6 +1037,7 @@ fun AdjustStockDialog(
 
     AlertDialog(
         onDismissRequest = requestDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false),
         title = { Text("Ajustar stock de ${product.name}") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {

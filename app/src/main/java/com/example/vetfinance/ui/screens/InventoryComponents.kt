@@ -29,6 +29,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
@@ -49,7 +50,10 @@ fun ProductDialog(
     onDelete: ((Product) -> Unit)? = null,
     productNameSuggestions: List<Product>,
     onProductNameChange: (String) -> Unit,
-    allProducts: List<Product>,
+    containedProductSuggestions: List<Product>,
+    selectedContainedProduct: Product?,
+    onContainedProductSearchChange: (String) -> Unit,
+    onContainedProductSelected: (String?) -> Unit,
     suppliers: List<Supplier>
 ) {
     val isEditing = product != null
@@ -68,8 +72,9 @@ fun ProductDialog(
     var isContainer by remember(product) { mutableStateOf(product?.isContainer ?: false) }
     var containerSize by remember(product) { mutableStateOf(product?.containerSize?.toString() ?: "") }
     var selectedContainedProductId by remember(product) { mutableStateOf(product?.containedProductId) }
-    val selectedContainedProduct = remember(selectedContainedProductId, allProducts) {
-        allProducts.find { it.productId == selectedContainedProductId }
+    val containedProductForSelection = remember(selectedContainedProductId, selectedContainedProduct, containedProductSuggestions) {
+        selectedContainedProduct?.takeIf { it.productId == selectedContainedProductId }
+            ?: containedProductSuggestions.find { it.productId == selectedContainedProductId }
     }
     var selectedSupplierId by remember(product) { mutableStateOf(product?.supplierIdFk) }
     val selectedSupplier = remember(selectedSupplierId, suppliers) {
@@ -128,6 +133,18 @@ fun ProductDialog(
         }
     }
 
+    LaunchedEffect(product?.containedProductId) {
+        onContainedProductSelected(product?.containedProductId)
+    }
+
+    LaunchedEffect(isContainer) {
+        if (!isContainer) {
+            selectedContainedProductId = null
+            onContainedProductSelected(null)
+            onContainedProductSearchChange("")
+        }
+    }
+
     if (showDeleteConfirmation && product != null) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmation = false },
@@ -150,6 +167,7 @@ fun ProductDialog(
 
     AlertDialog(
         onDismissRequest = requestDismiss,
+        properties = DialogProperties(dismissOnClickOutside = false),
         title = { Text(if (isEditing) stringResource(R.string.product_dialog_edit_title) else stringResource(R.string.product_dialog_add_title)) },
         text = {
             Column(
@@ -320,35 +338,16 @@ fun ProductDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal)
                     )
 
-                    var expanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(
-                        expanded = expanded,
-                        onExpandedChange = { expanded = !expanded },
-                        modifier = Modifier.padding(top = 8.dp)
-                    ) {
-                        OutlinedTextField(
-                            value = selectedContainedProduct?.name ?: stringResource(R.string.select_bulk_product_placeholder),
-                            onValueChange = {},
-                            readOnly = true,
-                            label = { Text(stringResource(R.string.contained_product_label))},
-                            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                            modifier = Modifier.menuAnchor().fillMaxWidth()
-                        )
-                        ExposedDropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            allProducts.filter { !it.isContainer && !it.isService }.forEach { prod ->
-                                DropdownMenuItem(
-                                    text = { Text(prod.name) },
-                                    onClick = {
-                                        selectedContainedProductId = prod.productId
-                                        expanded = false
-                                    }
-                                )
-                            }
+                    ContainedProductSelector(
+                        selectedProduct = containedProductForSelection,
+                        suggestions = containedProductSuggestions,
+                        currentProductId = product?.productId,
+                        onQueryChange = onContainedProductSearchChange,
+                        onProductSelected = {
+                            selectedContainedProductId = it.productId
+                            onContainedProductSelected(it.productId)
                         }
-                    }
+                    )
                 }
             }
         },
@@ -379,7 +378,11 @@ fun ProductDialog(
 
                     onConfirm(newOrUpdatedProduct)
                 },
-                enabled = name.isNotBlank() && price.isNotBlank() && cost.isNotBlank() && (isService || selectedSellingMethod != SELLING_METHOD_BY_UNIT || stock.isNotBlank())
+                enabled = name.isNotBlank() &&
+                    price.isNotBlank() &&
+                    cost.isNotBlank() &&
+                    (isService || selectedSellingMethod != SELLING_METHOD_BY_UNIT || stock.isNotBlank()) &&
+                    (!isContainer || ((containerSize.toDoubleOrNull() ?: 0.0) > 0.0 && selectedContainedProductId != null))
             ) {
                 Text(if (isEditing) stringResource(R.string.product_dialog_update_button) else stringResource(R.string.save_button))
             }
@@ -426,6 +429,144 @@ fun ProductDialog(
                 }
             }
         )
+    }
+}
+
+@Composable
+private fun ContainedProductSelector(
+    selectedProduct: Product?,
+    suggestions: List<Product>,
+    currentProductId: String?,
+    onQueryChange: (String) -> Unit,
+    onProductSelected: (Product) -> Unit
+) {
+    var query by remember(currentProductId) { mutableStateOf(selectedProduct?.name ?: "") }
+    val results = remember(suggestions, currentProductId) {
+        suggestions.filter { it.productId != currentProductId }
+    }
+
+    LaunchedEffect(query) {
+        onQueryChange(query)
+    }
+
+    LaunchedEffect(selectedProduct?.productId) {
+        if (selectedProduct != null && query.isBlank()) {
+            query = selectedProduct.name
+        }
+    }
+
+    Column(
+        modifier = Modifier.padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            label = { Text("Buscar producto contenido") },
+            placeholder = { Text(stringResource(R.string.select_bulk_product_placeholder)) },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+
+        selectedProduct?.let { product ->
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.medium,
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Column(modifier = Modifier.padding(10.dp)) {
+                    Text("Seleccionado", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                    Text(
+                        product.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.medium,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                if (results.isEmpty()) {
+                    Text(
+                        "No hay productos que coincidan.",
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    results.forEach { product ->
+                        ContainedProductSearchRow(
+                            product = product,
+                            selected = product.productId == selectedProduct?.productId,
+                            onClick = {
+                                onProductSelected(product)
+                                query = product.name
+                            }
+                        )
+                    }
+                    if (query.isBlank()) {
+                        Text(
+                            "Escribe para buscar mas productos fraccionables.",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContainedProductSearchRow(
+    product: Product,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                product.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                listOfNotNull(
+                    product.category?.takeIf { it.isNotBlank() },
+                    product.unitMeasure?.takeIf { it.isNotBlank() }
+                ).ifEmpty { listOf("Producto fraccionable") }.joinToString(" | "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (selected) {
+            Text(
+                "Activo",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
 

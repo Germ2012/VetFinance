@@ -9,6 +9,7 @@ import androidx.sqlite.db.SimpleSQLiteQuery
 import androidx.room.withTransaction
 import com.example.vetfinance.R
 import com.example.vetfinance.data.*
+import com.example.vetfinance.domain.rules.InventoryRules
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -57,7 +58,16 @@ private fun productSearchPagedQuery(filterType: String, ftsQuery: String): Simpl
                     OR (? = 'Dosis' AND p.isService = 0 AND p.sellingMethod = 'Solo Dosis')
                     OR (? = 'Bajo stock' AND p.isService = 0 AND p.isContainer = 0 AND p.sellingMethod != 'Solo Dosis'
                         AND COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END) > 0.0
-                        AND p.stock < COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END))
+                        AND (
+                            p.stock + COALESCE((
+                                SELECT SUM(c.stock * COALESCE(c.containerSize, 0.0))
+                                FROM products AS c
+                                WHERE c.isContainer = 1
+                                    AND c.containedProductId = p.productId
+                                    AND c.stock > 0.0
+                                    AND COALESCE(c.containerSize, 0.0) > 0.0
+                            ), 0.0)
+                        ) < COALESCE(p.lowStockThreshold, CASE WHEN p.sellingMethod = 'Por Unidad' THEN 4.0 ELSE 0.0 END))
                 )
             ORDER BY p.name COLLATE NOCASE ASC
         """.trimIndent(),
@@ -72,6 +82,22 @@ private fun productSuggestionQuery(ftsQuery: String, limit: Int): SimpleSQLiteQu
             FROM products AS p
             INNER JOIN products_fts ON products_fts.productId = p.productId
             WHERE products_fts MATCH ?
+            ORDER BY p.name COLLATE NOCASE ASC
+            LIMIT ?
+        """.trimIndent(),
+        arrayOf(ftsQuery, limit)
+    )
+}
+
+private fun containedProductSearchQuery(ftsQuery: String, limit: Int): SimpleSQLiteQuery {
+    return SimpleSQLiteQuery(
+        """
+            SELECT p.*
+            FROM products AS p
+            INNER JOIN products_fts ON products_fts.productId = p.productId
+            WHERE products_fts MATCH ?
+                AND p.isService = 0
+                AND p.isContainer = 0
             ORDER BY p.name COLLATE NOCASE ASC
             LIMIT ?
         """.trimIndent(),
@@ -620,6 +646,7 @@ class VetRepository @Inject constructor(
     fun getStockHealthSummary(): Flow<StockHealthRow> = productDao.getStockHealthSummary()
     fun getInventoryCounts(): Flow<InventoryCountsRow> = productDao.getInventoryCounts()
     fun getLowStockProductsByName(): Flow<List<Product>> = productDao.getLowStockProductsByName()
+    fun getLowStockProductIds(): Flow<List<String>> = productDao.getLowStockProductIds()
     fun getServices(): Flow<List<Product>> = productDao.getServices()
     fun getInventoryReportSummary(): Flow<InventoryReportSummaryRow> = productDao.getInventoryReportSummary()
     fun getInventoryReportProductsPaginated(): Flow<PagingData<Product>> {
@@ -649,6 +676,14 @@ class VetRepository @Inject constructor(
             productDao.searchProductSuggestions(productSuggestionQuery(ftsQuery, limit))
         }
     }
+    fun searchContainedProductCandidates(query: String, limit: Int = 15): Flow<List<Product>> {
+        val ftsQuery = query.toFtsPrefixQuery()
+        return if (ftsQuery.isBlank()) {
+            productDao.getContainedProductCandidates(10)
+        } else {
+            productDao.searchContainedProductCandidates(containedProductSearchQuery(ftsQuery, limit))
+        }
+    }
     fun searchClientSuggestions(query: String, limit: Int = 6): Flow<List<Client>> {
         val ftsQuery = query.toFtsPrefixQuery()
         return if (ftsQuery.isBlank()) {
@@ -662,6 +697,7 @@ class VetRepository @Inject constructor(
     fun getAllClients(): Flow<List<Client>> = clientDao.getAllClients()
     suspend fun getClientById(clientId: String): Client? = clientDao.getClientById(clientId)
     fun getClientByIdFlow(clientId: String): Flow<Client?> = clientDao.getClientByIdFlow(clientId)
+    fun getProductByIdFlow(productId: String): Flow<Product?> = productDao.getProductByIdFlow(productId)
     fun getAllSuppliers(): Flow<List<Supplier>> = supplierDao.getAllSuppliers()
     fun getPaymentsForClient(clientId: String): Flow<List<Payment>> = paymentDao.getPaymentsForClient(clientId)
     fun getPaymentSummaryForClient(clientId: String): Flow<ClientPaymentSummaryRow> = paymentDao.getPaymentSummaryForClient(clientId)
@@ -692,12 +728,40 @@ class VetRepository @Inject constructor(
 
 
     suspend fun insertOrUpdateProduct(product: Product) {
-        val existingProduct = productDao.getProductById(product.productId)
-        if (existingProduct == null) {
-            val productToInsert = product.copy(productId = UUID.randomUUID().toString())
-            productDao.insertProduct(productToInsert)
-        } else {
-            productDao.update(product)
+        db.withTransaction {
+            val existingProduct = productDao.getProductById(product.productId)
+            val productToSave = if (existingProduct == null) {
+                product.copy(productId = UUID.randomUUID().toString())
+            } else {
+                product
+            }
+
+            validateContainerConfiguration(productToSave)
+
+            if (existingProduct == null) {
+                productDao.insertProduct(productToSave)
+            } else {
+                productDao.update(productToSave)
+            }
+        }
+    }
+
+    private suspend fun validateContainerConfiguration(product: Product) {
+        if (!product.isContainer) return
+        val containedProduct = product.containedProductId?.let { productDao.getProductById(it) }
+        val existingContainer = product.containedProductId?.let { productDao.findContainerForProduct(it) }
+        val validationError = InventoryRules.validateContainerConfiguration(
+            productId = product.productId,
+            isContainer = product.isContainer,
+            containedProductId = product.containedProductId,
+            containerSize = product.containerSize,
+            containedProductExists = containedProduct != null,
+            containedProductIsService = containedProduct?.isService == true,
+            containedProductIsContainer = containedProduct?.isContainer == true,
+            existingContainerIdForContainedProduct = existingContainer?.productId
+        )
+        if (validationError != null) {
+            throw IllegalStateException(validationError)
         }
     }
 
@@ -1260,21 +1324,21 @@ class VetRepository @Inject constructor(
 
     private suspend fun performMergeImport(data: ParsedBackupData) {
         db.withTransaction {
-            if (data.clients.isNotEmpty()) clientDao.insertAll(data.clients)
-            if (data.suppliers.isNotEmpty()) supplierDao.insertAll(data.suppliers)
-            if (data.products.isNotEmpty()) productDao.insertAll(data.products)
-            if (data.pets.isNotEmpty()) petDao.insertAll(data.pets)
-            if (data.sales.isNotEmpty()) saleDao.insertAllSales(data.sales)
-            if (data.treatments.isNotEmpty()) treatmentDao.insertAll(data.treatments)
-            if (data.transactions.isNotEmpty()) transactionDao.insertAll(data.transactions)
-            if (data.payments.isNotEmpty()) paymentDao.insertAll(data.payments)
-            if (data.clientDebtHistory.isNotEmpty()) clientDebtHistoryDao.insertAll(data.clientDebtHistory)
-            if (data.saleProductCrossRefs.isNotEmpty()) saleDao.insertAllSaleProductCrossRefs(data.saleProductCrossRefs)
-            if (data.appointments.isNotEmpty()) appointmentDao.insertAll(data.appointments)
-            if (data.supplierDebts.isNotEmpty()) supplierDebtDao.insertAll(data.supplierDebts)
-            if (data.restockOrders.isNotEmpty()) restockDao.insertAllOrders(data.restockOrders)
-            if (data.restockOrderItems.isNotEmpty()) restockDao.insertAllOrderItems(data.restockOrderItems)
-            if (data.stockMovements.isNotEmpty()) stockMovementDao.insertAll(data.stockMovements)
+            if (data.clients.isNotEmpty()) clientDao.upsertAll(data.clients)
+            if (data.suppliers.isNotEmpty()) supplierDao.upsertAll(data.suppliers)
+            if (data.products.isNotEmpty()) productDao.upsertAll(data.products)
+            if (data.pets.isNotEmpty()) petDao.upsertAll(data.pets)
+            if (data.sales.isNotEmpty()) saleDao.upsertAllSales(data.sales)
+            if (data.treatments.isNotEmpty()) treatmentDao.upsertAll(data.treatments)
+            if (data.transactions.isNotEmpty()) transactionDao.upsertAll(data.transactions)
+            if (data.payments.isNotEmpty()) paymentDao.upsertAll(data.payments)
+            if (data.clientDebtHistory.isNotEmpty()) clientDebtHistoryDao.upsertAll(data.clientDebtHistory)
+            if (data.saleProductCrossRefs.isNotEmpty()) saleDao.upsertAllSaleProductCrossRefs(data.saleProductCrossRefs)
+            if (data.appointments.isNotEmpty()) appointmentDao.upsertAll(data.appointments)
+            if (data.supplierDebts.isNotEmpty()) supplierDebtDao.upsertAll(data.supplierDebts)
+            if (data.restockOrders.isNotEmpty()) restockDao.upsertAllOrders(data.restockOrders)
+            if (data.restockOrderItems.isNotEmpty()) restockDao.upsertAllOrderItems(data.restockOrderItems)
+            if (data.stockMovements.isNotEmpty()) stockMovementDao.upsertAll(data.stockMovements)
         }
     }
 
@@ -1379,15 +1443,19 @@ class VetRepository @Inject constructor(
         paymentDate = r.required("paymentDate").toLong()
     )
 
-    private fun parseSaleProductCrossRef(r: CSVRecord) = SaleProductCrossRef(
-        crossRefId = r.optional("crossRefId") ?: UUID.randomUUID().toString(),
-        saleId = r.required("saleId"),
-        productId = r.required("productId"),
-        quantitySold = r.required("quantitySold").toDouble(),
-        priceAtTimeOfSale = r.required("priceAtTimeOfSale").toDouble(),
-        notes = r.optional("notes"),
-        overridePrice = r.optional("overridePrice")?.toDoubleOrNull()
-    )
+    private fun parseSaleProductCrossRef(r: CSVRecord): SaleProductCrossRef {
+        val saleId = r.required("saleId")
+        val productId = r.required("productId")
+        return SaleProductCrossRef(
+            crossRefId = r.optional("crossRefId") ?: "${saleId}_$productId",
+            saleId = saleId,
+            productId = productId,
+            quantitySold = r.required("quantitySold").toDouble(),
+            priceAtTimeOfSale = r.required("priceAtTimeOfSale").toDouble(),
+            notes = r.optional("notes"),
+            overridePrice = r.optional("overridePrice")?.toDoubleOrNull()
+        )
+    }
 
     private fun parseAppointment(r: CSVRecord) = Appointment(
         appointmentId = r.required("appointmentId"),

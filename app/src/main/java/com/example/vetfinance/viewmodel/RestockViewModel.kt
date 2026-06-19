@@ -6,17 +6,12 @@ import com.example.vetfinance.data.Product
 import com.example.vetfinance.data.RestockHistoryItem
 import com.example.vetfinance.data.RestockOrder
 import com.example.vetfinance.data.RestockOrderItem
-import com.example.vetfinance.data.SELLING_METHOD_BY_UNIT
-import com.example.vetfinance.data.SELLING_METHOD_DOSE_ONLY
 import com.example.vetfinance.data.Supplier
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -41,19 +36,7 @@ class RestockViewModel @Inject constructor(
     val inventory: StateFlow<List<Product>> = repository.getAllProducts()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val lowStockProducts: StateFlow<List<Product>> = inventory
-        .map { products ->
-            products.filter { product ->
-                if (product.isService || product.isContainer || product.sellingMethod == SELLING_METHOD_DOSE_ONLY) {
-                    false
-                } else {
-                    val threshold = product.lowStockThreshold
-                        ?: if (product.sellingMethod == SELLING_METHOD_BY_UNIT) 4.0 else 0.0
-                    threshold > 0.0 && product.stock < threshold
-                }
-            }
-        }
-        .flowOn(Dispatchers.Default)
+    val lowStockProducts: StateFlow<List<Product>> = repository.getLowStockProductsByName()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun onRestockSearchQueryChange(query: String) {

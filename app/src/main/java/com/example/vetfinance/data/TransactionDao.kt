@@ -7,6 +7,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Relation
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 
@@ -176,4 +177,7 @@ interface TransactionDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(transactions: List<Transaction>)
+
+    @Upsert
+    suspend fun upsertAll(transactions: List<Transaction>)
 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
 import com.example.vetfinance.R
 import com.example.vetfinance.data.Product
@@ -96,6 +97,7 @@ fun AddRestockScreen(
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDate)
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
+            properties = DialogProperties(dismissOnClickOutside = false),
             confirmButton = {
                 TextButton(onClick = {
                     val selectedMillis = datePickerState.selectedDateMillis
@@ -120,6 +122,7 @@ fun AddRestockScreen(
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = supplierDebtDueDate)
         DatePickerDialog(
             onDismissRequest = { showDebtDatePicker = false },
+            properties = DialogProperties(dismissOnClickOutside = false),
             confirmButton = {
                 TextButton(onClick = {
                     val selectedMillis = datePickerState.selectedDateMillis

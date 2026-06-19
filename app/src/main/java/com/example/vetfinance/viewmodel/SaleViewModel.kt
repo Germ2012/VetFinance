@@ -85,6 +85,8 @@ class SaleViewModel @Inject constructor(
     val saleInventoryFilter: StateFlow<String> = _saleInventoryFilter.asStateFlow()
 
     private val _productNameSuggestionQuery = MutableStateFlow("")
+    private val _containedProductSearchQuery = MutableStateFlow("")
+    private val _selectedContainedProductId = MutableStateFlow<String?>(null)
     val productNameSuggestions: StateFlow<List<Product>> = _productNameSuggestionQuery
         .debounce(SALE_SEARCH_DEBOUNCE_MS)
         .map { it.trim() }
@@ -93,6 +95,19 @@ class SaleViewModel @Inject constructor(
             if (query.isBlank()) flowOf(emptyList()) else repository.searchProductSuggestions(query)
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val containedProductSuggestions: StateFlow<List<Product>> = _containedProductSearchQuery
+        .debounce(SALE_SEARCH_DEBOUNCE_MS)
+        .map { it.trim() }
+        .distinctUntilChanged()
+        .flatMapLatest { query -> repository.searchContainedProductCandidates(query) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val selectedContainedProduct: StateFlow<Product?> = _selectedContainedProductId
+        .flatMapLatest { productId ->
+            if (productId.isNullOrBlank()) flowOf(null) else repository.getProductByIdFlow(productId)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _clientNameSuggestionQuery = MutableStateFlow("")
     val clientNameSuggestions: StateFlow<List<Client>> = _clientNameSuggestionQuery
@@ -131,6 +146,14 @@ class SaleViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SaleEntryUiState())
     val uiState: StateFlow<SaleEntryUiState> = _uiState.asStateFlow()
 
+    val saleTypeBulkProduct: StateFlow<Product?> = uiState
+        .map { state -> state.saleTypeDialogProduct?.containedProductId }
+        .distinctUntilChanged()
+        .flatMapLatest { productId ->
+            if (productId.isNullOrBlank()) flowOf(null) else repository.getProductByIdFlow(productId)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     private val _events = MutableSharedFlow<SaleUiEvent>(extraBufferCapacity = 1)
     val events = _events.asSharedFlow()
 
@@ -141,6 +164,7 @@ class SaleViewModel @Inject constructor(
     fun onDismissAddProductDialog() {
         _showAddProductDialog.value = false
         clearProductNameSuggestions()
+        clearContainedProductSelection()
     }
 
     fun onProductSearchQueryChange(query: String) {
@@ -165,6 +189,19 @@ class SaleViewModel @Inject constructor(
 
     fun clearProductNameSuggestions() {
         _productNameSuggestionQuery.value = ""
+    }
+
+    fun onContainedProductSearchChange(query: String) {
+        _containedProductSearchQuery.value = query
+    }
+
+    fun onContainedProductSelected(productId: String?) {
+        _selectedContainedProductId.value = productId
+    }
+
+    fun clearContainedProductSelection() {
+        _containedProductSearchQuery.value = ""
+        _selectedContainedProductId.value = null
     }
 
     fun onClientNameChange(name: String) {

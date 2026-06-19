@@ -5,6 +5,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -14,6 +15,9 @@ interface ClientDebtHistoryDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(history: List<ClientDebtHistory>)
+
+    @Upsert
+    suspend fun upsertAll(history: List<ClientDebtHistory>)
 
     @Query("SELECT * FROM client_debt_history WHERE clientIdFk = :clientId ORDER BY eventDate DESC")
     fun getHistoryForClient(clientId: String): Flow<List<ClientDebtHistory>>
