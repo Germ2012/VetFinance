@@ -78,7 +78,7 @@ class SalesHistoryViewModel @Inject constructor(
     private fun defaultSalesRangeMillis(): Pair<Long, Long> {
         val zoneId = ZoneId.systemDefault()
         val today = LocalDate.now()
-        val start = today.minusDays(30).atStartOfDay(zoneId).toInstant().toEpochMilli()
+        val start = today.atStartOfDay(zoneId).toInstant().toEpochMilli()
         val end = today.atTime(23, 59, 59).atZone(zoneId).toInstant().toEpochMilli()
         return start to end
     }

@@ -65,7 +65,7 @@ fun SalesScreen(
     var saleToDelete by remember { mutableStateOf<SaleListItem?>(null) }
     var secureSaleToDelete by remember { mutableStateOf<SaleListItem?>(null) }
     var selectedSale by remember { mutableStateOf<SaleListItem?>(null) }
-    var highVolumeMode by rememberSaveable { mutableStateOf(false) }
+    var highVolumeMode by rememberSaveable { mutableStateOf(true) }
 
 
     if (saleToDelete != null) {
@@ -277,7 +277,7 @@ private fun SalesSummaryStrip(
     selectedDate: Long?
 ) {
     val periodText = if (selectedDate == null) {
-        "Ultimos 30 dias"
+        "Ventas de hoy"
     } else {
         val sdf = remember { SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()) }
         "Ventas del ${sdf.format(Date(selectedDate))}"

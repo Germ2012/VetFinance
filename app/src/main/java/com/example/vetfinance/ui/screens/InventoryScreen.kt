@@ -99,7 +99,7 @@ fun InventoryScreen(viewModel: InventoryViewModel = hiltViewModel()) {
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val inventoryListState = rememberLazyListState()
-    var highVolumeMode by rememberSaveable { mutableStateOf(false) }
+    var highVolumeMode by rememberSaveable { mutableStateOf(true) }
 
     LaunchedEffect(inventoryListState) {
         snapshotFlow { inventoryListState.isScrollInProgress }

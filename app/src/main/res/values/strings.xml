@@ -318,6 +318,13 @@
     <string name="dashboard_current_day">D&#237;a al corriente</string>
     <string name="dashboard_pending_count">%1$d pendientes</string>
     <string name="dashboard_pending_title">Pendientes</string>
+    <string name="dashboard_pending_summary_title">Resumen de pendientes</string>
+    <string name="dashboard_pending_summary_message">%1$d elementos requieren atenci&#243;n.</string>
+    <string name="dashboard_pending_low_stock_count">%1$d productos bajo stock</string>
+    <string name="dashboard_pending_appointments_count">%1$d citas pr&#243;ximas</string>
+    <string name="dashboard_pending_treatments_count">%1$d tratamientos pendientes</string>
+    <string name="dashboard_pending_supplier_debts_count">%1$d deudas pr&#243;ximas con proveedores</string>
+    <string name="dashboard_pending_collections_count">%1$d clientes con cobros pendientes</string>
     <string name="dashboard_settings_content_description">Ajustes</string>
     <string name="dashboard_search_label">Buscar cliente, tel&#233;fono, mascota o producto</string>
     <string name="dashboard_quick_sale">Venta</string>

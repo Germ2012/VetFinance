@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Button
@@ -146,6 +147,7 @@ fun DashboardScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var treatmentForNextDialog by remember { mutableStateOf<Treatment?>(null) }
+    var showPendingSummaryDialog by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         viewModel.refreshAppSettings()
     }
@@ -187,18 +189,23 @@ fun DashboardScreen(
             petsWithOwners.find { it.pet.petId == treatment.petIdFk }
         }
     }
-    val pendingItemsCount = remember(
+    val pendingBreakdown = remember(
         lowStockProducts,
         upcomingAppointments,
         upcomingSupplierDebts,
         upcomingTreatments,
         pendingCollectionSummary
     ) {
-        lowStockProducts.size +
-            upcomingAppointments.size +
-            upcomingSupplierDebts.size +
-            upcomingTreatments.size +
-            pendingCollectionSummary.clientCount
+        DashboardPendingBreakdown(
+            lowStockProducts = lowStockProducts.size,
+            upcomingAppointments = upcomingAppointments.size,
+            upcomingTreatments = upcomingTreatments.size,
+            upcomingSupplierDebts = upcomingSupplierDebts.size,
+            pendingCollections = pendingCollectionSummary.clientCount
+        )
+    }
+    val pendingItemsCount = remember(pendingBreakdown) {
+        pendingBreakdown.total
     }
     val defaultClinicName = stringResource(R.string.dashboard_summary_of_the_day)
     val clinicName = remember(appSettings.clinicName, defaultClinicName) {
@@ -250,6 +257,13 @@ fun DashboardScreen(
             client = currentClientForPayment,
             onDismiss = { viewModel.onDismissPaymentDialog() },
             onConfirm = { amount -> viewModel.makePayment(amount) }
+        )
+    }
+
+    if (showPendingSummaryDialog) {
+        DashboardPendingSummaryDialog(
+            breakdown = pendingBreakdown,
+            onDismiss = { showPendingSummaryDialog = false }
         )
     }
 
@@ -316,7 +330,8 @@ fun DashboardScreen(
             item {
                 DashboardMetricsRow(
                     salesToday = salesToday,
-                    pendingItemsCount = pendingItemsCount
+                    pendingItemsCount = pendingItemsCount,
+                    onPendingClick = { showPendingSummaryDialog = true }
                 )
             }
 
@@ -570,7 +585,8 @@ private fun DashboardSearchResultItem(
 @Composable
 private fun DashboardMetricsRow(
     salesToday: Double,
-    pendingItemsCount: Int
+    pendingItemsCount: Int,
+    onPendingClick: () -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -598,7 +614,8 @@ private fun DashboardMetricsRow(
                 MaterialTheme.colorScheme.onTertiaryContainer
             } else {
                 MaterialTheme.colorScheme.onSecondaryContainer
-            }
+            },
+            onClick = onPendingClick
         )
     }
 }
@@ -610,10 +627,11 @@ private fun DashboardMetricCard(
     value: String,
     icon: ImageVector,
     containerColor: Color,
-    contentColor: Color
+    contentColor: Color,
+    onClick: (() -> Unit)? = null
 ) {
     Card(
-        modifier = modifier,
+        modifier = if (onClick == null) modifier else modifier.clickable(onClick = onClick),
         shape = MaterialTheme.shapes.medium,
         elevation = CardDefaults.cardElevation(defaultElevation = Elevation.level1),
         colors = CardDefaults.cardColors(
@@ -640,6 +658,100 @@ private fun DashboardMetricCard(
                 overflow = TextOverflow.Ellipsis
             )
         }
+    }
+}
+
+private data class DashboardPendingBreakdown(
+    val lowStockProducts: Int,
+    val upcomingAppointments: Int,
+    val upcomingTreatments: Int,
+    val upcomingSupplierDebts: Int,
+    val pendingCollections: Int
+) {
+    val total: Int
+        get() = lowStockProducts +
+            upcomingAppointments +
+            upcomingTreatments +
+            upcomingSupplierDebts +
+            pendingCollections
+}
+
+@Composable
+private fun DashboardPendingSummaryDialog(
+    breakdown: DashboardPendingBreakdown,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = if (breakdown.total == 0) Icons.Default.CheckCircle else Icons.Default.WarningAmber,
+                contentDescription = null
+            )
+        },
+        title = { Text(stringResource(R.string.dashboard_pending_summary_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = if (breakdown.total == 0) {
+                        stringResource(R.string.dashboard_empty_message)
+                    } else {
+                        stringResource(R.string.dashboard_pending_summary_message, breakdown.total)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                DashboardPendingSummaryRow(
+                    icon = Icons.Default.Inventory,
+                    text = stringResource(R.string.dashboard_pending_low_stock_count, breakdown.lowStockProducts)
+                )
+                DashboardPendingSummaryRow(
+                    icon = Icons.Default.CalendarMonth,
+                    text = stringResource(R.string.dashboard_pending_appointments_count, breakdown.upcomingAppointments)
+                )
+                DashboardPendingSummaryRow(
+                    icon = Icons.Default.MedicalServices,
+                    text = stringResource(R.string.dashboard_pending_treatments_count, breakdown.upcomingTreatments)
+                )
+                DashboardPendingSummaryRow(
+                    icon = Icons.Default.LocalShipping,
+                    text = stringResource(R.string.dashboard_pending_supplier_debts_count, breakdown.upcomingSupplierDebts)
+                )
+                DashboardPendingSummaryRow(
+                    icon = Icons.Default.Payments,
+                    text = stringResource(R.string.dashboard_pending_collections_count, breakdown.pendingCollections)
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.accept_button))
+            }
+        }
+    )
+}
+
+@Composable
+private fun DashboardPendingSummaryRow(
+    icon: ImageVector,
+    text: String
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
